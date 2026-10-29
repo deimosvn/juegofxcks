@@ -17,7 +17,7 @@ const capture = (el, id) => { try { el.setPointerCapture(id); } catch { /* sin c
 export const isTouch = () => html.classList.contains('touch');
 
 // El peleador que maneja esta pantalla (en línea puede ser el de la derecha)
-const localFighter = (g) => (!g.fighters?.length ? null : g.mode === 'online' && g.online ? g.fighters[g.online.side] : g.fighters[0]);
+const localFighter = (g) => (!g.fighters?.length || g.mode === 'watch' ? null : g.mode === 'online' && g.online ? g.fighters[g.online.side] : g.fighters[0]);
 
 // Botón con data-key: apretar = tecla abajo, soltar = tecla arriba (aguanta varios dedos)
 function bindKeyButton(el) {
@@ -75,10 +75,34 @@ function bindJoystick() {
   return { held, reset: () => { if (id === null) for (const c in held) set(c, false); } };
 }
 
+// Sin zoom. El CSS (touch-action) ya lo quita en los navegadores nuevos; esto cubre al resto:
+// - en la pelea los dedos solo manejan los controles: el navegador no hace nada con esos toques
+// - el pellizco del iPhone (gesturestart) y dos dedos moviéndose no hacen zoom
+// - doble toque rápido en los menús: sin zoom, pero el segundo toque sí cuenta como clic
+function blockZoom() {
+  const mine = (e) => { if (e.cancelable) e.preventDefault(); };
+  for (const id of ['touch', 'endbtns', 'game']) for (const t of ['touchstart', 'touchmove', 'touchend']) $(id).addEventListener(t, mine, { passive: false });
+  for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 && e.cancelable) e.preventDefault(); }, { passive: false });
+  let last = 0, x = 0, y = 0, moved = false;
+  document.addEventListener('touchstart', (e) => { const t = e.changedTouches[0]; x = t.clientX; y = t.clientY; moved = e.touches.length > 1; }, { passive: true });
+  document.addEventListener('touchmove', (e) => { const t = e.changedTouches[0]; if (Math.hypot(t.clientX - x, t.clientY - y) > 10) moved = true; }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (moved || e.touches.length || e.defaultPrevented) return;
+    const quick = e.timeStamp - last < 350;
+    last = e.timeStamp;
+    if (!quick || !e.cancelable || e.target.closest?.('input, textarea, select')) return;
+    e.preventDefault();
+    e.target.click?.();
+  }, { passive: false });
+  document.addEventListener('dblclick', (e) => e.preventDefault());
+}
+
 export function initTouch(game) {
   const enable = () => html.classList.add('touch');
   if (matchMedia('(pointer: coarse)').matches) enable();
   addEventListener('touchstart', enable, { passive: true, once: true });
+  blockZoom();
 
   document.querySelectorAll('[data-key]').forEach(bindKeyButton);
   const joy = bindJoystick();
@@ -134,15 +158,19 @@ export function initTouch(game) {
     requestAnimationFrame(frame);
     const touch = isTouch();
     const fight = game.screen === 'fight' && game.fighters.length > 0;
+    const watch = game.mode === 'watch';   // viendo la pelea de una sala: solo el botón para salirse
     // al terminar la pelea mandan los botones de CONTINUAR / MENÚ
     ui.touch.classList.toggle('hidden', !(touch && fight && game.phase !== 'matchEnd'));
+    ui.touch.classList.toggle('watch', watch);
+    setText(ui.pause, watch ? '✕ SALIR' : '❚❚');
     // la pausa no tapa los letreros grandes (RONDA, K.O., ¡ACÁBALO!)
     ui.pause.style.visibility = ui.announcer.classList.contains('show') ? 'hidden' : '';
     if (!fight) joy.reset();
     const f = fight ? localFighter(game) : null;
     if (touch && f) { const s = f.specials[specialIndex(f)] || f.specials[0]; setText(ui.spec, s ? s.nombre : ''); }
     ui.fatal.classList.toggle('hidden', !(touch && f && game.phase === 'finish' && game.winner === f && f.fatality));
-    const end = fight && game.phase === 'matchEnd' && game.phaseT > 120;
+    // en una sala la siguiente pelea se arma sola
+    const end = fight && game.phase === 'matchEnd' && game.phaseT > 120 && !watch && !game.online?.turno;
     ui.end.classList.toggle('hidden', !end);
     if (end) { const online = game.mode === 'online'; setText(ui.ok, online ? 'REVANCHA' : 'CONTINUAR'); setText(ui.menu, online ? 'SALIR' : 'MENÚ'); }
     ui.rotate.classList.toggle('hidden', !(touch && fight && innerHeight > innerWidth));

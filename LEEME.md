@@ -1,7 +1,8 @@
 # FXCKS KOMBAT
 
 Juego de pelea 3D para el navegador (Three.js) con los compas: contra la CPU, 1 vs 1 en el mismo teclado, o
-**en línea** con presencia en tiempo real (ves quién está conectado), retos, ranking y netcode con *rollback*.
+**en línea** con presencia en tiempo real (ves quién está conectado), retos, **salas con espectadores**, ranking y
+netcode con *rollback*.
 
 ## Jugar en tu computadora
 
@@ -29,6 +30,7 @@ ESC = pausa con la lista de movimientos y fatalidades. En línea se puede usar c
   arriba del botón sale el nombre del que vas a hacer.
 - **☠ FATALITY**: aparece en “¡ACÁBALO!” y la marca por ti. **❚❚** = pausa.
 - Se juega mejor acostado (horizontal); al entrar a jugar se pone en pantalla completa.
+- No hace zoom aunque toques dos veces rápido (ni en la pelea ni en los menús) ni con dos dedos.
 - **Instalarlo como app**: en Android sale el botón “INSTALAR EL JUEGO” en el menú (o menú del navegador → Instalar).
   En iPhone: Safari → Compartir → “Agregar a inicio”. Después de abrirlo una vez, contra la CPU funciona **sin internet**.
 
@@ -97,6 +99,25 @@ en línea elige el anfitrión (quien mandó el reto) y el otro lo ve en vivo.
 
 ---
 
+## 🏟️ Salas: la reta y peleas en vivo
+
+En **EN LÍNEA** está el panel **SALAS**:
+
+- **+ CREAR SALA** y luego **COMPARTIR LIGA** (en el celular abre WhatsApp y demás). Quien abre la liga entra directo a la sala.
+- En la lista de salas: **JUGAR** te forma en la fila; **VER** entra solo a mirar. Adentro puedes cambiar con
+  **QUIERO JUGAR / SOLO QUIERO VER**.
+- **La reta**: pelean los dos primeros de la fila. El que gana se queda (🔥 cuenta su racha) y el que pierde se forma al
+  final. La siguiente pelea se arma sola unos segundos después.
+- Los que esperan **ven la pelea en vivo** (como un segundo atrás). Si entras a media pelea, se adelanta sola hasta
+  alcanzarla. **✕ SALIR** (o ESC) regresa a la sala; **VER LA PELEA** te vuelve a meter.
+- Si alguien se sale a media pelea pierde, y si no contesta cuando le toca, pasa a "solo ver".
+
+Cómo funciona: el que pelea a la izquierda manda a Firebase los botones ya confirmados de los dos (unos cuantos bytes
+por segundo) y, como la simulación es determinista, cada espectador vuelve a jugar exactamente la misma pelea.
+Necesita las reglas de [`database.rules.json`](database.rules.json) publicadas (secciones `arenas` y `vivo`).
+
+---
+
 ## 🌐 En línea (Firebase + Vercel)
 
 - **Firebase Realtime Database**: lista de conectados en tiempo real (detecta desconexiones al instante),
@@ -126,7 +147,8 @@ Opcional: variables `FIREBASE_*` (ver [`.env.example`](.env.example)) para usar 
 `TURN_URLS` / `TURN_USERNAME` / `TURN_CREDENTIAL` si a alguien no le conecta directo (redes muy cerradas).
 
 Para probar el modo en línea sin Firebase: http://localhost:8080/herramientas/prueba-online.html (dos jugadores
-en la misma pantalla con mala conexión simulada) o abre el juego con `?local=1` en dos pestañas.
+en la misma pantalla con mala conexión simulada; `?n=3` o `?n=4` abre más ventanas para probar salas con espectadores)
+o abre el juego con `?local=1` en varias pestañas.
 Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de datos real.
 
 ---

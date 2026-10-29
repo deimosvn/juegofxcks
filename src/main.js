@@ -12,6 +12,7 @@ import { sfx, announce, unlockAudio, setVoice, audioState } from './audio.js';
 import { loadNetConfig, createBackend, Link, RollbackSession, fnv } from './net.js';
 import { makeFish, makeKawama } from './props.js';
 import { initTouch, isTouch, registerServiceWorker } from './touch.js';
+import { Salas } from './salas.js';
 
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;
@@ -60,7 +61,7 @@ class Game {
     // vista
     this.models = []; this.projViews = new Map(); this.events = [];
     this.animFrames = 0; this.viewAnimFrames = 0; this.viewRound = -1; this.slowmo = 0; this.resim = false;
-    this.cpu = null; this.session = null; this.online = null; this.net = null;
+    this.cpu = null; this.session = null; this.online = null; this.net = null; this.salas = null;
     this.screen = 'menu'; this.menuIdx = 0; this.mode = 'cpu';
     this.fxSeen = new Map(); this.fxCount = new Map();
     this.effects.gate = (name, args) => this.fxAllow(name, args);
@@ -79,6 +80,9 @@ class Game {
     requestAnimationFrame(frame);
     // En línea el juego no puede pararse si la pestaña queda en segundo plano
     setInterval(() => { if (document.hidden && this.session) this.loop(performance.now()); }, 100);
+    // liga de una sala (?sala=...): directo al modo en línea y a esa sala
+    const sala = new URLSearchParams(location.search).get('sala');
+    if (sala) { this.pendingSala = sala; setTimeout(() => this.openLobby(), 0); }
   }
 
   resize() {
@@ -126,6 +130,7 @@ class Game {
   // por frame: si ya salió en ese frame no se repite; si es nuevo (p. ej. el rival hizo algo
   // que no habíamos predicho) sale aunque llegue unos frames tarde.
   fxAllow(name, args) {
+    if (this.ffwd) return false;   // espectador adelantando la pelea: sin efectos ni sonidos
     if (!this.session) return true;
     const key = name + ':' + fxSig(args);
     const n = (this.fxCount.get(key) || 0) + 1;
@@ -285,7 +290,7 @@ class Game {
   // ================================================================== PANTALLAS
   show(screen) {
     this.screen = screen;
-    for (const id of ['menu', 'select', 'controls', 'lobby', 'stages']) $(id).classList.toggle('hidden', id !== screen);
+    for (const id of ['menu', 'select', 'controls', 'lobby', 'stages', 'arena']) $(id).classList.toggle('hidden', id !== screen);
     $('hud').classList.toggle('hidden', screen !== 'fight');
     clearKeyEdges();
   }
@@ -521,8 +526,17 @@ class Game {
     this.show('lobby');
     $('lobby-main').classList.toggle('hidden', !this.net);
     $('lobby-login').classList.toggle('hidden', !!this.net);
-    if (!this.net) setTimeout(() => $('myname').focus(), 50);
-    else this.net.setStatus('libre');
+    if (!this.net) {
+      setTimeout(() => $('myname').focus(), 50);
+      if (this.pendingSala && $('myname').value.trim()) this.connectOnline();
+    } else this.net.setStatus('libre');
+  }
+
+  showArena() {
+    this.mode = 'online';
+    this.show('arena');
+    this.net?.setStatus('sala', this.salas?.cur?.data?.nombre || 'una sala');
+    this.salas?.renderArena();
   }
 
   async connectOnline() {
@@ -537,6 +551,13 @@ class Game {
       await be.connect(name);
       this.net = be; this.myName = name;
       $('netstatus').textContent = '';
+      this.salas = new Salas(this);
+      this.salas.start(be);
+      if (this.pendingSala) {
+        this.salas.joinWhenReady(this.pendingSala);
+        this.pendingSala = null;
+        const u = new URL(location.href); u.searchParams.delete('sala'); history.replaceState(null, '', u);
+      }
       be.onPlayers((list) => this.renderPlayers(list));
       be.onChallenge((ch) => this.incomingChallenge(ch), (ch) => this.challengeCancelled(ch));
       be.onRanking((list) => this.renderRanking(list));
@@ -554,6 +575,7 @@ class Game {
 
   leaveLobby() {
     if (this.pendingChallenge) this.cancelMyChallenge();
+    this.salas?.stop(); this.salas = null;
     this.net?.disconnect();
     this.net = null;
     this.show('menu');
@@ -565,10 +587,10 @@ class Game {
     $('online-count').textContent = `(${list.length})`;
     $('players').innerHTML = list.sort((a, b) => (a.uid === me ? -1 : b.uid === me ? 1 : a.nombre.localeCompare(b.nombre))).map((p) => `
       <li class="${p.uid === me ? 'me' : ''}">
-        <span class="dot ${p.estado === 'jugando' ? 'busy' : ''}"></span>
+        <span class="dot ${p.estado === 'jugando' || p.estado === 'sala' ? 'busy' : ''}"></span>
         <span class="pname">${esc(p.nombre)}${p.uid === me ? ' (tú)' : ''}</span>
-        <span class="pstate">${p.estado === 'jugando' ? 'en pelea' : 'libre'}</span>
-        ${p.uid !== me && p.estado !== 'jugando' ? `<button data-uid="${esc(p.uid)}">RETAR</button>` : ''}
+        <span class="pstate">${p.estado === 'jugando' ? 'en pelea' : p.estado === 'sala' ? `en ${esc(p.sala || 'una sala')}` : 'libre'}</span>
+        ${p.uid !== me && p.estado !== 'jugando' && p.estado !== 'sala' ? `<button data-uid="${esc(p.uid)}">RETAR</button>` : ''}
       </li>`).join('');
     $('players').querySelectorAll('button[data-uid]').forEach((b) => { b.onclick = () => this.challenge(b.dataset.uid); });
     // si mi rival se desconectó mientras peleamos o elegíamos
@@ -604,7 +626,7 @@ class Game {
   }
 
   incomingChallenge(ch) {
-    if (this.online || this.incoming || this.pendingChallenge) { this.net.respond(ch, false); return; }
+    if (this.online || this.incoming || this.pendingChallenge || this.salas?.cur) { this.net.respond(ch, false); return; }
     this.incoming = ch;
     sfx.confirm(); announce('¡Nuevo reto!');
     this.showModal(`<b>${esc(ch.nombre)}</b> te reta a pelear`, 'ACEPTAR', 'RECHAZAR');
@@ -634,14 +656,22 @@ class Game {
     if (this.pendingChallenge) { this.hideModal(); this.cancelMyChallenge(); }
   }
 
-  enterRoom(sala, peerUid, peerName, isHost) {
+  // arena: { arena, turno } cuando la pelea es un turno de una sala con espectadores (salas.js)
+  enterRoom(sala, peerUid, peerName, isHost, arena = null) {
     const room = this.net.openRoom(sala, peerUid, isHost);
     const link = new Link(room, isHost, this.netCfg.iceServers);
-    this.online = { sala, peerUid, peerName, myName: this.myName, isHost, side: isHost ? 0 : 1, link, picks: [null, null], ready: [false, false], rematch: [false, false] };
+    const o = this.online = { sala, peerUid, peerName, myName: this.myName, isHost, side: isHost ? 0 : 1, link, picks: [null, null], ready: [false, false], rematch: [false, false],
+      arena: arena?.arena || null, turno: arena?.turno || null };
     this.net.setStatus('jugando');
-    link.onCtrl((m) => this.onRoomMsg(m));
-    room.onClosed(() => this.peerGone());
-    this.toast(`¡Pelea contra ${peerName}!`);
+    // solo cuentan los avisos de esta pelea (en una sala la siguiente empieza mientras la anterior se cierra)
+    link.onCtrl((m) => { if (this.online === o) this.onRoomMsg(m); });
+    room.onClosed(() => { if (this.online === o) this.peerGone(); });
+    if (arena) {
+      sfx.confirm(); announce('¡Te toca!');
+      this.toast(`¡Te toca! Contra ${peerName}`, 3500);
+      // si el otro nunca contesta (app cerrada o sin señal), pierde su turno
+      o.waitPeer = setTimeout(() => { if (this.online === o && !link.peerReady) { o.ausente = true; this.toast(`${peerName} no respondió`); this.leaveRoom(false); } }, 20000);
+    } else this.toast(`¡Pelea contra ${peerName}!`);
     this.mode = 'online';
     this.openSelect();
   }
@@ -674,7 +704,10 @@ class Game {
       case 'ready': o.ready[peer] = true; this.maybeGo(); break;
       case 'go': if (!o.isHost) this.goOnline(); break;
       case 'rematch': o.rematch[peer] = true; this.toast(`${o.peerName} quiere la revancha`); this.maybeRematch(); break;
-      case 'leave': this.toast(`${o.peerName} salió de la sala`); this.leaveRoom(false); break;
+      case 'leave':
+        if (!(o.turno && this.phase === 'matchEnd')) this.toast(o.turno ? `${o.peerName} abandonó la pelea` : `${o.peerName} salió de la sala`);
+        this.leaveRoom(false);
+        break;
     }
   }
 
@@ -722,6 +755,7 @@ class Game {
     window.session = this.session;
     this.acc = 0;
     $('netbadge').classList.remove('hidden');
+    if (o.turno) this.salas?.matchStarted(o);
   }
 
   maybeRematch() {
@@ -830,16 +864,21 @@ class Game {
     if (!o) return;
     if (notify) o.link.sendCtrl({ t: 'leave' });
     setTimeout(() => o.link.close(), notify ? 300 : 0);
+    clearTimeout(o.waitPeer);
+    if (o.turno) this.salas?.leftMatch(o, notify);
     this.online = null;
     $('loading').classList.add('hidden');
     this.hideModal();
     this.quitMatch();
-    this.openLobby();
+    if (o.arena && this.salas?.cur?.id === o.arena) this.showArena();
+    else this.openLobby();
   }
 
   peerGone() {
-    if (!this.online) return;
-    this.toast(`Se perdió la conexión con ${this.online.peerName}`, 4000);
+    const o = this.online;
+    if (!o) return;
+    // en una sala, al terminar la pelea cada quien regresa por su lado: no es que se perdiera la conexión
+    if (!(o.turno && this.phase === 'matchEnd')) this.toast(`Se perdió la conexión con ${o.peerName}`, 4000);
     this.leaveRoom(false);
   }
 
@@ -866,6 +905,7 @@ class Game {
       while (this.acc >= STEP && n < 5) { this.simStep(); this.acc -= STEP; n++; }
       if (n >= 5) this.acc = 0;
     }
+    this.salas?.update();
     // cuánto falta para el siguiente paso de la simulación (0..1): la vista dibuja entre pasos
     this.alpha = Math.min(1, Math.max(0, this.acc / STEP));
     this.stage.update(now / 1000);
@@ -882,19 +922,32 @@ class Game {
       if (consumeKey('Enter', 'KeyF', 'Space', 'KeyK')) this.menuAccept(this.menuIdx);
     } else if (this.screen === 'select') this.selectInput();
     else if (this.screen === 'stages') this.stageInput();
-    else if (this.screen === 'lobby') {
+    else if (this.screen === 'arena') {
+      if (consumeKey('Escape')) this.salas?.leave().then(() => this.openLobby());
+      if (consumeKey('Enter', 'KeyV')) this.salas?.watchNow();
+    } else if (this.screen === 'lobby') {
       if (consumeKey('Escape')) { if (!$('modal').classList.contains('hidden')) this.modalAnswer(false); else this.leaveLobby(); }
       if (this.incoming && consumeKey('Enter')) this.modalAnswer(true);
     } else if (this.screen === 'controls') {
       if (consumeKey('Escape', 'Enter')) { this.paused = false; this.show(this.prevScreen === 'fight' ? 'fight' : 'menu'); }
       if (this.prevScreen === 'fight' && consumeKey('KeyQ')) { this.paused = false; this.quitMatch(); this.show('menu'); }
     } else if (this.screen === 'fight') {
+      // espectador: solo puede salirse a la sala
+      if (this.mode === 'watch') {
+        if (consumeKey('Escape')) this.salas?.stopWatching(true);
+        this.salas?.badge();
+        return;
+      }
       // los golpes que venían de la pelea no cuentan como "continuar" ni como "revancha"
       if (this.phase === 'matchEnd' && this.phaseT <= 120) consumeKey('Enter', 'KeyF', 'KeyK', 'Space');
       if (this.mode === 'online') {
         if (this.phase === 'matchEnd') {
           this.reportResult();
-          if (this.phaseT > 120 && consumeKey('Enter', 'KeyF', 'KeyK') && !this.online.rematch[this.online.side]) {
+          if (this.online.turno) {
+            // en una sala la siguiente pelea la arma la sala; ESC regresa antes
+            this.salas?.matchOver(this.online);
+            if (consumeKey('Escape')) this.leaveRoom(false);
+          } else if (this.phaseT > 120 && consumeKey('Enter', 'KeyF', 'KeyK') && !this.online.rematch[this.online.side]) {
             this.online.rematch[this.online.side] = true;
             this.online.link.sendCtrl({ t: 'rematch' });
             this.toast('Esperando a que tu rival acepte la revancha…');
@@ -920,9 +973,10 @@ class Game {
     if (!o) return;
     const quiet = performance.now() - o.link.lastHeard;
     const s = this.session?.stats;
+    const crowd = o.arena ? Object.keys(this.salas?.cur?.data?.miembros || {}).length - 2 : 0;
     $('netbadge').innerHTML = quiet > 2500
       ? `<span class="bad">● Esperando a ${esc(o.peerName)}…</span>`
-      : `<span class="${o.link.rtt < 80 ? 'good' : o.link.rtt < 160 ? 'mid' : 'bad'}">●</span> ${Math.round(o.link.rtt)} ms · ${o.link.mode}${s ? ` · rollback ${s.depth}f` : ''}`;
+      : `<span class="${o.link.rtt < 80 ? 'good' : o.link.rtt < 160 ? 'mid' : 'bad'}">●</span> ${Math.round(o.link.rtt)} ms · ${o.link.mode}${s ? ` · rollback ${s.depth}f` : ''}${crowd > 0 ? ` · ${crowd} viendo` : ''}`;
     if (quiet > 15000) this.peerGone();
   }
 
@@ -1304,7 +1358,9 @@ class Game {
       case 'fatality': return null;
       case 'postFatality': return t < 130 ? { text: '¡FATALIDAD!', blood: true, say: 'Fatalidad' } : null;
       case 'matchEnd': {
-        const hint = t > 120 && !isTouch() ? (this.mode === 'online' ? 'ENTER revancha · ESC salir' : 'ENTER para continuar · ESC menú') : '';
+        const room = this.mode === 'watch' || !!this.online?.turno;
+        const hint = room ? (t > 60 ? 'Siguiente pelea en un momento…' : '')
+          : t > 120 && !isTouch() ? (this.mode === 'online' ? 'ENTER revancha · ESC salir' : 'ENTER para continuar · ESC menú') : '';
         return { text: `GANA ${w.def.nombre}`, sub: [w.def.frase, hint].filter(Boolean), say: `${w.def.nombre} gana` };
       }
     }

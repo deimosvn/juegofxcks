@@ -5,22 +5,28 @@
   <title>Prueba en línea</title>
   <style>
     html, body { margin: 0; height: 100%; background: #000; }
-    body { display: flex; }
-    iframe { flex: 1; height: 100%; border: 0; border-right: 2px solid #333; }
+    body { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 2px; }
+    body.two { grid-template-rows: 1fr; }
+    iframe { width: 100%; height: 100%; border: 0; }
   </style>
 </head>
 <body>
-  <!-- Dos jugadores en la misma pantalla, conectados en "modo local" con mala conexión simulada.
+  <!-- Varios jugadores en la misma pantalla, conectados en "modo local" con mala conexión simulada.
        Cambia lag/jitter/loss en la URL: prueba-online.html?lag=80&jitter=30&loss=0.05
+       ?n=3 o ?n=4 abre más ventanas (para probar salas con espectadores).
        Con ?firebase=1 se conectan por la base de datos real (cada ventana con su propia sesión anónima). -->
-  <iframe id="a"></iframe>
-  <iframe id="b"></iframe>
   <script>
     const q = new URLSearchParams(location.search);
+    const n = Math.min(4, Math.max(2, +q.get('n') || 2));
     const modo = q.has('firebase') ? 'aislado=1' : 'local=1';
     const params = `${modo}&lag=${q.get('lag') ?? 60}&jitter=${q.get('jitter') ?? 25}&loss=${q.get('loss') ?? 0.05}`;
-    document.getElementById('a').src = '/?' + params;
-    document.getElementById('b').src = '/?' + params;
+    document.body.classList.toggle('two', n === 2);
+    for (let i = 0; i < n; i++) {
+      const f = document.createElement('iframe');
+      f.id = 'abcd'[i];
+      f.src = '/?' + params;
+      document.body.appendChild(f);
+    }
   </script>
 </body>
 </html>

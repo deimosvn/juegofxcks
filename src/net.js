@@ -3,6 +3,8 @@
 //
 //  - Firebase Realtime Database: quién está conectado (presencia), retos,
 //    salas, señalización WebRTC, ranking y respaldo de las entradas.
+//    `backend.store` es un árbol en tiempo real con la misma forma de uso en
+//    Firebase y en modo local (lo usan las salas con espectadores, salas.js).
 //  - WebRTC (conexión directa entre los dos jugadores): las entradas del
 //    combate viajan por aquí, sin pasar por ningún servidor.
 //  - Rollback: el juego no espera al rival. Predice sus botones y, si se
@@ -62,7 +64,7 @@ const rankKey = (n) => n.toLowerCase().replace(/[.#$[\]/\s]+/g, '_').slice(0, 24
 //  Backend Firebase
 // ---------------------------------------------------------------------
 class FirebaseBackend {
-  constructor() { this.kind = 'firebase'; this.subs = []; }
+  constructor() { this.kind = 'firebase'; this.subs = []; this.reconnects = []; }
 
   async init(cfg) {
     const [app, auth, db] = await Promise.all([
@@ -74,6 +76,7 @@ class FirebaseBackend {
     const databaseURL = await resolveDatabaseURL(cfg);
     const fbApp = app.initializeApp({ ...cfg, databaseURL });
     this.db = db.getDatabase(fbApp);
+    this.store = firebaseStore(db, (p) => this.ref(p));
     const a = auth.getAuth(fbApp);
     // ?aislado: cada pestaña es un jugador distinto (para probar en una sola computadora)
     if (qs.has('aislado')) await auth.setPersistence(a, auth.inMemoryPersistence);
@@ -92,7 +95,7 @@ class FirebaseBackend {
 
   async connect(name) {
     const { onValue, onDisconnect, set, serverTimestamp, ref } = this.f;
-    this.name = name; this.estado = 'libre';
+    this.name = name; this.estado = 'libre'; this.sala = null;
     this.meRef = this.ref('conectados/' + this.uid);
     // primera escritura: si las reglas no están publicadas, avisar claro
     try {
@@ -106,18 +109,22 @@ class FirebaseBackend {
     this.subs.push(onValue(ref(this.db, '.info/connected'), (s) => {
       if (s.val() !== true) return;
       onDisconnect(this.meRef).remove();
-      set(this.meRef, { nombre: name, estado: this.estado, t: serverTimestamp() });
+      set(this.meRef, { nombre: name, estado: this.estado, ...(this.sala ? { sala: this.sala } : {}), t: serverTimestamp() });
+      for (const cb of this.reconnects) cb();
     }));
   }
+
+  // al volver la conexión (en el celular se cae seguido) cada quien vuelve a su lugar
+  onReconnect(cb) { this.reconnects.push(cb); }
 
   onPlayers(cb) {
     this.subs.push(this.f.onValue(this.ref('conectados'), (s) => {
       const v = s.val() || {};
-      cb(Object.entries(v).map(([uid, p]) => ({ uid, nombre: p.nombre, estado: p.estado })));
+      cb(Object.entries(v).map(([uid, p]) => ({ uid, nombre: p.nombre, estado: p.estado, sala: p.sala })));
     }));
   }
 
-  setStatus(estado) { this.estado = estado; if (this.meRef) this.f.update(this.meRef, { estado }); }
+  setStatus(estado, sala = null) { this.estado = estado; this.sala = sala; if (this.meRef) this.f.update(this.meRef, { estado, sala }); }
 
   onChallenge(cb, onCancel) {
     this.subs.push(this.f.onChildAdded(this.ref('retos/' + this.uid), (s) => cb({ from: s.key, ...s.val() })));
@@ -147,6 +154,13 @@ class FirebaseBackend {
   cancelChallenge(toUid, sala) {
     this.f.remove(this.ref(`retos/${toUid}/${this.uid}`));
     this.f.remove(this.ref('salas/' + sala));
+  }
+
+  // Pelea de una sala con espectadores: ya está aceptada, solo falta su cuarto de señalización
+  async createMatchRoom(sala, guest) {
+    const { set, onDisconnect, serverTimestamp } = this.f;
+    await set(this.ref('salas/' + sala), { host: this.uid, guest, estado: 'aceptado', t: serverTimestamp() });
+    onDisconnect(this.ref('salas/' + sala)).remove();
   }
 
   openRoom(sala, peerUid, isHost) {
@@ -211,22 +225,25 @@ class LocalBackend {
     this.players = new Map();
     this.handlers = [];
     this.bc.onmessage = (e) => { for (const h of this.handlers) h(e.data); };
+    this.store = new LocalStore();
   }
   async init() {}
+  onReconnect() {}
+  async createMatchRoom() {}
   post(m) { this.bc.postMessage(m); }
   on(fn) { this.handlers.push(fn); }
 
   async connect(name) {
-    this.name = name; this.estado = 'libre';
-    const hello = () => this.post({ t: 'hello', uid: this.uid, nombre: this.name, estado: this.estado });
+    this.name = name; this.estado = 'libre'; this.sala = null;
+    const hello = () => this.post({ t: 'hello', uid: this.uid, nombre: this.name, estado: this.estado, sala: this.sala });
     hello();
     this.helloTimer = setInterval(hello, 1000);
     addEventListener('beforeunload', () => this.post({ t: 'bye', uid: this.uid }));
   }
   onPlayers(cb) {
-    const emit = () => cb([{ uid: this.uid, nombre: this.name, estado: this.estado }, ...[...this.players.entries()].map(([uid, p]) => ({ uid, ...p }))]);
+    const emit = () => cb([{ uid: this.uid, nombre: this.name, estado: this.estado, sala: this.sala }, ...[...this.players.entries()].map(([uid, p]) => ({ uid, ...p }))]);
     this.on((m) => {
-      if (m.t === 'hello') { const isNew = !this.players.has(m.uid); this.players.set(m.uid, { nombre: m.nombre, estado: m.estado, seen: Date.now() }); if (isNew) this.post({ t: 'hello', uid: this.uid, nombre: this.name, estado: this.estado }); emit(); }
+      if (m.t === 'hello') { const isNew = !this.players.has(m.uid); this.players.set(m.uid, { nombre: m.nombre, estado: m.estado, sala: m.sala, seen: Date.now() }); if (isNew) this.post({ t: 'hello', uid: this.uid, nombre: this.name, estado: this.estado, sala: this.sala }); emit(); }
       if (m.t === 'bye') { this.players.delete(m.uid); emit(); }
     });
     this.pruneTimer = setInterval(() => {
@@ -236,7 +253,7 @@ class LocalBackend {
     }, 1000);
     emit();
   }
-  setStatus(estado) { this.estado = estado; this.post({ t: 'hello', uid: this.uid, nombre: this.name, estado }); }
+  setStatus(estado, sala = null) { this.estado = estado; this.sala = sala; this.post({ t: 'hello', uid: this.uid, nombre: this.name, estado, sala }); }
   onChallenge(cb, onCancel) {
     this.on((m) => {
       if (m.t === 'reto' && m.to === this.uid) cb({ from: m.from, nombre: m.nombre, sala: m.sala });
@@ -297,6 +314,68 @@ class LocalBackend {
     this.handlers = [];
     this.bc.onmessage = (e) => { for (const h of this.handlers) h(e.data); };
   }
+}
+
+// ---------------------------------------------------------------------
+//  Árbol en tiempo real (salas con espectadores). Rutas sin el prefijo 'kombate/'.
+// ---------------------------------------------------------------------
+function firebaseStore(f, ref) {
+  return {
+    set: (p, v) => f.set(ref(p), v),
+    update: (p, o) => f.update(ref(p), o),
+    remove: (p) => f.remove(ref(p)),
+    key: (p) => f.push(ref(p)).key,
+    onValue: (p, cb, onErr) => f.onValue(ref(p), (s) => cb(s.val()), onErr),
+    onChildAdded: (p, cb) => f.onChildAdded(ref(p), (s) => cb(s.key, s.val())),
+    onDisconnectRemove: (p) => { const od = f.onDisconnect(ref(p)); od.remove(); return () => od.cancel(); },
+    // fn recibe el valor actual y devuelve el nuevo (undefined = no cambiar); resuelve true si se guardó.
+    // Sin applyLocally: nadie ve un turno que al final no ganó la carrera contra otro cliente
+    transaction: (p, fn) => f.runTransaction(ref(p), fn, { applyLocally: false }).then((r) => r.committed),
+    now: () => f.serverTimestamp(),
+  };
+}
+
+// Modo local: el árbol vive en localStorage y las demás pestañas se enteran con el evento 'storage'
+class LocalStore {
+  constructor() {
+    this.k = 'kombate-db'; this.subs = new Set(); this.leaving = new Set();
+    addEventListener('storage', (e) => { if (e.key === this.k) this.emit(); });
+    addEventListener('pagehide', () => { if (this.leaving.size) this.write(Object.fromEntries([...this.leaving].map((p) => [p, null]))); });
+  }
+  root() { try { return JSON.parse(localStorage.getItem(this.k)) || {}; } catch { return {}; } }
+  get(p, v = this.root()) { for (const k of p.split('/')) { if (v == null || typeof v !== 'object') return null; v = v[k]; } return v ?? null; }
+  write(changes) {
+    const root = this.root();
+    for (const [p, val] of Object.entries(changes)) {
+      const ks = p.split('/'), last = ks.pop(), chain = [root];
+      let o = root;
+      for (const k of ks) { if (!o[k] || typeof o[k] !== 'object') o[k] = {}; o = o[k]; chain.push(o); }
+      if (val == null) delete o[last]; else o[last] = JSON.parse(JSON.stringify(val));
+      // como en Firebase: un nodo que se queda sin hijos deja de existir
+      for (let i = ks.length - 1; i >= 0 && !Object.keys(chain[i + 1]).length; i--) delete chain[i][ks[i]];
+    }
+    try { localStorage.setItem(this.k, JSON.stringify(root)); } catch { /* sin espacio */ }
+    queueMicrotask(() => this.emit());
+    return Promise.resolve();
+  }
+  emit() { for (const s of [...this.subs]) s(); }
+  watch(run) { this.subs.add(run); queueMicrotask(() => { if (this.subs.has(run)) run(); }); return () => this.subs.delete(run); }
+  set(p, v) { return this.write({ [p]: v }); }
+  update(p, o) { return this.write(Object.fromEntries(Object.entries(o).map(([k, v]) => [`${p}/${k}`, v]))); }
+  remove(p) { return this.write({ [p]: null }); }
+  key() { return Date.now().toString(36).padStart(9, '0') + Math.random().toString(36).slice(2, 8); }
+  onValue(p, cb) { let last; return this.watch(() => { const v = this.get(p), j = JSON.stringify(v); if (j !== last) { last = j; cb(v); } }); }
+  onChildAdded(p, cb) {
+    const seen = new Set();
+    return this.watch(() => {
+      const v = this.get(p) || {};
+      for (const k of seen) if (!(k in v)) seen.delete(k);
+      for (const k of Object.keys(v).sort()) if (!seen.has(k)) { seen.add(k); cb(k, v[k]); }
+    });
+  }
+  onDisconnectRemove(p) { this.leaving.add(p); return () => this.leaving.delete(p); }
+  transaction(p, fn) { const v = fn(this.get(p)); return v === undefined ? Promise.resolve(false) : this.write({ [p]: v }).then(() => true); }
+  now() { return Date.now(); }
 }
 
 export async function createBackend(cfg) {

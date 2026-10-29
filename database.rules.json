@@ -24,10 +24,36 @@
       },
       "ranking": {
         ".read": true,
-        ".indexOn": ["victorias"],
+        ".indexOn": [
+          "victorias"
+        ],
         "$jugador": {
           ".write": "auth != null",
           ".validate": "newData.hasChildren(['nombre', 'victorias', 'derrotas'])"
+        }
+      },
+      "arenas": {
+        ".read": "auth != null",
+        "$arena": {
+          ".write": "auth != null && ((!data.exists() && newData.child('miembros').child(auth.uid).exists()) || (!newData.exists() && !data.child('miembros').exists()))",
+          "nombre": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 24"
+          },
+          "miembros": {
+            "$uid": {
+              ".write": "auth != null && (auth.uid === $uid || root.child('kombate/arenas/' + $arena + '/miembros/' + auth.uid).exists())",
+              ".validate": "newData.hasChildren(['nombre', 'orden']) && newData.child('nombre').isString() && newData.child('nombre').val().length <= 16 && newData.parent().parent().child('nombre').exists()"
+            }
+          },
+          "turno": {
+            ".write": "auth != null && root.child('kombate/arenas/' + $arena + '/miembros/' + auth.uid).exists()"
+          }
+        }
+      },
+      "vivo": {
+        "$arena": {
+          ".read": "auth != null",
+          ".write": "auth != null && (root.child('kombate/arenas/' + $arena + '/miembros/' + auth.uid).exists() || (!newData.exists() && !root.child('kombate/arenas/' + $arena + '/miembros').exists()))"
         }
       }
     }

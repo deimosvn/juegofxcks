@@ -8,14 +8,17 @@
   --panel: rgba(12, 8, 6, 0.82);
 }
 
-* { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #eee; font-family: 'Rubik', system-ui, sans-serif; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; overscroll-behavior: none; }
+/* Celular: sin zoom con doble toque ni pellizco (el iPhone ignora user-scalable=no). touch-action no se
+   hereda y Safari lo reinicia en cada caja con scroll (todas las pantallas), por eso va en todo.
+   'manipulation' queda para Safari viejo, que no entiende 'pan-x pan-y'. */
+* { box-sizing: border-box; touch-action: manipulation; touch-action: pan-x pan-y; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #eee; font-family: 'Rubik', system-ui, sans-serif; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 input { user-select: text; -webkit-user-select: text; }
 /* lo que solo se ve con teclado o solo en el celular */
 .touch-only { display: none; }
 html.touch .touch-only { display: revert; }
 html.touch .kb-only { display: none !important; }
-#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .hidden { display: none !important; }
 
 /* ---------- HUD ---------- */
@@ -99,7 +102,7 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 6px; border: 1px soli
 .panel input { padding: 10px; font-size: 18px; background: #111; color: #fff; border: 1px solid #555; font-family: 'Rubik', sans-serif; }
 .panel button, #modal button { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px; padding: 6px 18px; background: var(--gold); color: #111; border: 0; cursor: pointer; }
 .panel button:disabled { opacity: .5; }
-.lobby-layout { display: flex; gap: 20px; width: min(900px, 100%); align-items: flex-start; }
+.lobby-layout { display: flex; gap: 20px; width: min(1100px, 100%); align-items: flex-start; }
 .lobby-layout .grow { flex: 1; }
 .lobby-layout > .panel:last-child { width: 260px; }
 #players { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; }
@@ -115,6 +118,34 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 6px; border: 1px soli
 #ranking li span { display: inline-block; min-width: 110px; }
 #ranking li b { color: var(--gold); margin-left: 6px; }
 #ranking li small { color: #888; }
+/* Salas */
+h3 .mini { float: right; font-size: 18px; padding: 2px 10px; margin-left: 8px; }
+#arenas { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; }
+#arenas li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 2px 8px; padding: 8px 4px; border-bottom: 1px solid #222; }
+#arenas .aname { font-size: 15px; font-weight: 700; color: #fff; }
+#arenas .aname small { color: #888; font-weight: 400; font-size: 12px; }
+#arenas .ainfo { grid-row: 2; font-size: 12px; color: #aaa; }
+#arenas button { grid-row: 1 / span 2; font-size: 18px; padding: 4px 12px; }
+#arenas button.ghost, .arena-actions button.ghost { background: #333; color: #ddd; }
+.live { color: #ff4a3a; font-weight: 700; }
+#arena h2 small { font-size: .45em; color: #aaa; letter-spacing: 2px; }
+.arena-layout { display: flex; gap: 20px; width: min(900px, 100%); align-items: stretch; }
+.arena-layout .grow { flex: 1; min-width: 0; }
+.arena-vs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; margin: 8px 0 2px; font-family: 'Bebas Neue', sans-serif; font-size: 40px; letter-spacing: 2px; }
+.arena-vs b { font-weight: 400; color: #fff; }
+.arena-vs b.me { color: var(--gold); }
+.arena-vs span { color: var(--red); font-size: .7em; }
+.arena-status { margin: 4px 0 10px; text-align: center; color: #ccc; }
+#arena-watch { display: block; margin: 4px auto 0; }
+#arena-queue { margin: 0 0 10px; padding-left: 24px; max-height: 32vh; overflow-y: auto; }
+#arena-queue li { padding: 3px 0; }
+#arena-queue li.me { color: var(--gold); }
+#arena-queue small { color: #ff9a2a; }
+h3 small { font-family: 'Rubik', sans-serif; font-size: 12px; letter-spacing: 0; color: #888; }
+h3.sub { font-size: 20px; margin-top: 4px; }
+.arena-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 14px; }
+.arena-actions button { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px; padding: 6px 18px; background: var(--gold); color: #111; border: 0; cursor: pointer; }
+
 button.link { margin-top: 18px; background: none; border: 0; color: #aaa; font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px; cursor: pointer; }
 button.link:hover { color: var(--gold); }
 
@@ -147,8 +178,8 @@ button.link:hover { color: var(--gold); }
 }
 
 @media (max-width: 760px) and (orientation: portrait) {
-  .lobby-layout { flex-direction: column; }
-  .lobby-layout > .panel:last-child { width: 100%; }
+  .lobby-layout, .arena-layout { flex-direction: column; }
+  .lobby-layout > .panel { width: 100% !important; }
 }
 @media (max-width: 760px) {
   #netbadge { top: 74px; }
@@ -183,7 +214,7 @@ button.link.back { margin-top: 10px; padding: 8px 14px; }
 
 /* ---------- Controles táctiles ---------- */
 #touch { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
-#touch button, #tpad { pointer-events: auto; touch-action: none; }
+#touch button, #tpad, #endbtns button { pointer-events: auto; touch-action: none; }
 #tpad { position: absolute; left: 0; bottom: 0; width: 46%; height: 72%; }
 #tpad .base { position: absolute; width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.07), rgba(255,255,255,.14)); border: 2px solid rgba(255, 255, 255, .25); left: calc(98px + env(safe-area-inset-left)); top: calc(100% - 104px - env(safe-area-inset-bottom)); transition: opacity .2s; opacity: .55; }
 #tpad.on .base { opacity: 1; transition: none; }
@@ -196,6 +227,9 @@ button.link.back { margin-top: 10px; padding: 8px 14px; }
 #tb-b { right: 0; top: 66px; border-color: #9aa; }
 #tb-k { left: 66px; bottom: 0; border-color: var(--p2); }
 #tspec-name { position: absolute; left: -80px; right: -10px; top: -30px; text-align: center; font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 1px; color: var(--gold); text-shadow: 1px 1px 0 #000, 0 0 8px #000; white-space: nowrap; }
+/* espectador: sin controles, solo el botón para salirse */
+#touch.watch #tpad, #touch.watch #tbtns, #touch.watch #tfatal { display: none; }
+#touch.watch #tpause { width: auto; padding: 0 14px; font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 1px; }
 #tpause { position: absolute; left: 50%; top: calc(86px + env(safe-area-inset-top)); transform: translateX(-50%); width: 46px; height: 34px; border-radius: 8px; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); color: #fff; font-size: 14px; }
 #tfatal { position: absolute; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom)); transform: translateX(-50%); font-family: 'Bebas Neue', sans-serif; font-size: 34px; letter-spacing: 3px; padding: 10px 26px; color: #fff; background: var(--red); border: 3px solid #fff; border-radius: 10px; box-shadow: 0 0 30px #ff0000; animation: pulse .7s ease-in-out infinite alternate; }
 @keyframes pulse { to { transform: translateX(-50%) scale(1.08); box-shadow: 0 0 50px #ff3a3a; } }
@@ -228,8 +262,16 @@ html.touch .screen { padding: max(12px, env(safe-area-inset-top)) max(12px, env(
   .pspecials .ready { font-size: 20px; margin-top: 4px; }
   #menu { justify-content: center; }
   .lobby-layout { gap: 10px; }
-  .lobby-layout > .panel:last-child { width: 220px; }
+  .lobby-layout > .panel:last-child { width: 200px; }
   .panel { padding: 10px 14px; }
+  #arenas li { padding: 5px 2px; }
+  #ranking li span { min-width: 84px; }
+  #arenas button { font-size: 16px; padding: 3px 9px; }
+  .arena-vs { font-size: 28px; margin: 2px 0; }
+  .arena-status { margin: 2px 0 6px; }
+  #arena-queue { max-height: 26vh; }
+  .arena-actions { margin-top: 8px; }
+  .arena-actions button { font-size: 20px; padding: 4px 14px; }
   h3 { font-size: 22px; }
   .touch-help { font-size: 12px; padding: 6px 12px; }
   .controls-grid, #movelist { gap: 10px; margin-top: 8px; }

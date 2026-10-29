@@ -117,6 +117,10 @@
     </div>
     <div id="lobby-main" class="lobby-layout hidden">
       <div class="panel grow">
+        <h3>SALAS <button id="createArena" class="mini">+ CREAR SALA</button></h3>
+        <ul id="arenas"></ul>
+      </div>
+      <div class="panel grow">
         <h3>CONECTADOS <span id="online-count"></span></h3>
         <ul id="players"></ul>
         <p id="lobby-mode" class="small"></p>
@@ -127,7 +131,31 @@
       </div>
     </div>
     <button id="lobbyBack" class="link">← VOLVER</button>
-    <p class="hint">Reta a alguien que esté libre<span class="kb-only"> · ESC para volver</span></p>
+    <p class="hint">En una sala pelean de dos en dos y los demás ven en vivo · o reta directo a alguien libre<span class="kb-only"> · ESC para volver</span></p>
+  </div>
+
+  <!-- Sala: "la reta" (el que gana se queda) y la pelea en vivo para los que esperan -->
+  <div id="arena" class="screen hidden">
+    <h2><span id="arena-name">SALA</span> <small id="arena-count"></small></h2>
+    <div class="arena-layout">
+      <div class="panel grow">
+        <h3>PELEA</h3>
+        <div id="arena-fight"></div>
+        <button id="arena-watch" class="hidden">▶ VER LA PELEA</button>
+      </div>
+      <div class="panel grow">
+        <h3>LA RETA <small>el que gana se queda</small></h3>
+        <ol id="arena-queue"></ol>
+        <h3 class="sub">SOLO VIENDO</h3>
+        <p id="arena-watchers" class="small"></p>
+      </div>
+    </div>
+    <div class="arena-actions">
+      <button id="arena-play">SOLO QUIERO VER</button>
+      <button id="arena-share" class="ghost">COMPARTIR LIGA</button>
+      <button class="ghost" data-key="Escape">← SALIR</button>
+    </div>
+    <p class="hint kb-only">ENTER ver la pelea · ESC salir de la sala</p>
   </div>
 
   <!-- Controles / pausa -->
