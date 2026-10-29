@@ -328,7 +328,9 @@ class Game {
     list.innerHTML = '';
     if (pause) for (const f of this.fighters) {
       const div = document.createElement('div');
-      div.innerHTML = `<h3>${esc(f.def.nombre)}</h3><table>${f.specials.map((s) => `<tr><td>${esc(s.nombre)}</td><td>${esc(s.input)}</td></tr>`).join('')}${f.fatality ? `<tr><td>☠ ${esc(f.fatality.nombre)}</td><td>${esc(f.fatality.input)}</td></tr>` : ''}</table>`;
+      const row = (s) => `<tr><td>${esc(s.nombre)}</td><td>${esc(s.input)}</td></tr>`;
+      div.innerHTML = `<h3>${esc(f.def.nombre)}</h3><table>${f.normalSpecials.map(row).join('')}${f.fatality ? `<tr><td>☠ ${esc(f.fatality.nombre)}</td><td>${esc(f.fatality.input)}</td></tr>` : ''}`
+        + (f.titanSpecials.length ? `<tr><td colspan="2" class="sub">CON EL TRAJE DE ROBOT</td></tr>${f.titanSpecials.map(row).join('')}` : '') + '</table>';
       list.appendChild(div);
     }
     this.prevScreen = this.screen;
@@ -427,7 +429,9 @@ class Game {
       const show = p === 0 || showP2;
       const def = PELEADORES[s.cur[p]];
       $(`pick${p + 1}`).textContent = show ? def.nombre : '?';
-      $(`pspec${p + 1}`).innerHTML = show ? def.especiales.map((e) => `<b>${esc(e.nombre)}</b><br><span class="inp">${esc(e.input)}</span>`).join('<br>') + (s.locked[p] ? '<p class="ready">¡LISTO!</p>' : '') : '';
+      const list = (l) => l.map((e) => `<b>${esc(e.nombre)}</b><br><span class="inp">${esc(e.input)}</span>`).join('<br>');
+      $(`pspec${p + 1}`).innerHTML = show ? list(def.especiales) + (def.especialesTitan ? `<p class="suit">Con el traje de robot:</p>${list(def.especialesTitan)}` : '')
+        + (s.locked[p] ? '<p class="ready">¡LISTO!</p>' : '') : '';
     }
   }
 
@@ -464,9 +468,19 @@ class Game {
   // ------------------------------------------------------------------ partida
   async loadModels(def1, def2) {
     $('loading').classList.remove('hidden');
-    for (const m of this.models) m.dispose();
+    for (const m of this.models) { m.suit?.dispose(); m.dispose(); }
     this.models = [];
-    const models = await Promise.all([FighterModel.create(def1, false), FighterModel.create(def2, def1 === def2)]);
+    // con `traje` también se carga el robot que se pone en el MODO TITÁN (model.suit)
+    const make = async (def, alt) => {
+      const [m, suit] = await Promise.all([FighterModel.create(def, alt),
+        def.traje ? FighterModel.create({ ...def, modelo: def.traje.modelo, escala: def.traje.escala ?? 1, accesorios: [] }, alt) : null]);
+      if (suit) {
+        for (const mt of suit.materials) if (mt.isMeshStandardMaterial) { mt.metalness = 0.3; mt.roughness = 0.45; }   // un poco de brillo metálico
+        m.suit = suit;
+      }
+      return m;
+    };
+    const models = await Promise.all([make(def1, false), make(def2, def1 === def2)]);
     $('loading').classList.add('hidden');
     return models;
   }
@@ -484,6 +498,7 @@ class Game {
     if (stageId) this.setStage(stageId);
     this.models = models;
     this.scene.add(models[0].root, models[1].root);
+    for (const m of models) { m.suitOn = false; if (m.suit) { m.suit.root.visible = false; this.scene.add(m.suit.root); } }
     this.fighters = [new Fighter(def1, 0, this), new Fighter(def2, 1, this)];
     this.inputs = [new PlayerInput(0), new PlayerInput(1)];
     this.cpu = this.mode === 'cpu' ? new CPU(this.fighters[1], this.inputs[1], this, 0.6) : null;
@@ -499,7 +514,7 @@ class Game {
   }
 
   quitMatch() {
-    for (const m of this.models) m.dispose();
+    for (const m of this.models) { m.suit?.dispose(); m.dispose(); }
     this.models = []; this.fighters = []; this.projectiles = [];
     this.clearViews();
     this.effects.clear();
@@ -1100,6 +1115,17 @@ class Game {
         G.rflame.visible = this.phase === 'fatality' && this.phaseT >= 45;
         G.rflame.scale.y = 0.8 + Math.random() * 0.6;
       }
+      // robot: fuego de los propulsores y chispas de la descarga eléctrica
+      if (tipo === 'propulsores' && f.t >= 6 && f.t < 24) {
+        const back = V((f.rx ?? f.x) - f.facing * 0.5, f.y + 1.1, -0.1);
+        this.effects.glow.emit({ pos: back, count: 5 * n, speed: 7, dir: [-f.facing, -0.1, 0], spread: 0.25, color: '#ffffff', colorEnd: f.spec.color || '#4fd8ff', life: 0.3, size: 0.32 });
+        this.effects.solid.emit({ pos: back, count: n, speed: 3, dir: [-f.facing, 0, 0], spread: 0.4, color: '#bbbbbb', colorEnd: '#444', life: 0.6, size: 0.3, grow: 2, drag: 2 });
+      }
+      if (tipo === 'descarga' && f.t >= 6 && f.t < 36 && (G.arcT = (G.arcT || 0) + dt) > 0.05) {
+        G.arcT = 0;
+        const c = V(f.rx ?? f.x, f.y + 1.1, 0.2), ang = Math.random() * Math.PI * 2, r = 0.7 + Math.random() * 0.6;
+        this.effects.lightning(c, V(c.x + Math.cos(ang) * r, c.y + Math.sin(ang) * r, 0.2 + (Math.random() - 0.5) * 0.4), f.spec.color || '#9fe8ff', 0.06);
+      }
       // chorro de cerveza (Emi): sale de la boca de la caguama
       if (tipo === 'chela' && f.t >= 14 && f.t < 46) {
         const bottle = this.models[i]?.acc?.caguama;
@@ -1151,7 +1177,7 @@ class Game {
   handleEvent(e) {
     if (e.type === 'special') this.showSpecialName(e.side, e.nombre, e.color);
     if (e.type === 'hit') {
-      this.models[e.side]?.flash(1);
+      this.viewModel(e.side)?.flash(1);
       if (e.combo >= 2) {
         const el = $(e.attacker === 0 ? 'combo1' : 'combo2');
         el.textContent = `${e.combo} GOLPES`;
@@ -1169,7 +1195,20 @@ class Game {
     clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1100);
   }
 
-  syncFighter(f, m, animDt) {
+  // el modelo que se ve de cada peleador (Diego en MODO TITÁN: el traje de robot)
+  viewModel(i) { const m = this.models[i]; return m?.suitOn && m.suit ? m.suit : m; }
+
+  syncFighter(f, base, animDt) {
+    // MODO TITÁN: se ve el traje de robot en lugar del modelo; al ponérselo "se arma" en un instante
+    const robot = !!base.suit && f.titan;
+    if (robot !== !!base.suitOn) {
+      base.suitOn = robot; base.suitT = 0;
+      base.suit?.flash(1.3); base.flash(1.3);
+    }
+    base.suitT = (base.suitT ?? 1) + (animDt || 0);
+    base.root.visible = false;
+    if (base.suit) base.suit.root.visible = false;
+    const m = robot ? base.suit : base;
     // posición entre el paso anterior y el actual (sin saltos aunque la pantalla vaya a 120/144 Hz)
     const a = this.alpha ?? 1;
     const jump = f.px === undefined || Math.abs(f.x - f.px) > 1.5 || Math.abs(f.y - f.py) > 1.5;
@@ -1181,7 +1220,7 @@ class Game {
       shake = Math.sin(performance.now() * 0.12) * 0.012 * (this.hitstop + 1);
     }
     m.root.position.set(f.rx + shake, ry, 0);
-    m.size = f.sizeScale;
+    m.size = f.sizeScale * (robot ? 0.8 + 0.2 * Math.min(1, base.suitT / 0.25) : 1);
     m.setFacing(f.facing);
     m.root.visible = !f.hidden;
     m.burn = f.burn; m.squash = f.squash;
@@ -1197,12 +1236,15 @@ class Game {
     const tipo = f.state === 'special' ? f.spec?.tipo : null;
     m.prop = tipo === 'pescado' && f.t < 12 ? 'pez' : (tipo === 'kawama' && f.t < 14) || tipo === 'chela' ? 'caguama' : null;
     if (m.jetOn && animDt) this.effects.glow.emit({ pos: V(f.x - f.facing * 0.3, f.y + 0.75, -0.1), count: 3, speed: 4, dir: [0, -1, 0], spread: 0.25, color: '#fff3c0', colorEnd: '#ff6a00', life: 0.3, size: 0.28 });
+    // el robot corre con chispas de propulsor en los pies
+    if (robot && f.state === 'walk' && animDt) this.effects.glow.emit({ pos: V(f.rx - f.facing * 0.2, f.y + 0.12, 0), count: 2, speed: 2.5, dir: [-f.facing, 0.3, 0], spread: 0.4, color: '#ffffff', colorEnd: f.buffColor || '#4fd8ff', life: 0.25, size: 0.18 });
     const st = f.animState();
-    if (this.hitstop <= 0 && !this.paused) st.t += a;   // tiempo de animación continuo entre pasos
+    if (this.hitstop <= 0 && !this.paused) st.t += a * st.rate;   // tiempo de animación continuo entre pasos
     m.apply(st, animDt);
     let tint = null, amount = 0.6;
     if (f.iced) tint = '#3aa8ff';
     else if (f.buffTimer > 0 && f.buffKind === 'armor') { tint = f.buffColor; amount = 0.28 + 0.16 * Math.sin(performance.now() / 90); }
+    else if (f.titan) tint = f.buffTimer < 90 && (f.t >> 3) % 2 ? f.buffColor : null;   // parpadea cuando ya se le acaba
     else if (f.buffTimer > 0 && (f.t >> 2) % 2) tint = f.buffColor;
     m.tickMaterials(animDt || 1 / 60, tint, amount);
   }
@@ -1237,6 +1279,12 @@ class Game {
       const prop = p.kind === 'pescado' ? makeFish() : makeKawama();
       if (p.kind === 'kawama') prop.position.y = -0.18; else prop.scale.setScalar(1.15);
       tumble = new THREE.Group(); tumble.add(prop); g.add(tumble);
+    } else if (p.kind === 'plasma') {
+      // cañón del robot: núcleo blanco, esfera azul y dos anillos girando
+      add(new THREE.SphereGeometry(0.15, 16, 12), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+      spin = add(new THREE.SphereGeometry(0.34, 20, 14), glow(p.color, 0.55));
+      tumble = new THREE.Group(); g.add(tumble);
+      for (const rx of [0, Math.PI / 2]) { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.025, 8, 36), glow('#ffffff', 0.75)); ring.rotation.x = rx; tumble.add(ring); }
     } else if (p.kind === 'gas') {
       // la nube de gas son partículas (ver syncProjectiles)
     } else {
@@ -1246,7 +1294,7 @@ class Game {
     }
     // brillo que ilumina alrededor (lo pone la luz fija de syncProjectiles, ver buildViews)
     const light = p.kind === 'pescado' || p.kind === 'kawama' ? null
-      : { color: p.kind === 'puno' || p.kind === 'cohete' ? '#ffb347' : p.color, power: p.kind === 'misil' ? 8 : p.kind === 'gas' ? 3 : 22 };
+      : { color: p.kind === 'puno' || p.kind === 'cohete' ? '#ffb347' : p.color, power: p.kind === 'misil' ? 8 : p.kind === 'gas' ? 3 : p.kind === 'plasma' ? 32 : 22 };
     this.scene.add(g);
     return { obj: g, spin, tumble, light, t: 0 };
   }
@@ -1319,7 +1367,23 @@ class Game {
     this.fighters.forEach((f, i) => {
       const L = this.lasers[i];
       for (const m of [...L.beams, ...L.cores]) m.visible = false;
-      const m = this.models[i];
+      const m = this.viewModel(i);
+      // MEGA LÁSER del traje de robot: un solo rayo gordo desde el pecho
+      if (f.state === 'special' && f.spec?.tipo === 'megalaser') {
+        const k = f.sizeScale, chest = V((f.rx ?? f.x) + f.facing * 0.42 * k, f.y + 1.25 * k, 0.3), color = f.spec.color || '#ff2a3a';
+        if (f.t < 14) { this.effects.glow.emit({ pos: chest, count: 3, speed: 1.2, jitter: 0.12, color: '#ffffff', colorEnd: color, life: 0.25, size: 0.2 }); return; }
+        if (f.t >= 46) return;
+        const o = this.other(f);
+        let endX = f.facing * (ARENA_HALF + 2);
+        if ((o.x - f.x) * f.facing > 0 && !o.hidden && chest.y >= o.y - 0.4 && chest.y <= o.y + o.height + 0.4) endX = (o.rx ?? o.x) - f.facing * 0.25;
+        const end = V(endX, chest.y, chest.z);
+        L.beams[0].material.color.set(color);
+        this.placeBeam(L.beams[0], chest, end); this.placeBeam(L.cores[0], chest, end);
+        const w = 4 + Math.random() * 1.2;
+        L.beams[0].scale.x = L.beams[0].scale.z = w; L.cores[0].scale.x = L.cores[0].scale.z = w * 0.9;
+        this.effects.glow.emit({ pos: end, count: Math.max(2, Math.round(dt * 400)), speed: 5, color: '#ffffff', colorEnd: color, life: 0.25, size: 0.25, gravity: 3 });
+        return;
+      }
       const laserSpecial = f.state === 'special' && f.spec?.tipo === 'laser';
       const charging = (laserSpecial && f.t < 14) || (fat === f && this.phaseT < 12);
       const firing = (laserSpecial && f.t >= 14 && f.t < 36) || (fat === f && this.phaseT >= 12 && this.phaseT < 70);
@@ -1433,4 +1497,4 @@ window.game = new Game();
 initTouch(window.game);
 registerServiceWorker();
 // precargar en segundo plano los modelos de los peleadores
-for (const d of PELEADORES) if (d.modelo) loadAsset(d.modelo).catch(() => {});
+for (const d of PELEADORES) for (const url of [d.modelo, d.traje?.modelo]) if (url) loadAsset(url).catch(() => {});

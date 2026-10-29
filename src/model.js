@@ -573,6 +573,16 @@ function extraPose(a, P, e, t) {
     }
     case 'gas':
       Object.assign(P, { spin: Math.PI, torsoX: lerp(0.3, 1.15, e), torsoY: 0, headX: -0.6, shNX: -0.7, elNX: -0.2, shFX: -0.7, elFX: -0.2, hipNX: -0.4, knNX: 0.45, hipFX: -0.3, knFX: 0.4, hipsY: 0.92 }); return true;
+    // Diego con el traje de robot
+    case 'canon':      // apunta el brazo como cañón; al disparar el retroceso lo echa un poco atrás
+      Object.assign(P, { torsoY: -0.5, torsoX: lerp(0.08, -0.12, e), headX: -0.05, shFX: -1.55, shFZ: -0.05, elFX: -0.05, shNX: -1.2, shNZ: 0.25, elNX: -1.5,
+        hipNX: -0.55, knNX: 0.7, hipFX: 0.35, knFX: 0.45, hipsY: 0.88 }); return true;
+    case 'propulsor':  // se lanza casi acostado, con los brazos hacia atrás
+      Object.assign(P, { torsoX: 1.05, torsoY: 0, headX: -0.7, shNX: 0.55, shNZ: 0.25, elNX: -0.1, shFX: 0.55, shFZ: -0.25, elFX: -0.1, hipNX: 0.35, knNX: 0.5, hipFX: 0.6, knFX: 0.7, hipsY: 0.72 });
+      return true;
+    case 'descarga':   // brazos abiertos, temblando por la electricidad
+      Object.assign(P, { torsoX: -0.15, torsoY: 0, headX: -0.25, shNX: -0.4, shNZ: 1.25, elNX: -0.3, shFX: -0.4, shFZ: -1.25, elFX: -0.3, hipNX: -0.45, knNX: 0.6, hipFX: 0.35, knFX: 0.5, hipsY: 0.88 });
+      P.torsoZ = Math.sin(t * 2.3) * 0.04; P.shNZ += Math.sin(t * 3.1) * 0.08; P.shFZ -= Math.sin(t * 2.7) * 0.08; return true;
     // Conde
     case 'flexion':   // pose de fisicoculturista temblando de fuerza mientras crece
       Object.assign(P, { torsoX: 0.3, torsoY: 0, headX: -0.15, shNX: -0.5, shNZ: 0.55, elNX: -1.7, shFX: -0.5, shFZ: -0.55, elFX: -1.7, hipNX: -0.45, knNX: 0.7, hipFX: 0.25, knFX: 0.55, hipsY: 0.86 });
@@ -701,6 +711,7 @@ const FALLBACK = {
   senton_suelo: ['agacharse'], twerk: ['agacharse'], gas: ['agacharse'],
   flexion: ['carga', 'especial'], agarrar: ['puno'], levantar: ['victoria'], pisar_arriba: ['patada'], pisar: ['patada'],
   silbido: ['victoria', 'especial'], chela: ['lanzar', 'especial'],
+  canon: ['puno_fuerte', 'especial'], propulsor: ['embestida', 'especial'], descarga: ['carga', 'especial'],
 };
 const LOOPING = new Set(['idle', 'caminar', 'caminar_atras', 'agacharse', 'bloqueo', 'bloqueo_bajo', 'mareado', 'victoria', 'carga']);
 const BURNT = new THREE.Color('#0d0806');

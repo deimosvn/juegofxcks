@@ -43,7 +43,12 @@ export class Fighter {
     this.speed = def.stats?.velocidad ?? 1;
     this.power = def.stats?.fuerza ?? 1;
     this.maxHealth = def.stats?.vida ?? 100;
-    this.specials = (def.especiales || []).map((s) => ({ ...s, parsed: parseInput(s.input) }));
+    const parse = (list) => (list || []).map((s) => ({ ...s, parsed: parseInput(s.input) }));
+    // con el traje de robot (MODO TITÁN) los botones sacan otras armas: especialesTitan
+    this.normalSpecials = parse(def.especiales);
+    this.titanSpecials = parse(def.especialesTitan);
+    this.allSpecials = [...this.normalSpecials, ...this.titanSpecials];
+    this.titanSpeed = this.normalSpecials.find((s) => s.tipo === 'titan')?.velocidad ?? 1.7;
     this.fatality = def.fatality ? { ...def.fatality, parsed: parseInput(def.fatality.input) } : null;
     this.wins = 0;
     this.reset(side === 0 ? -2.6 : 2.6);
@@ -75,7 +80,9 @@ export class Fighter {
   }
 
   get move() { return this.moveName ? MOVES[this.moveName] : null; }
-  get spec() { return this.specIdx >= 0 ? this.specials[this.specIdx] : null; }
+  get spec() { return this.specIdx >= 0 ? this.allSpecials[this.specIdx] : null; }
+  get specials() { return this.titan && this.titanSpecials.length ? this.titanSpecials : this.normalSpecials; }
+  get titan() { return this.buffKind === 'titan' && this.buffTimer > 0; }
   get grounded() { return this.y <= 0.0001 && this.vy <= 0; }
   get dead() { return this.health <= 0; }
   get giant() { return this.buffKind === 'giant' && this.buffTimer > 0; }
@@ -120,7 +127,7 @@ export class Fighter {
   startSpecial(spec, opp) {
     const S = SPECIALS[spec.tipo];
     if (!S || (S.canStart && !S.canStart(this, opp, spec, this.game))) return false;
-    this.specIdx = this.specials.indexOf(spec); this.specData = {};
+    this.specIdx = this.allSpecials.indexOf(spec); this.specData = {};
     this.setState('special', spec.animacion || S.anim || 'especial', S.total || 0, S.s || 0.3, S.a || 0.5);
     this.game.event('special', { side: this.side, nombre: spec.nombre, color: spec.color });
     S.start?.(this, opp, spec, this.game);
@@ -155,16 +162,25 @@ export class Fighter {
     if (this.invuln > 0) this.invuln--;
     if (this.buffTimer > 0) {
       this.buffTimer--;
-      if (this.t % 3 === 0) g.effects.aura(new THREE.Vector3(this.x, this.y + 0.9 * this.sizeScale, 0), this.buffColor || '#ff2a2a', 2);
+      if (this.t % (this.titan ? 6 : 3) === 0) g.effects.aura(new THREE.Vector3(this.x, this.y + 0.9 * this.sizeScale, 0), this.buffColor || '#ff2a2a', 2);
       // gigante: cada paso retumba
       if (this.giant && this.state === 'walk' && this.t % 16 === 8) {
         g.effects.dust(new THREE.Vector3(this.x, 0.05, 0), 10); g.effects.addShake(0.05); sfx.thump();
       }
-      if (this.buffTimer === 0) this.buffKind = null;
+      if (this.buffTimer === 0) {
+        // se acaba el MODO TITÁN: el traje sale volando en pedazos
+        if (this.buffKind === 'titan') {
+          const c = new THREE.Vector3(this.x, this.y + 1.1, 0.2);
+          g.effects.shards(c, '#9fb3c8', 26); g.effects.smoke(c, '#555', 26); g.effects.burst(c, this.buffColor || '#4fd8ff', 40, 5);
+          sfx.powerDown();
+        }
+        this.buffKind = null;
+      }
     }
     const wasAir = this.y > 0 || this.vy > 0;
     const fwd = inp.forward(this.facing), back = inp.back(this.facing);
-    const walkSpd = 3.3 * this.speed * (this.giant ? 0.85 : 1);
+    const boost = this.giant ? 0.85 : this.titan ? this.titanSpeed : 1;   // gigante lento, robot rápido
+    const walkSpd = 3.3 * this.speed * boost;
 
     switch (this.state) {
       case 'idle': case 'walk': case 'crouch': case 'block': case 'crouchBlock': {
@@ -187,7 +203,8 @@ export class Fighter {
         }
         if (inp.held.block) { this.setIfNew(inp.held.down ? 'crouchBlock' : 'block', inp.held.down ? 'bloqueo_bajo' : 'bloqueo'); break; }
         if (inp.held.up) {
-          this.vy = 11.5; this.vx = fwd ? 4 * this.speed * this.facing : back ? -4 * this.speed * this.facing : 0;
+          const jx = 4 * this.speed * (this.titan ? 1.35 : 1);
+          this.vy = 11.5; this.vx = fwd ? jx * this.facing : back ? -jx * this.facing : 0;
           this.flip = this.vx !== 0;
           this.airAttackUsed = false;
           this.setState('jump', 'saltar', 50);
@@ -336,7 +353,7 @@ export class Fighter {
     pos = pos || this.chest;
     const dir = attacker.x < this.x ? 1 : -1;
     const armored = this.buffKind === 'armor' && this.buffTimer > 0;
-    const giant = this.giant;
+    const giant = this.giant, robot = this.titan;   // el traje de robot aguanta casi como la armadura
     // guardia de contragolpe (Gera)
     if (this.state === 'special' && !hit.isCounter && SPECIALS[this.spec?.tipo]?.counter) {
       const r = SPECIALS[this.spec.tipo].counter(this, attacker, hit, g);
@@ -344,7 +361,7 @@ export class Fighter {
     }
 
     if (!hit.unblockable && this.isBlocking(hit.height) && this.grounded) {
-      if (!armored && !giant) this.health = Math.max(1, this.health - hit.dmg * 0.12 * attacker.power);
+      if (!armored && !giant && !robot) this.health = Math.max(1, this.health - hit.dmg * 0.12 * attacker.power);
       this.wasCrouchBlock = this.state === 'crouchBlock' || (this.state === 'blockstun' && this.wasCrouchBlock);
       this.setState('blockstun', this.wasCrouchBlock ? 'bloqueo_bajo' : 'bloqueo');
       this.stunDur = 10;
@@ -356,14 +373,14 @@ export class Fighter {
 
     const scale = Math.max(0.35, 1 - this.comboTaken * 0.09);
     const buff = attacker.buffTimer > 0 ? (attacker.buffKind === 'dmg' ? 1.5 : attacker.buffKind === 'giant' ? 1.6 : 1) : 1;
-    const dmg = hit.dmg * attacker.power * buff * scale * (armored ? 0.5 : giant ? 0.6 : 1);
+    const dmg = hit.dmg * attacker.power * buff * scale * (armored ? 0.5 : giant ? 0.6 : robot ? 0.65 : 1);
     this.health = Math.max(0, this.health - dmg);
     this.comboTaken++;
     attacker.combo++;
     g.event('hit', { side: this.side, attacker: attacker.side, combo: attacker.combo });
 
     const strong = dmg >= 9 || hit.launch || hit.knockdown;
-    if (armored) { g.effects.metalSpark(pos, this.buffColor || '#9fe8ff'); sfx.clank(); }
+    if (armored || robot) { g.effects.metalSpark(pos, this.buffColor || '#9fe8ff'); sfx.clank(); }
     else {
       g.effects.hitSpark(pos, hit.color || '#ffd27a', strong);
       g.effects.bloodSplash(pos, dir, strong ? 1.3 : 0.7);
@@ -398,8 +415,9 @@ export class Fighter {
       this.vy = 5; this.vx = dir * (hit.push ?? 4);
     } else {
       this.setState('hitstun', 'golpeado');
-      this.stunDur = Math.round((hit.hitstun ?? 16) * (armored ? 0.5 : 1));
-      this.vx = dir * (hit.push ?? 3) * (armored ? 0.5 : 1);
+      const tough = armored ? 0.5 : robot ? 0.6 : 1;
+      this.stunDur = Math.round((hit.hitstun ?? 16) * tough);
+      this.vx = dir * (hit.push ?? 3) * tough;
     }
     return 'hit';
   }
@@ -420,9 +438,11 @@ export class Fighter {
 
   // Lo que se le pasa al modelo para animar
   animState() {
+    // el robot camina más rápido: sus pasos también
+    const rate = this.titan && this.state === 'walk' ? this.titanSpeed : 1;
     return {
-      key: this.animKey, t: this.t - this.animStart, total: this.animTotal, s: this.animS, a: this.animA,
-      id: this.animId, flip: this.flip,
+      key: this.animKey, t: (this.t - this.animStart) * rate, total: this.animTotal, s: this.animS, a: this.animA,
+      id: this.animId, flip: this.flip, rate,
     };
   }
 }

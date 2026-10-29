@@ -72,15 +72,15 @@ export class CPU {
     if (me.state === 'jump') { if (d < 2 && r < 0.5) this.plan(this.tap({ kick: true })); this.cool = 6; return; }
 
     // Ataque
-    const proj = findSpec('proyectil', 'congelar', 'puno_cohete', 'laser', 'pescado', 'kawama', 'cohete');
+    const proj = findSpec('proyectil', 'congelar', 'puno_cohete', 'laser', 'pescado', 'kawama', 'cohete', 'plasma');
     if (d > 4) {
       if (proj >= 0 && r < 0.35 && !g.hasProjectile(me)) useSpec(proj);
       else if (r < 0.5) this.plan({ keys: { [fwd]: true }, frames: 20 + Math.random() * 20 | 0 });
-      else if (r < 0.65) { const i = findSpec('rayo', 'teletransporte', 'gancho', 'embestida', 'misiles', 'lluvia_pescados', 'orbital'); if (i >= 0) useSpec(i); else this.plan({ keys: { up: true, [fwd]: true }, frames: 3 }); }
+      else if (r < 0.65) { const i = findSpec('rayo', 'teletransporte', 'gancho', 'embestida', 'misiles', 'lluvia_pescados', 'orbital', 'propulsores', 'megalaser'); if (i >= 0) useSpec(i); else this.plan({ keys: { up: true, [fwd]: true }, frames: 3 }); }
       else this.plan({ keys: { up: true, [fwd]: true }, frames: 3 });
     } else if (d > 1.9) {
       if (r < 0.45) this.plan({ keys: { [fwd]: true }, frames: 10 + Math.random() * 14 | 0 });
-      else if (r < 0.65) { const i = findSpec('embestida', 'terremoto', 'gancho', 'teletransporte', 'rayo', 'misiles', 'laser', 'chela', 'turbina', 'resorte'); if (i >= 0) useSpec(i); }
+      else if (r < 0.65) { const i = findSpec('embestida', 'terremoto', 'gancho', 'teletransporte', 'rayo', 'misiles', 'laser', 'chela', 'turbina', 'resorte', 'propulsores', 'megalaser', 'descarga'); if (i >= 0) useSpec(i); }
       else if (r < 0.8) this.plan({ keys: { up: true, [fwd]: true }, frames: 3 });
       else if (proj >= 0 && !g.hasProjectile(me)) useSpec(proj);
       else this.plan(this.tap({ [fwd]: true, punch: true }));
@@ -93,7 +93,7 @@ export class CPU {
         () => this.plan(this.tap({ [back]: true, kick: true })),
         () => this.plan({ keys: { down: true }, frames: 2 }, this.tap({ down: true, punch: true })),
         () => this.plan({ keys: { [back]: true }, frames: 12 }),
-        () => { const i = findSpec('uppercut_volador', 'gancho', 'poder', 'terremoto', 'armadura'); if (i >= 0 && Math.random() < L) useSpec(i); else this.plan(this.tap({ punch: true })); },
+        () => { const i = findSpec('uppercut_volador', 'gancho', 'poder', 'terremoto', 'armadura', 'titan', 'descarga'); if (i >= 0 && Math.random() < L) useSpec(i); else this.plan(this.tap({ punch: true })); },
         () => { const i = findSpec('agarre', 'gigante', 'rafaga', 'contra'); if (i >= 0 && Math.random() < L) useSpec(i); else this.plan(this.tap({ kick: true })); },
       ];
       combos[Math.random() * combos.length | 0]();

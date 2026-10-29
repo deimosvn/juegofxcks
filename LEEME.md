@@ -36,14 +36,23 @@ ESC = pausa con la lista de movimientos y fatalidades. En línea se puede usar c
 
 ## Peleadores
 
-### Diego (robot)
+### Diego (robot) — y con MODO TITÁN se pone un traje de robot
 | Especial | Entrada | Qué hace |
 |---|---|---|
-| PUÑO COHETE | `← → + P` | El antebrazo sale disparado con propulsor y derriba |
-| LÁSER OCULAR | `↓ → + P` | Rayos de los ojos, 5 impactos. Pasa por encima si el rival se agacha |
-| LLUVIA DE MISILES | `↓ ← + K` | 4 misiles desde la espalda que caen alrededor del rival |
-| MODO TITÁN | `↓ ↓ + P` | Armadura 6 s: mitad de daño, sin daño por bloqueo |
+| PUÑO COHETE | `← → + P` | El antebrazo sale disparado con propulsor y derriba (14 de daño) |
+| LÁSER OCULAR | `↓ → + P` | Rayos de los ojos, 5 impactos (18 en total). Pasa por encima si el rival se agacha |
+| LLUVIA DE MISILES | `↓ ← + K` | 4 misiles desde la espalda que caen alrededor del rival (20 en total) |
+| MODO TITÁN | `↓ ↓ + P` (o Especial + atrás) | Se pone el traje de robot 7 s: camina y salta mucho más rápido, recibe 35% menos daño, no le hace daño bloquear y el botón de especial saca las armas del robot |
 | ☠ DESINTEGRACIÓN | `→ → ↓ + P` | Escaneo láser y el rival se deshace en cubos de luz |
+
+Con el traje puesto (al final parpadea y se le cae en pedazos):
+
+| Arma del robot | Entrada | Qué hace |
+|---|---|---|
+| CAÑÓN DE PLASMA | `← → + P` (o Especial solo) | Bola de plasma grande que tumba (16) |
+| PROPULSORES | `→ → + K` (o Especial + adelante) | Sale volando a ras de suelo y embiste (15) |
+| MEGA LÁSER | `↓ → + P` (o Especial + abajo) | Rayo gordo desde el pecho, 8 impactos; agacharse no lo esquiva |
+| DESCARGA ELÉCTRICA | `↓ ↓ + P` (o Especial + atrás) | Rayos alrededor, 4 toques de cerca; el último deja al rival mareado |
 
 ### Alan (ingeniería aeroespacial) — trae jetpack en la espalda
 | Especial | Entrada | Qué hace |
@@ -164,9 +173,14 @@ Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de
 
 Tipos de especial: `proyectil`, `congelar`, `teletransporte`, `embestida`, `terremoto`, `gancho`,
 `uppercut_volador`, `poder`, `rayo`; robot: `puno_cohete`, `laser`, `misiles`, `armadura`; aeroespacial:
-`cohete`, `jetpack`, `orbital`, `turbina`; boxeo: `rafaga`, `resorte`, `contra`; nalgas: `culazo`, `senton`,
+`cohete`, `jetpack`, `orbital`, `turbina`; robot con traje: `titan`, `plasma`, `megalaser`, `propulsores`, `descarga`; boxeo: `rafaga`, `resorte`, `contra`; nalgas: `culazo`, `senton`,
 `twerk`, `gas`; fuerza: `gigante`, `agarre`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
 `aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`. Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
+
+Traje que se pone con un especial `titan` (como Diego): pasa el modelo por el convertidor con otro id (ej. `diego-robot`)
+y en el roster agrega `traje: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 }` y la lista
+`especialesTitan` con lo que hace el botón de especial mientras lo trae puesto. Los modelos de Meshy con la textura
+partida en muchas islas también se reducen bien: el convertidor lo detecta solo.
 
 Si el modelo sale de lado, usa "Girar" en el convertidor (o `rotacionY` en el roster). `escala` cambia la estatura
 (Conde usa `0.94`). Lo mejor es que el modelo venga en **pose de T o de A**; si viene con los brazos pegados al cuerpo

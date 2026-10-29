@@ -93,6 +93,8 @@ kbd { display: inline-block; min-width: 24px; padding: 1px 6px; border: 1px soli
 
 .name small { font-family: 'Rubik', sans-serif; font-size: 13px; letter-spacing: 0; color: #ddd; }
 .card .portrait-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.pspecials .suit { margin: 8px 0 2px; font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 1px; color: #4fd8ff; }
+td.sub { padding-top: 10px; text-align: left !important; font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 1px; color: #4fd8ff !important; }
 .pspecials .ready { margin-top: 10px; font-family: 'Bebas Neue', sans-serif; font-size: 26px; color: #5dff6a; }
 
 /* Lobby en línea */

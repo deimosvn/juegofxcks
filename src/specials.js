@@ -19,7 +19,7 @@ export const MISSILE_G = 20;
 
 // ---------------------------------------------------------------------
 //  Proyectiles (datos simples; las mallas las pone la vista)
-//  kind: bola | hielo | puno (puño cohete) | misil
+//  kind: bola | hielo | puno (puño cohete) | misil | plasma (cañón del robot)
 // ---------------------------------------------------------------------
 export function spawnProjectile(g, f, kind, spec, extra = {}) {
   const p = {
@@ -31,7 +31,7 @@ export function spawnProjectile(g, f, kind, spec, extra = {}) {
   return p;
 }
 
-export const SOLID_PROJECTILES = new Set(['bola', 'hielo', 'puno', 'cohete']);
+export const SOLID_PROJECTILES = new Set(['bola', 'hielo', 'puno', 'cohete', 'plasma']);
 
 export function updateProjectile(p, g) {
   const owner = g.fighters[p.owner], opp = g.fighters[1 - p.owner];
@@ -44,10 +44,12 @@ export function updateProjectile(p, g) {
   }
   p.x += p.vx / 60;
   if (Math.abs(p.x) > ARENA + 2) { p.alive = false; return; }
-  if (!opp.invulnerable() && Math.abs(opp.x - p.x) < 0.45 && p.y > opp.y - 0.1 && p.y < opp.y + opp.height + 0.1) {
+  const r = p.kind === 'plasma' ? 0.6 : 0.45;
+  if (!opp.invulnerable() && Math.abs(opp.x - p.x) < r && p.y > opp.y - 0.1 && p.y < opp.y + opp.height + 0.1) {
     const hit = { dmg: p.dmg, height: 'mid', hitstun: 22, push: 3.5, color: p.color };
     if (p.kind === 'hielo') hit.freeze = p.freeze ?? 100;
     if (p.kind === 'puno') { hit.knockdown = true; hit.push = 6; }
+    if (p.kind === 'plasma') { hit.knockdown = true; hit.push = 7; }
     opp.receive(hit, owner, V(p.x, p.y, 0.3));
     impactProjectile(p, g);
   }
@@ -58,6 +60,7 @@ export function impactProjectile(p, g) {
   const pos = V(p.x, p.y, 0.2);
   if (p.kind === 'puno') { g.effects.explosion(pos, '#ffb347', 0.6); sfx.clank(); return; }
   if (p.kind === 'cohete') { g.effects.explosion(pos, '#ff7a1a', 1.0); sfx.smallBoom(); return; }
+  if (p.kind === 'plasma') { g.effects.explosion(pos, p.color, 1.1); g.effects.burst(pos, '#ffffff', 40, 6); sfx.zap(); sfx.smallBoom(); return; }
   g.effects.burst(pos, p.color, 50, 6);
   if (p.kind === 'hielo') g.effects.shards(V(p.x, p.y), p.color, 6);
 }
@@ -333,6 +336,102 @@ export const SPECIALS = {
         g.effects.burst(f.chest, s.color, 80, 6); g.effects.ring(f.x, s.color, 2.6);
         g.effects.addShake(0.15); sfx.armor();
         f.buffTimer = 60 * (s.duracion ?? 6); f.buffKind = 'armor'; f.buffColor = s.color;
+      }
+      return t >= 46;
+    },
+  },
+
+  // Se pone el traje de robot (la vista cambia al modelo de `traje` del roster): corre más rápido
+  // (`velocidad`), aguanta más y los botones de especial sacan las armas del robot (especialesTitan)
+  titan: {
+    total: 52, anim: 'flexion',
+    canStart: (f) => f.buffTimer <= 0,
+    update(f, o, s, g, t) {
+      if (t % 2 === 0) aura(g, f, s.color, 5);
+      if (t === 4) sfx.servo();
+      if (t === 18) g.effects.ring(f.x, s.color, 1.6, 0.3);
+      if (t === 30) {
+        g.effects.burst(f.chest, s.color, 120, 7); g.effects.burst(f.chest, '#ffffff', 40, 4);
+        g.effects.ring(f.x, s.color, 3.2); g.effects.dust(V(f.x, 0.1), 24);
+        g.effects.addShake(0.3); sfx.transform();
+        f.buffTimer = 60 * (s.duracion ?? 7); f.buffKind = 'titan'; f.buffColor = s.color;
+      }
+      return t >= 52;
+    },
+  },
+
+  // Robot: cañón de plasma en el brazo (bola grande que tumba)
+  plasma: {
+    total: 40, anim: 'canon', s: 12 / 40, a: 30 / 40,
+    canStart: (f, o, s, g) => !g.hasProjectile(f),
+    update(f, o, s, g, t) {
+      if (t === 1) sfx.charge();
+      if (t < 12 && t % 2 === 0) g.effects.aura(f.hand, s.color, 5);
+      if (t === 12) {
+        spawnProjectile(g, f, 'plasma', s, { y: f.y + 1.35, vx: (s.velocidad ?? 12) * f.facing });
+        g.effects.burst(f.hand, s.color, 30, 4); sfx.zap(); sfx.fire();
+      }
+      return t >= 40;
+    },
+  },
+
+  // Robot: rayo gordo desde el pecho. A media altura: agacharse no lo esquiva
+  megalaser: {
+    total: 60, anim: 'laser', s: 14 / 60, a: 46 / 60,
+    update(f, o, s, g, t) {
+      if (t === 1) sfx.charge();
+      if (t === 14 || t === 30) sfx.laser();
+      if (t >= 14 && t < 46 && (t - 14) % 4 === 0) {
+        const y = f.y + 1.25;
+        const ahead = (o.x - f.x) * f.facing > 0;
+        if (ahead && !o.invulnerable() && y >= o.y - 0.4 && y <= o.y + o.height + 0.4) {
+          const last = t >= 42;
+          o.receive({ dmg: (s.danio ?? 24) / 8, height: 'mid', hitstun: last ? 24 : 12, push: last ? 5 : 1, color: s.color }, f, V(o.x - f.facing * 0.25, Math.min(y, o.y + o.height - 0.1), 0.3));
+        }
+      }
+      return t >= 60;
+    },
+  },
+
+  // Robot: se lanza con los propulsores a ras de suelo y embiste
+  propulsores: {
+    total: 40, anim: 'carga',
+    start(f) { f.invuln = 6; },
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t < 6) aura(g, f, s.color, 3);
+      if (t === 6) { f.anim(s.animacion || 'propulsor'); sfx.rocket(); }
+      if (t >= 6 && t < 24 && !d.hit) {
+        f.vx = (s.velocidad ?? 20) * f.facing;
+        if (f.reaches(o, 0.8, 1.0)) {
+          d.hit = true; f.vx = -4 * f.facing;
+          o.receive({ dmg: s.danio ?? 15, height: 'mid', knockdown: true, push: 9, color: s.color }, f);
+          g.effects.explosion(V(o.x, o.y + 1.0, 0.3), s.color, 0.6);
+        }
+      } else f.vx *= 0.75;
+      if (t === 24 || (d.hit && !d.slowed)) { d.slowed = true; f.anim('idle'); }
+      return t >= 40;
+    },
+  },
+
+  // Robot: descarga eléctrica alrededor (4 toques de cerca; el último lo deja mareado)
+  descarga: {
+    total: 46, anim: 'descarga',
+    update(f, o, s, g, t) {
+      if (t === 2) sfx.charge();
+      if (t % 2 === 0) aura(g, f, s.color, 3);
+      const i = [12, 18, 24, 30].indexOf(t);
+      if (i >= 0) {
+        sfx.zap();
+        const near = Math.abs(o.x - f.x) < 2.6 && Math.abs(o.y - f.y) < 1.6;
+        const from = V(f.x, f.y + 1.2, 0.2);
+        g.effects.lightning(from, near ? V(o.x, o.y + 1.0, 0.2) : V(f.x + f.facing * 2.2, f.y + 0.4 + (i % 2) * 1.2, 0.2), s.color, 0.14);
+        g.effects.lightning(from, V(f.x - f.facing * 1.4, f.y + 0.3 + (i % 3) * 0.6, -0.3), '#ffffff', 0.1);
+        if (near && !o.invulnerable()) {
+          const last = i === 3;
+          const r = o.receive({ dmg: (s.danio ?? 16) / 4, height: 'mid', hitstun: 14, push: last ? 2.5 : 0.6, color: s.color }, f, V(o.x, o.y + 1.0, 0.3));
+          if (last && r === 'hit' && !o.dead && o.state === 'hitstun') { o.setState('stunned', 'mareado'); o.stunDur = 45; }
+        }
       }
       return t >= 46;
     },

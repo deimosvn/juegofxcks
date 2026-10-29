@@ -13,6 +13,8 @@
 //    stats      velocidad / fuerza (1 = normal), vida (100 = normal)
 //    especiales lista de habilidades (ver tipos en src/specials.js)
 //    fatality   remate final cuando sale "¡ACÁBALO!"
+//    traje      (opcional) modelo que se pone con un especial tipo 'titan': { modelo, escala }
+//    especialesTitan  (opcional) lo que sacan los mismos botones mientras trae el traje puesto
 //
 //  Entradas (input) — relativas a hacia dónde mira el peleador:
 //    →  adelante    ←  atrás    ↓  abajo    ↑  arriba
@@ -22,7 +24,9 @@
 //  Tipos de especial disponibles:
 //    proyectil, teletransporte, embestida, terremoto, gancho,
 //    congelar, uppercut_volador, poder, rayo
-//    robot: puno_cohete, laser, misiles, armadura
+//    robot: puno_cohete, laser, misiles, armadura, titan (se pone el traje: más rápido y aguanta más)
+//    robot con traje: plasma (cañón), megalaser (rayo gordo desde el pecho), propulsores (embestida
+//      volando), descarga (eléctrica de cerca, deja mareado)
 //    aeroespacial: cohete, jetpack, orbital, turbina
 //    boxeo: rafaga, resorte, contra (y uppercut_volador)
 //    nalgas: culazo, senton, twerk, gas
@@ -82,12 +86,21 @@ export const PELEADORES = [
     modelo: 'assets/peleadores/diego/modelo.glb',
     retrato: 'assets/peleadores/diego/retrato.png',
     escala: 1, rotacionY: 0,
+    // MODO TITÁN: se pone este traje de robot (Robot X de Meshy)
+    traje: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 },
     stats: { velocidad: 1.05, fuerza: 1, vida: 100 },
     especiales: [
-      { nombre: 'PUÑO COHETE', tipo: 'puno_cohete', input: '← → + P', color: '#ff8a00', danio: 11 },
-      { nombre: 'LÁSER OCULAR', tipo: 'laser', input: '↓ → + P', color: '#ff2a3a', danio: 14 },
-      { nombre: 'LLUVIA DE MISILES', tipo: 'misiles', input: '↓ ← + K', color: '#ffb000', danio: 16 },
-      { nombre: 'MODO TITÁN', tipo: 'armadura', input: '↓ ↓ + P', color: '#4fd8ff', duracion: 6 },
+      { nombre: 'PUÑO COHETE', tipo: 'puno_cohete', input: '← → + P', color: '#ff8a00', danio: 14 },
+      { nombre: 'LÁSER OCULAR', tipo: 'laser', input: '↓ → + P', color: '#ff2a3a', danio: 18 },
+      { nombre: 'LLUVIA DE MISILES', tipo: 'misiles', input: '↓ ← + K', color: '#ffb000', danio: 20 },
+      { nombre: 'MODO TITÁN', tipo: 'titan', input: '↓ ↓ + P', color: '#4fd8ff', duracion: 7, velocidad: 1.7 },
+    ],
+    // Con el traje puesto, el botón de especial (solo / adelante / abajo / atrás) saca las armas del robot
+    especialesTitan: [
+      { nombre: 'CAÑÓN DE PLASMA', tipo: 'plasma', input: '← → + P', color: '#4fd8ff', danio: 16 },
+      { nombre: 'PROPULSORES', tipo: 'propulsores', input: '→ → + K', color: '#4fd8ff', danio: 15 },
+      { nombre: 'MEGA LÁSER', tipo: 'megalaser', input: '↓ → + P', color: '#ff2a3a', danio: 24 },
+      { nombre: 'DESCARGA ELÉCTRICA', tipo: 'descarga', input: '↓ ↓ + P', color: '#9fe8ff', danio: 16 },
     ],
     fatality: { nombre: 'DESINTEGRACIÓN', tipo: 'desintegrar', input: '→ → ↓ + P', color: '#4fd8ff' },
     frase: 'Sistema de combate: victoria confirmada.',

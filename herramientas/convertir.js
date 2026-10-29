@@ -102,6 +102,7 @@ function simplify(geo, targetTris) {
   const pos = new Float32Array(g.attributes.position.array);
   let [out] = MeshoptSimplifier.simplify(idx, pos, 3, targetTris * 3, 0.01);
   if (out.length / 3 > targetTris * 1.5) [out] = MeshoptSimplifier.simplify(idx, pos, 3, targetTris * 3, 0.04);
+  if (out.length / 3 > targetTris * 1.5 && g.attributes.uv) return seamless(g, targetTris, before);
   // compactar vértices
   const remap = new Int32Array(g.attributes.position.count).fill(-1);
   let next = 0;
@@ -116,6 +117,43 @@ function simplify(geo, targetTris) {
   for (let i = 0; i < out.length; i++) ni[i] = remap[out[i]];
   ng.setIndex(new THREE.BufferAttribute(ni, 1));
   return { geo: ng, before, after: out.length / 3 };
+}
+
+// Algunos modelos (Meshy) traen la textura cortada en cientos de islas y esas costuras no dejan
+// simplificar. Entonces se simplifica solo por forma (una copia por posición) y cada esquina toma
+// la copia del vértice cuya UV cae en la misma isla que las otras dos. Si no hay ninguna (el triángulo
+// quedó entre dos islas), el triángulo entero toma el color de una esquina en vez de embarrar la textura.
+function seamless(g, targetTris, before) {
+  const P = g.attributes.position.array, UV = g.attributes.uv.array, n = g.attributes.position.count;
+  const groups = new Map(), slot = new Uint32Array(n), cands = [], pos = [];
+  for (let v = 0; v < n; v++) {
+    const k = `${Math.round(P[v * 3] * 1e4)},${Math.round(P[v * 3 + 1] * 1e4)},${Math.round(P[v * 3 + 2] * 1e4)}`;
+    let s = groups.get(k);
+    if (s === undefined) { s = cands.length; groups.set(k, s); cands.push([]); pos.push(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]); }
+    slot[v] = s; cands[s].push(v);
+  }
+  const src = g.index.array, sh = new Uint32Array(src.length);
+  for (let i = 0; i < src.length; i++) sh[i] = slot[src[i]];
+  const [out] = MeshoptSimplifier.simplify(sh, new Float32Array(pos), 3, targetTris * 3, 0.04);
+  const d = (a, b) => Math.abs(UV[a * 2] - UV[b * 2]) + Math.abs(UV[a * 2 + 1] - UV[b * 2 + 1]);
+  const attrs = Object.entries(g.attributes), outAttrs = attrs.map(([, a]) => []);
+  let flat = 0;
+  for (let t = 0; t < out.length; t += 3) {
+    const A = cands[out[t]].slice(0, 8), B = cands[out[t + 1]].slice(0, 8), C = cands[out[t + 2]].slice(0, 8);
+    let best = Infinity, tri = [A[0], B[0], C[0]];
+    for (const a of A) for (const b of B) for (const c of C) { const s = d(a, b) + d(b, c) + d(c, a); if (s < best) { best = s; tri = [a, b, c]; } }
+    const oneColor = best > 0.15;
+    if (oneColor) flat++;
+    for (const v of tri) attrs.forEach(([name, a], i) => {
+      const from = name === 'uv' && oneColor ? tri[0] : v;
+      for (let c = 0; c < a.itemSize; c++) outAttrs[i].push(a.array[from * a.itemSize + c]);
+    });
+  }
+  const ng = new THREE.BufferGeometry();
+  attrs.forEach(([name, a], i) => ng.setAttribute(name, new THREE.BufferAttribute(new a.array.constructor(outAttrs[i]), a.itemSize, a.normalized)));
+  const geo = mergeVertices(ng, 1e-6);
+  log(`  (textura en muchas islas: simplificado por forma; ${flat.toLocaleString()} triángulos de un solo color)`);
+  return { geo, before, after: out.length / 3 };
 }
 
 async function process(obj) {

@@ -70,6 +70,13 @@ export const sfx = {
   smallBoom: () => { noise(0.45, 400, 0.7, 0.8); tone(70, 0.4, 'sine', 0.6, 35); },
   armor: () => { tone(220, 0.5, 'square', 0.15, 880); setTimeout(() => { noise(0.08, 3500, 6, 0.4, 'bandpass'); tone(1200, 0.12, 'triangle', 0.2); }, 380); },
   clank: () => { noise(0.07, 4200, 8, 0.6, 'bandpass'); tone(1500, 0.09, 'triangle', 0.25, 1200); },
+  // Diego se pone el traje: motor que sube, placas que se cierran y el encendido
+  transform: () => {
+    tone(110, 0.8, 'sawtooth', 0.15, 440);
+    for (let i = 0; i < 5; i++) setTimeout(() => { noise(0.06, 3800, 7, 0.45, 'bandpass'); tone(700 + i * 160, 0.08, 'square', 0.1); }, 100 + i * 85);
+    setTimeout(() => { tone(880, 0.4, 'triangle', 0.2, 1760); tone(440, 0.4, 'square', 0.08, 880); }, 560);
+  },
+  powerDown: () => { tone(620, 0.7, 'sawtooth', 0.12, 110); noise(0.5, 1500, 1, 0.3, 'lowpass', 300); },
   voxel: () => { for (let i = 0; i < 10; i++) setTimeout(() => tone(600 + Math.random() * 1600, 0.06, 'square', 0.06), i * 45); },
   // --- Gera y José ---
   boing: () => { tone(160, 0.4, 'sine', 0.35, 640); tone(240, 0.35, 'triangle', 0.15, 900); },
