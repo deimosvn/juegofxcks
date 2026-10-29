@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { sfx } from './audio.js';
-import { SPECIALS, FATALITIES, spawnProjectile, updateProjectile } from './specials.js';
+import { SPECIALS, FATALITIES, SOLID_PROJECTILES, spawnProjectile, updateProjectile } from './specials.js';
 
 // =====================================================================
 //  ALAN (ingeniería aeroespacial) · GERA (boxeo) · JOSÉ CORTEZ (nalgas) · CONDE (fuerza, gigante)
+//  EMI (pescadero: pescados y caguamas)
 //  Mismas reglas que specials.js: estado con datos simples, lo visual
 //  (satélite, turbina, resorte, cohete en la espalda…) se dibuja en main.js.
 // =====================================================================
@@ -11,6 +12,8 @@ import { SPECIALS, FATALITIES, spawnProjectile, updateProjectile } from './speci
 const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
 const ARENA = 9;
 const clampT = THREE.MathUtils.clamp;
+const KAWAMA_G = 20, FISH_G = 14;     // gravedad de la caguama y de la lluvia de pescados
+SOLID_PROJECTILES.add('pescado');     // un pescado choca contra otros proyectiles
 
 Object.assign(SPECIALS, {
   // ---------------- Alan ----------------
@@ -280,7 +283,71 @@ Object.assign(SPECIALS, {
       if (f.specData?.grab && !f.specData.thrown && o.state === 'scripted') { o.setState('airHit', 'caer'); o.vy = 2; }
     },
   },
+
+  // ---------------- Emi (pescadero) ----------------
+  // Avienta un pescado que va dando vueltas
+  pescado: {
+    total: 34, anim: 'lanzar', s: 12 / 34, a: 20 / 34,
+    canStart: (f, o, s, g) => !g.hasProjectile(f),
+    update(f, o, s, g, t) {
+      if (t === 12) { spawnProjectile(g, f, 'pescado', s, { y: f.y + 1.4, vx: (s.velocidad ?? 11) * f.facing }); sfx.whoosh(); }
+      return t >= 34;
+    },
+  },
+
+  // Avienta una caguama en parábola hacia el pecho del rival: se rompe y lo deja mareado
+  kawama: {
+    total: 40, anim: 'lanzar', s: 14 / 40, a: 22 / 40,
+    canStart: (f, o, s, g) => !g.projectiles.some((p) => p.alive && p.owner === f.side && p.kind === 'kawama'),
+    update(f, o, s, g, t) {
+      if (t === 14) {
+        const x0 = f.x + f.facing * 0.5, y0 = f.y + 1.75, vy = 7;
+        const T = (vy + Math.sqrt(vy * vy + 2 * KAWAMA_G * (y0 - 1.1))) / KAWAMA_G;
+        const dx = clampT(o.x - x0, -8, 8);
+        spawnProjectile(g, f, 'kawama', s, { x: x0, y: y0, vx: (Math.abs(dx) < 0.5 ? f.facing * 2 : dx) / T, vy });
+        sfx.whoosh();
+      }
+      return t >= 40;
+    },
+  },
+
+  // Chifla y le llueven pescados encima al rival
+  lluvia_pescados: {
+    total: 58, anim: 'silbido',
+    update(f, o, s, g, t) {
+      if (t === 4) sfx.whistle();
+      const i = [16, 22, 28, 34, 40].indexOf(t);
+      if (i >= 0) {
+        const x = clampT(o.x + (i - 2) * 0.4 * f.facing, -ARENA, ARENA);
+        spawnProjectile(g, f, 'pescado', s, { x, y: 8 + i * 0.25, vx: 0, vy: -1, fall: true, dmg: (s.danio ?? 15) / 5, last: i === 4 });
+      }
+      return t >= 58;
+    },
+  },
+
+  // Agita una caguama y lo baña de cerveza: varios chorros que lo empujan (el chorro lo dibuja main.js)
+  chela: {
+    total: 60, anim: 'chela', s: 0.2, a: 0.85,
+    update(f, o, s, g, t) {
+      if (t === 2) sfx.clank();
+      if (t === 14) sfx.fizz();
+      if (t >= 14 && t < 46 && (t - 14) % 8 === 0) {
+        const dx = (o.x - f.x) * f.facing;
+        if (dx > 0 && dx < 2.9 && !o.invulnerable() && o.y < 1.6) {
+          o.receive({ dmg: (s.danio ?? 12) / 4, height: 'mid', hitstun: 16, push: 2.4, color: s.color || '#ffd23a' }, f, V(o.x - f.facing * 0.25, o.y + 1.3, 0.3));
+        }
+      }
+      return t >= 60;
+    },
+  },
 });
+
+// Pescado que pega o cae al suelo: salpica
+function splashFish(p, g) {
+  p.alive = false;
+  g.effects.burst(V(p.x, Math.max(p.y, 0.12), 0.2), '#bfe8ff', 26, 3.5);
+  sfx.slap();
+}
 
 // Especiales en los que José saca las nalgas (la vista las infla)
 export const BUTT_SPECIALS = new Set(['culazo', 'senton', 'twerk', 'gas']);
@@ -306,6 +373,41 @@ export function updateProjectileExtra(p, g) {
     if (p.life <= 0 || Math.abs(p.x) > ARENA + 2) { p.alive = false; return; }
     if (p.t % 15 === 0 && !opp.invulnerable() && Math.abs(opp.x - p.x) < 1.15 && opp.y < 2) {
       opp.receive({ dmg: p.dmg, height: 'mid', unblockable: true, hitstun: 18, push: 0.6, color: p.color }, owner, V(opp.x, opp.y + 1.3, 0.3));
+    }
+    return;
+  }
+  if (p.kind === 'pescado') {
+    p.t++;
+    if (p.fall) {   // lluvia de pescados: cae del cielo (hay que bloquear parado)
+      p.vy -= FISH_G / 60; p.y += p.vy / 60;
+      if (!opp.invulnerable() && Math.abs(opp.x - p.x) < 0.5 && p.y > opp.y && p.y < opp.y + opp.height) {
+        opp.receive({ dmg: p.dmg, height: 'mid', hitstun: 14, push: 1.2, color: p.color, knockdown: !!p.last }, owner, V(p.x, p.y, 0.3));
+        splashFish(p, g);
+      } else if (p.y <= 0.08) splashFish(p, g);
+      return;
+    }
+    p.x += p.vx / 60;
+    if (Math.abs(p.x) > ARENA + 2) { p.alive = false; return; }
+    if (!opp.invulnerable() && Math.abs(opp.x - p.x) < 0.45 && p.y > opp.y - 0.1 && p.y < opp.y + opp.height + 0.1) {
+      opp.receive({ dmg: p.dmg, height: 'mid', hitstun: 20, push: 3.5, color: p.color }, owner, V(p.x, p.y, 0.3));
+      splashFish(p, g);
+    }
+    return;
+  }
+  if (p.kind === 'kawama') {
+    p.t++;
+    p.vy -= KAWAMA_G / 60; p.x += p.vx / 60; p.y += p.vy / 60;
+    const body = !opp.invulnerable() && Math.abs(opp.x - p.x) < 0.45 && p.y > opp.y && p.y < opp.y + opp.height + 0.1;
+    if (body || p.y <= 0.06 || Math.abs(p.x) > ARENA + 2) {
+      p.alive = false;
+      const pos = V(p.x, Math.max(p.y, 0.15), 0.2);
+      g.effects.shards(pos, '#8a4a12', 10); g.effects.burst(pos, '#ffe9a8', 50, 4);   // vidrio y espuma
+      sfx.shatter();
+      // si le cae encima (o se rompe a sus pies) queda mareado
+      if (!opp.invulnerable() && (body || (Math.abs(opp.x - p.x) < 0.8 && opp.y < 0.3))) {
+        const r = opp.receive({ dmg: p.dmg, height: 'mid', hitstun: 20, push: 2, color: p.color }, owner, pos);
+        if (r === 'hit' && opp.health > 0 && opp.state === 'hitstun') { opp.setState('stunned', 'mareado'); opp.stunDur = 50; }
+      }
     }
     return;
   }
@@ -380,5 +482,18 @@ Object.assign(FATALITIES, {
     }
     if (t === 186) w.anim('victoria');
     return t >= 230;
+  },
+
+  // Emi: un pescado gigante sale del suelo, se traga al rival y se vuelve a clavar (lo dibuja main.js)
+  pescadote(t, w, l, fat, g, data) {
+    if (t === 1) { w.anim('silbido', 40); l.anim('mareado'); sfx.whistle(); }
+    if (t === 24) { g.effects.ring(l.x, '#4fb8ff', 2.6); g.effects.burst(V(l.x, 0.2), '#bfe8ff', 70, 5); g.effects.addShake(0.3); sfx.splash(); }
+    if (t === 52) { l.hidden = true; g.effects.burst(V(l.x, 2.0), '#bfe8ff', 90, 6); g.effects.addShake(0.5); sfx.slap(); sfx.boom(); }
+    if (t === 104) {
+      const x = l.x + w.facing * 1.4;
+      g.effects.burst(V(x, 0.2), '#bfe8ff', 100, 6); g.effects.ring(x, '#4fb8ff', 3.6); g.effects.addShake(0.4); sfx.splash();
+    }
+    if (t === 125) w.anim('victoria');
+    return t >= 200;
   },
 });

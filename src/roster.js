@@ -27,12 +27,14 @@
 //    boxeo: rafaga, resorte, contra (y uppercut_volador)
 //    nalgas: culazo, senton, twerk, gas
 //    fuerza: gigante (se hace gigante y súper fuerte), agarre (lo levanta y lo avienta)
+//    pescadero: pescado, kawama (caguama en parábola), lluvia_pescados, chela (chorro de cerveza)
 //
 //  Tipos de fatality disponibles:
 //    explosion, incinerar, congelar_romper, rayo, aplastar, desintegrar,
-//    despegue, nocaut, nalgon, pisoton
+//    despegue, nocaut, nalgon, pisoton, pescadote
 //
-//  accesorios: ['guantes'] (guantes de box, color con colorGuantes) y/o ['jetpack']
+//  accesorios: ['guantes'] (guantes de box, color con colorGuantes), ['jetpack'],
+//    ['pescadero'] (pescado y caguama en la mano)
 //
 //  Modelos: pasa el .fbx/.glb de Meshy o Tripo por herramientas/convertir.html
 //  (lo reduce, le pone esqueleto automático y crea el retrato).
@@ -159,6 +161,24 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'PISOTÓN GIGANTE', tipo: 'pisoton', input: '↓ → ↓ + K', color: '#ff7a1a' },
     frase: 'Ahora sí, ¿quién es el chaparro?',
+  },
+  {
+    id: 'emi',
+    nombre: 'EMI',
+    color: '#1f8fbf',
+    modelo: 'assets/peleadores/emi/modelo.glb',
+    retrato: 'assets/peleadores/emi/retrato.png',
+    escala: 1, rotacionY: 0,
+    accesorios: ['pescadero'],
+    stats: { velocidad: 1, fuerza: 1, vida: 100 },
+    especiales: [
+      { nombre: 'PESCADAZO', tipo: 'pescado', input: '← → + P', color: '#8fd3ff', danio: 10 },
+      { nombre: 'KAWAMA VOLADORA', tipo: 'kawama', input: '↓ → + P', color: '#ffb000', danio: 12 },
+      { nombre: 'LLUVIA DE PESCADOS', tipo: 'lluvia_pescados', input: '↓ ← + K', color: '#4fb8ff', danio: 15 },
+      { nombre: 'BAÑO DE CHELA', tipo: 'chela', input: '← ← + K', color: '#ffd23a', danio: 12 },
+    ],
+    fatality: { nombre: 'PESCADO GIGANTE', tipo: 'pescadote', input: '→ ↓ → + K', color: '#4fb8ff' },
+    frase: '¡Pásele, pásele, que hoy hay paliza fresca!',
   },
   {
     id: 'fuego',

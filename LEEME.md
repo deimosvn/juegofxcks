@@ -23,6 +23,15 @@ Abajo+Puño = gancho al aire · Abajo+Patada = barrida · Adelante+Puño = puño
 Especiales: su combinación (ej. `← → + P`) o el botón Especial (solo / adelante / abajo / atrás).
 ESC = pausa con la lista de movimientos y fatalidades. En línea se puede usar cualquiera de las dos teclas o un mando.
 
+## 📱 En el celular (y como app)
+- **Joystick** en la mitad izquierda (aparece donde pones el dedo): moverse, saltar (arriba) y agacharse (abajo).
+- **PUÑO · PATADA · BLOQ. · ESPECIAL** a la derecha. ESPECIAL solo = especial 1, adelante = 2, abajo = 3, atrás = 4;
+  arriba del botón sale el nombre del que vas a hacer.
+- **☠ FATALITY**: aparece en “¡ACÁBALO!” y la marca por ti. **❚❚** = pausa.
+- Se juega mejor acostado (horizontal); al entrar a jugar se pone en pantalla completa.
+- **Instalarlo como app**: en Android sale el botón “INSTALAR EL JUEGO” en el menú (o menú del navegador → Instalar).
+  En iPhone: Safari → Compartir → “Agregar a inicio”. Después de abrirlo una vez, contra la CPU funciona **sin internet**.
+
 ## Peleadores
 
 ### Diego (robot)
@@ -69,6 +78,15 @@ ESC = pausa con la lista de movimientos y fatalidades. En línea se puede usar c
 | PISOTÓN SÍSMICO | `↓ ↓ + K` | Brinca y cae con todo: onda en el suelo (bloquear agachado) |
 | LANZAMIENTO TITÁNICO | `← → + P` | Agarre de cerca: lo levanta sobre la cabeza y lo avienta. No se puede bloquear |
 | ☠ PISOTÓN GIGANTE | `↓ → ↓ + K` | Se hace gigantesco y lo aplasta de un pisotón |
+
+### Emi (pescadero) — pescados y caguamas
+| Especial | Entrada | Qué hace |
+|---|---|---|
+| PESCADAZO | `← → + P` (o el botón Especial solo) | Avienta un pescado que va dando vueltas |
+| KAWAMA VOLADORA | `↓ → + P` | Avienta una caguama en parábola: se rompe y deja al rival mareado |
+| LLUVIA DE PESCADOS | `↓ ← + K` | Chifla y le caen 5 pescados encima (el último lo tumba) |
+| BAÑO DE CHELA | `← ← + K` | Agita la caguama y lo baña: varios chorros que lo empujan |
+| ☠ PESCADO GIGANTE | `→ ↓ → + K` | Un pescado gigante sale del suelo y se lo traga |
 
 Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo).
 

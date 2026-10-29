@@ -77,6 +77,9 @@ export const sfx = {
   slap: () => { noise(0.09, 2500, 1.2, 1.0, 'bandpass'); tone(120, 0.12, 'sine', 0.5, 70); },
   thump: () => { tone(70, 0.18, 'sine', 0.8, 45); noise(0.06, 300, 1, 0.4); },
   grow: () => { tone(55, 1.1, 'sawtooth', 0.3, 190); tone(82, 1.1, 'square', 0.1, 260); noise(1.0, 180, 1, 0.45, 'lowpass', 700); },
+  whistle: () => { tone(1500, 0.18, 'sine', 0.3, 2300); setTimeout(() => tone(2300, 0.35, 'sine', 0.3, 1700), 170); },
+  fizz: () => noise(0.9, 5200, 0.8, 0.35, 'highpass', 2600),
+  splash: () => { noise(0.6, 900, 0.7, 0.8, 'lowpass', 300); noise(0.35, 3500, 1.5, 0.35, 'bandpass', 1800); },
   fart: () => { tone(95, 0.7, 'sawtooth', 0.22, 60); tone(110, 0.65, 'square', 0.08, 70); noise(0.7, 260, 3, 0.25, 'bandpass', 160); },
 };
 

@@ -10,6 +10,8 @@ import { FATALITIES, impactProjectile, SOLID_PROJECTILES } from './specials.js';
 import { updateProjectileExtra as updateProjectile, BUTT_SPECIALS } from './specials-amigos.js';
 import { sfx, announce, unlockAudio, setVoice, audioState } from './audio.js';
 import { loadNetConfig, createBackend, Link, RollbackSession, fnv } from './net.js';
+import { makeFish, makeKawama } from './props.js';
+import { initTouch, isTouch, registerServiceWorker } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;
@@ -32,7 +34,8 @@ class Game {
   constructor() {
     const canvas = $('game');
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // en celular, menos píxeles: se ve casi igual y va mucho más fluido
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -366,9 +369,15 @@ class Game {
   }
 
   clickCard(i) {
-    if (this.mode === 'online') { const p = this.online.side; if (!this.sel.locked[p]) { this.sel.cur[p] = i; this.lock(p); } return; }
-    if (!this.sel.locked[0]) { this.sel.cur[0] = i; this.lock(0); }
-    else if (this.mode === 'vs' && !this.sel.locked[1]) { this.sel.cur[1] = i; this.lock(1); }
+    // en el celular no hay "pasar el mouse": el primer toque muestra al peleador y sus especiales,
+    // el segundo toque en el mismo lo elige
+    const pick = (p) => {
+      if (isTouch() && this.sel.tapped?.[p] !== i) { (this.sel.tapped ||= [])[p] = i; this.sel.cur[p] = i; this.selectMoved(p); return; }
+      this.sel.cur[p] = i; this.lock(p);
+    };
+    if (this.mode === 'online') { const p = this.online.side; if (!this.sel.locked[p]) pick(p); return; }
+    if (!this.sel.locked[0]) pick(0);
+    else if (this.mode === 'vs' && !this.sel.locked[1]) pick(1);
   }
 
   selectMoved(p) {
@@ -731,9 +740,8 @@ class Game {
     const list = this.stageList();
     const start = (!canPick && this.online?.stageCursor) || this.stageId;
     this.stageSel = { cur: Math.max(0, list.findIndex((s) => s.id === start)), canPick, onDone, locked: false };
-    $('stage-hint').textContent = canPick
-      ? 'A D / ← → para elegir · F / K / ENTER para aceptar · ESC volver'
-      : `${this.online?.peerName || 'Tu rival'} está eligiendo el escenario…`;
+    $('stage-hint').textContent = !canPick ? `${this.online?.peerName || 'Tu rival'} está eligiendo el escenario…`
+      : isTouch() ? 'Toca un escenario para elegirlo' : 'A D / ← → para elegir · F / K / ENTER para aceptar · ESC volver';
     this.show('stages');
     this.renderStages();
     this.stageThumbs().then(() => this.renderStages());
@@ -973,6 +981,14 @@ class Game {
       for (const o of [sat, aim, ray, turb, spring, sglove, rocket]) { o.visible = false; o.frustumCulled = false; this.scene.add(o); }
       return { sat, aim, ray, turb, fan, spring, sglove, rocket, rflame };
     });
+    // Emi: pescado gigante de la fatality
+    this.bigFish = makeFish({ body: '#6f8fa6', belly: '#e6edf1', fin: '#45606f' });
+    this.bigFish.scale.setScalar(7); this.bigFish.visible = false;
+    this.scene.add(this.bigFish);
+    // Luz de los proyectiles: siempre existe (con brillo 0 si no hay). Si se agregaran y quitaran
+    // luces, Three.js recompilaría todos los materiales y el juego se trabaría un instante.
+    this.projLight = new THREE.PointLight('#ffffff', 0, 5);
+    this.scene.add(this.projLight);
   }
 
   syncGadgets(dt) {
@@ -1030,7 +1046,26 @@ class Game {
         G.rflame.visible = this.phase === 'fatality' && this.phaseT >= 45;
         G.rflame.scale.y = 0.8 + Math.random() * 0.6;
       }
+      // chorro de cerveza (Emi): sale de la boca de la caguama
+      if (tipo === 'chela' && f.t >= 14 && f.t < 46) {
+        const bottle = this.models[i]?.acc?.caguama;
+        const mouth = bottle ? bottle.localToWorld(V(0, 0.37, 0)) : V(f.x + f.facing * 0.9, f.y + 1.4, 0.3);
+        this.effects.solid.emit({ pos: mouth, count: 3 * n, speed: 7, dir: [f.facing, 0.15, 0], spread: 0.18, color: '#fff6d8', colorEnd: '#e8b030', life: 0.45, size: 0.22, grow: 1.5, drag: 1.2, gravity: 3 });
+        this.effects.glow.emit({ pos: mouth, count: n, speed: 6, dir: [f.facing, 0.1, 0], spread: 0.25, color: '#ffffff', colorEnd: '#ffd23a', life: 0.3, size: 0.18 });
+      }
     });
+    // pescado gigante (fatality de Emi): sale del suelo, se traga al rival y se vuelve a clavar
+    const bf = this.bigFish, ft = this.phaseT;
+    bf.visible = !!(this.phase === 'fatality' && this.fatal?.tipo === 'pescadote' && ft >= 24 && ft < 108 && this.loser && this.winner);
+    if (bf.visible) {
+      const dir = this.winner.facing;
+      let x = this.loser.x, y, rot;
+      if (ft < 52) { y = -2.6 + (ft - 24) / 28 * 3.4; rot = Math.PI / 2; }                      // sube con la boca hacia arriba
+      else if (ft < 70) { const k = (ft - 52) / 18; y = 0.8 + Math.sin(k * Math.PI) * 0.6; rot = Math.PI / 2 * (1 - k); x += dir * k * 0.7; }   // se dobla
+      else { const k = (ft - 70) / 34; y = 0.8 - k * 3.6; rot = -k * Math.PI / 2; x += dir * (0.7 + k * 0.7); }   // se clava de cabeza
+      bf.position.set(x, y, 0);
+      bf.rotation.set(0, dir > 0 ? 0 : Math.PI, rot);
+    }
   }
 
   clearViews() {
@@ -1104,6 +1139,9 @@ class Game {
     if (this.phase === 'fatality' && this.fatal?.tipo === 'nalgon' && this.winner === f && this.phaseT < 100) butt = 1 + 2.3 * Math.min(1, Math.max(0, (this.phaseT - 6) / 30));
     m.buttScale += (butt - m.buttScale) * Math.min(1, (animDt || 0) * 10);
     m.jetOn = f.state === 'special' && f.spec?.tipo === 'jetpack' && ['up', 'dive'].includes(f.specData?.phase);
+    // Emi: el pescado o la caguama en la mano antes de aventarlos
+    const tipo = f.state === 'special' ? f.spec?.tipo : null;
+    m.prop = tipo === 'pescado' && f.t < 12 ? 'pez' : (tipo === 'kawama' && f.t < 14) || tipo === 'chela' ? 'caguama' : null;
     if (m.jetOn && animDt) this.effects.glow.emit({ pos: V(f.x - f.facing * 0.3, f.y + 0.75, -0.1), count: 3, speed: 4, dir: [0, -1, 0], spread: 0.25, color: '#fff3c0', colorEnd: '#ff6a00', life: 0.3, size: 0.28 });
     const st = f.animState();
     if (this.hitstop <= 0 && !this.paused) st.t += a;   // tiempo de animación continuo entre pasos
@@ -1120,7 +1158,7 @@ class Game {
     const add = (geo, mat, setup) => { const mesh = new THREE.Mesh(geo, mat); setup?.(mesh); g.add(mesh); return mesh; };
     const glow = (c, o = 0.7) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
     const metal = new THREE.MeshStandardMaterial({ color: '#b9c3cc', metalness: 0.9, roughness: 0.28 });
-    let spin = null;
+    let spin = null, tumble = null;
     if (p.kind === 'puno') {
       // puño mecánico con antebrazo y propulsor
       add(new THREE.BoxGeometry(0.2, 0.17, 0.16), metal, (m) => { m.position.x = 0.12; });
@@ -1140,6 +1178,11 @@ class Game {
       add(new THREE.ConeGeometry(0.075, 0.24, 14), new THREE.MeshStandardMaterial({ color: '#d1121b' }), (m) => { m.rotation.z = -Math.PI / 2; m.position.x = 0.43; });
       for (const s of [1, -1]) add(new THREE.BoxGeometry(0.16, 0.14, 0.012), new THREE.MeshStandardMaterial({ color: '#d1121b' }), (m) => { m.position.set(-0.25, 0.09 * s, 0); });
       add(new THREE.ConeGeometry(0.065, 0.45, 10), glow('#ffcf5a', 0.9), (m) => { m.rotation.z = Math.PI / 2; m.position.x = -0.54; });
+    } else if (p.kind === 'pescado' || p.kind === 'kawama') {
+      // Emi: pescado o caguama dando vueltas en el aire
+      const prop = p.kind === 'pescado' ? makeFish() : makeKawama();
+      if (p.kind === 'kawama') prop.position.y = -0.18; else prop.scale.setScalar(1.15);
+      tumble = new THREE.Group(); tumble.add(prop); g.add(tumble);
     } else if (p.kind === 'gas') {
       // la nube de gas son partículas (ver syncProjectiles)
     } else {
@@ -1147,10 +1190,11 @@ class Game {
       add(new THREE.SphereGeometry(0.13, 16, 12), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
       spin = add(icy ? new THREE.OctahedronGeometry(0.27) : new THREE.SphereGeometry(0.24, 16, 12), glow(p.color));
     }
-    const light = new THREE.PointLight(p.kind === 'puno' || p.kind === 'cohete' ? '#ffb347' : p.color, p.kind === 'misil' ? 8 : p.kind === 'gas' ? 3 : 22, 5);
-    g.add(light);
+    // brillo que ilumina alrededor (lo pone la luz fija de syncProjectiles, ver buildViews)
+    const light = p.kind === 'pescado' || p.kind === 'kawama' ? null
+      : { color: p.kind === 'puno' || p.kind === 'cohete' ? '#ffb347' : p.color, power: p.kind === 'misil' ? 8 : p.kind === 'gas' ? 3 : 22 };
     this.scene.add(g);
-    return { obj: g, spin, t: 0 };
+    return { obj: g, spin, tumble, light, t: 0 };
   }
 
   syncProjectiles(dt) {
@@ -1169,6 +1213,8 @@ class Game {
       if (p.kind === 'misil') v.obj.rotation.z = Math.atan2(p.vy, p.vx);
       else v.obj.rotation.y = dir > 0 ? 0 : Math.PI;
       if (v.spin) { v.spin.rotation.x += dt * 12; v.spin.rotation.y += dt * 9; v.spin.scale.setScalar(1 + Math.sin(v.t * 36) * 0.12); }
+      // pescado/caguama: da vueltas; el de la lluvia cae de cabeza coleteando
+      if (v.tumble) v.tumble.rotation.z = p.fall ? -Math.PI / 2 + Math.sin(v.t * 9) * 0.35 : -v.t * (p.kind === 'kawama' ? 11 : 15);
       const back = V(p.x - Math.cos(v.obj.rotation.z) * 0.3 * (p.kind === 'misil' ? 1 : dir), p.y - (p.kind === 'misil' ? Math.sin(v.obj.rotation.z) * 0.3 : 0), 0.1);
       if (p.kind === 'gas') {
         solid.emit({ pos: V(p.x, p.y, 0.1), count: 3 * n, speed: 0.6, jitter: 1.0, color: '#a6e35a', colorEnd: '#4b6b25', life: 1.3, size: 0.7, grow: 1.6, drag: 1.5, gravity: -0.3 });
@@ -1176,11 +1222,18 @@ class Game {
       } else if (p.kind === 'puno' || p.kind === 'misil' || p.kind === 'cohete') {
         glow.emit({ pos: back, count: 2 * n, speed: 1.5, dir: [-dir, 0, 0], spread: 0.5, color: '#fff3c0', colorEnd: '#ff5a00', life: 0.25, size: 0.25 });
         solid.emit({ pos: back, count: n, speed: 0.6, jitter: 0.1, color: '#777', colorEnd: '#222', life: 0.9, size: 0.22, grow: 2, drag: 2 });
+      } else if (p.kind === 'pescado' || p.kind === 'kawama') {
+        // gotitas de agua (pescado) o de cerveza (caguama)
+        if (Math.random() < 0.6) solid.emit({ pos: v.obj.position, count: 1, speed: 0.4, jitter: 0.08, color: p.kind === 'kawama' ? '#ffd27a' : '#cdeeff', colorEnd: '#ffffff', life: 0.35, size: 0.07, gravity: 3 });
       } else {
         glow.emit({ pos: V(p.x, p.y, 0.1), count: 3 * n, speed: 1.2, dir: [-dir, 0.2, 0], spread: 0.6, jitter: 0.2, color: '#ffffff', colorEnd: p.color, life: 0.35, size: 0.3, drag: 2 });
       }
     }
     for (const [id, v] of this.projViews) if (!seen.has(id)) { this.scene.remove(v.obj); this.projViews.delete(id); }
+    // una sola luz fija sigue al proyectil que brilla (el número de luces nunca cambia: sin trabones)
+    const lit = [...this.projViews.values()].find((v) => v.light);
+    this.projLight.intensity = lit ? lit.light.power : 0;
+    if (lit) { this.projLight.position.copy(lit.obj.position); this.projLight.color.set(lit.light.color); }
   }
 
   syncChains() {
@@ -1251,7 +1304,7 @@ class Game {
       case 'fatality': return null;
       case 'postFatality': return t < 130 ? { text: '¡FATALIDAD!', blood: true, say: 'Fatalidad' } : null;
       case 'matchEnd': {
-        const hint = t > 120 ? (this.mode === 'online' ? 'ENTER revancha · ESC salir' : 'ENTER para continuar · ESC menú') : '';
+        const hint = t > 120 && !isTouch() ? (this.mode === 'online' ? 'ENTER revancha · ESC salir' : 'ENTER para continuar · ESC menú') : '';
         return { text: `GANA ${w.def.nombre}`, sub: [w.def.frase, hint].filter(Boolean), say: `${w.def.nombre} gana` };
       }
     }
@@ -1321,5 +1374,7 @@ class Game {
 }
 
 window.game = new Game();
+initTouch(window.game);
+registerServiceWorker();
 // precargar en segundo plano los modelos de los peleadores
 for (const d of PELEADORES) if (d.modelo) loadAsset(d.modelo).catch(() => {});

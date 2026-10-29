@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ANIMACIONES } from './roster.js';
+import { makeFish, makeKawama } from './props.js';
 
 export const TARGET_HEIGHT = 1.85;
 const gltfLoader = new GLTFLoader();
@@ -172,7 +173,8 @@ function skinSampler(map) {
     const vv = v - Math.floor(v);
     const y = Math.min(S - 1, Math.max(0, Math.floor((map.flipY ? 1 - vv : vv) * S)));
     const i = (y * S + x) * 4, r = px[i], g = px[i + 1], b = px[i + 2];
-    return r > 95 && g > 40 && b > 20 && r > g && r > b && r - Math.min(g, b) > 15;
+    // piel: rojo > verde > azul, pero con bastante verde (una tela roja casi no tiene)
+    return r > 90 && g > 0.42 * r && g < 0.92 * r && b < g * 1.05 && r - b > 20;
   };
 }
 
@@ -583,6 +585,14 @@ function extraPose(a, P, e, t) {
       Object.assign(P, { torsoX: -0.25, torsoY: 0, shNX: -0.4, shNZ: -0.6, elNX: -0.6, shFX: -0.4, shFZ: 0.6, elFX: -0.6, hipNX: -1.7, knNX: 1.5, hipFX: 0.1, knFX: 0.15, hipsY: 0.97 }); return true;
     case 'pisar':
       Object.assign(P, { torsoX: 0.3, torsoY: 0, shNX: -0.6, shNZ: -0.3, elNX: -1.2, shFX: -0.6, shFZ: 0.3, elFX: -1.2, hipNX: -0.75, knNX: 0.15, hipFX: 0.45, knFX: 0.5, hipsY: 0.84 }); return true;
+    // Emi
+    case 'silbido':   // chifla con los dedos y alza la otra mano: ¡que lluevan pescados!
+      Object.assign(P, { torsoX: -0.15, torsoY: 0.1, headX: -0.25, shNX: -1.25, shNZ: 0.45, elNX: -2.45, shFX: -2.95, shFZ: -0.15, elFX: -0.25, hipNX: -0.25, knNX: 0.3, hipFX: 0.2, knFX: 0.3, hipsY: 0.96 });
+      P.elFX += Math.sin(t * 0.6) * 0.25; return true;
+    case 'chela':     // agita la caguama y luego la apunta al rival
+      Object.assign(P, { torsoX: 0.12, torsoY: -0.2, shFX: -1.45, shFZ: -0.1, elFX: -0.15, shNX: -0.6, shNZ: 0.3, elNX: -1.9, hipNX: -0.5, knNX: 0.7, hipFX: 0.3, knFX: 0.5, hipsY: 0.9 });
+      if (t < 14) { P.shFX = -1.0; P.elFX = -1.2 + Math.sin(t * 2.2) * 0.6; }
+      return true;
   }
   return false;
 }
@@ -690,6 +700,7 @@ const FALLBACK = {
   resorte: ['puno_fuerte', 'puno'], contra: ['bloqueo'], culazo: ['especial'], senton: ['saltar'],
   senton_suelo: ['agacharse'], twerk: ['agacharse'], gas: ['agacharse'],
   flexion: ['carga', 'especial'], agarrar: ['puno'], levantar: ['victoria'], pisar_arriba: ['patada'], pisar: ['patada'],
+  silbido: ['victoria', 'especial'], chela: ['lanzar', 'especial'],
 };
 const LOOPING = new Set(['idle', 'caminar', 'caminar_atras', 'agacharse', 'bloqueo', 'bloqueo_bajo', 'mareado', 'victoria', 'carga']);
 const BURNT = new THREE.Color('#0d0806');
@@ -713,7 +724,8 @@ export class FighterModel {
     this.detachArm = false;
     this.buttScale = 1;      // nalgas infladas (José)
     this.jetOn = false;      // fuego del jetpack (Alan)
-    this.acc = {};           // accesorios: guantes, jetpack
+    this.prop = null;        // lo que trae en la mano: 'pez' | 'caguama' (Emi)
+    this.acc = {};           // accesorios: guantes, jetpack, pescado, caguama
     this.pose = { ...GUARD };
   }
 
@@ -739,6 +751,14 @@ export class FighterModel {
         P['el' + s].add(g);
         this.materials.push(red);
       }
+    }
+    // Emi: el pescado (agarrado de la cola) o la caguama en la mano; solo se ven mientras los usa
+    if (list.includes('pescadero')) {
+      const hand = R ? R.handF : new THREE.Vector3(0, -0.29, 0);
+      const fish = makeFish(); fish.rotation.z = -Math.PI / 2; fish.position.copy(hand).add(new THREE.Vector3(0, -0.38, 0));
+      const bottle = makeKawama(); bottle.rotation.x = Math.PI; bottle.position.copy(hand).add(new THREE.Vector3(0, 0.04, 0));
+      for (const o of [fish, bottle]) { o.visible = false; P.elF.add(o); }
+      this.acc.pez = fish; this.acc.caguama = bottle;
     }
     if (list.includes('jetpack')) {
       const metal = new THREE.MeshStandardMaterial({ color: '#c9d1d9', metalness: 0.85, roughness: 0.3 });
@@ -919,6 +939,7 @@ export class FighterModel {
     P.elF.scale.setScalar(this.detachArm ? 0.001 : 1);   // ¡el antebrazo salió volando!
     if (P.butt) P.butt.scale.setScalar(this.buttScale);
     for (const fl of this.acc.flames || []) { fl.visible = this.jetOn; if (this.jetOn) fl.scale.y = 0.8 + Math.random() * 0.5; }
+    for (const k of ['pez', 'caguama']) if (this.acc[k]) this.acc[k].visible = this.prop === k;
     this.pivot.rotation.y = q.spin;
     this.pivot.rotation.x = q.tilt || 0;
     this.pivot.scale.y = this.squash;

@@ -2,8 +2,17 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>FXCKS KOMBAT</title>
+  <meta name="description" content="Juego de pelea 3D con los compas: contra la CPU, 1 vs 1 o en línea.">
+  <meta name="theme-color" content="#0b0806">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FXCKS KOMBAT">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rubik:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
@@ -41,6 +50,26 @@
     <div id="netbadge" class="hidden"></div>
   </div>
 
+  <!-- Controles táctiles (celular): joystick a la izquierda, botones a la derecha -->
+  <div id="touch" class="hidden">
+    <div id="tpad"><div class="base"><div class="knob"></div></div></div>
+    <div id="tbtns">
+      <div id="tspec-name"></div>
+      <button class="tb" id="tb-e" data-key="KeyR">ESPECIAL</button>
+      <button class="tb" id="tb-p" data-key="KeyF">PUÑO</button>
+      <button class="tb" id="tb-b" data-key="KeyH">BLOQ.</button>
+      <button class="tb" id="tb-k" data-key="KeyG">PATADA</button>
+    </div>
+    <button id="tpause" data-key="Escape" aria-label="Pausa">❚❚</button>
+    <button id="tfatal" class="hidden">☠ FATALITY</button>
+  </div>
+  <!-- Al terminar la pelea (también con clic en la compu) -->
+  <div id="endbtns" class="hidden">
+    <button id="end-ok" data-key="Enter">CONTINUAR</button>
+    <button id="end-menu" class="ghost" data-key="Escape">MENÚ</button>
+  </div>
+  <div id="rotate-hint" class="hidden">↻ Gira el celular para jugar mejor</div>
+
   <div id="announcer"></div>
 
   <!-- Menú principal -->
@@ -48,11 +77,13 @@
     <h1 class="logo">FXCKS<span>KOMBAT</span></h1>
     <div class="menu-options">
       <button data-mode="cpu" class="sel">1 JUGADOR vs CPU</button>
-      <button data-mode="vs">1 vs 1 LOCAL</button>
+      <button data-mode="vs" class="kb-only">1 vs 1 LOCAL</button>
       <button data-mode="online">EN LÍNEA</button>
       <button data-mode="controls">CONTROLES</button>
     </div>
-    <p class="hint">↑ ↓ / W S para elegir · ENTER o F para aceptar</p>
+    <p class="hint"><span class="kb-only">↑ ↓ / W S para elegir · ENTER o F para aceptar</span><span class="touch-only">Toca una opción</span></p>
+    <button id="installBtn" class="link hidden">⤓ INSTALAR EL JUEGO</button>
+    <p id="ios-hint" class="small hidden">En iPhone: botón Compartir → “Agregar a inicio” para instalarlo</p>
   </div>
 
   <!-- Selección de personaje -->
@@ -63,7 +94,8 @@
       <div class="grid" id="grid"></div>
       <div class="preview p2"><div class="pname" id="pick2">—</div><div class="ptag" id="ptag2">P2</div><div class="pspecials" id="pspec2"></div></div>
     </div>
-    <p class="hint">P1: A D W S + F &nbsp;·&nbsp; P2: flechas + K &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; ESC volver</p>
+    <p class="hint"><span class="kb-only">P1: A D W S + F &nbsp;·&nbsp; P2: flechas + K &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; ESC volver</span><span class="touch-only">Toca un peleador para verlo · tócalo otra vez para elegirlo</span></p>
+    <button class="link back" data-key="Escape">← VOLVER</button>
   </div>
 
   <!-- Selección de escenario -->
@@ -71,6 +103,7 @@
     <h2>ELIGE ESCENARIO</h2>
     <div class="stage-grid" id="stage-grid"></div>
     <p class="hint" id="stage-hint"></p>
+    <button class="link back" data-key="Escape">← VOLVER</button>
   </div>
 
   <!-- Lobby en línea -->
@@ -94,13 +127,19 @@
       </div>
     </div>
     <button id="lobbyBack" class="link">← VOLVER</button>
-    <p class="hint">Reta a alguien que esté libre · ESC para volver</p>
+    <p class="hint">Reta a alguien que esté libre<span class="kb-only"> · ESC para volver</span></p>
   </div>
 
   <!-- Controles / pausa -->
   <div id="controls" class="screen hidden">
     <h2 id="controls-title">CONTROLES</h2>
-    <div class="controls-grid">
+    <div class="touch-help touch-only">
+      <p><b>Joystick</b> (lado izquierdo): moverse, saltar (arriba) y agacharse (abajo).</p>
+      <p><b>PUÑO · PATADA · BLOQ.</b>: igual que en el teclado; con el joystick salen otros golpes (abajo + puño = gancho…).</p>
+      <p><b>ESPECIAL</b>: solo = especial 1 · adelante = 2 · abajo = 3 · atrás = 4. Arriba del botón sale cuál vas a hacer.</p>
+      <p><b>☠ FATALITY</b>: aparece cuando sale “¡ACÁBALO!”.</p>
+    </div>
+    <div class="controls-grid kb-only">
       <div>
         <h3>JUGADOR 1</h3>
         <table>
@@ -138,7 +177,11 @@
       </div>
     </div>
     <div id="movelist"></div>
-    <p class="hint" id="controls-hint">ESC para volver</p>
+    <p class="hint kb-only" id="controls-hint">ESC para volver</p>
+    <div class="screen-actions">
+      <button class="link back" data-key="Escape" id="controls-back">← VOLVER</button>
+      <button class="link back hidden" data-key="KeyQ" id="controls-quit">SALIR AL MENÚ</button>
+    </div>
   </div>
 
   <div id="modal" class="hidden">

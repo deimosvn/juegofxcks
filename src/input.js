@@ -12,6 +12,13 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 
+// Botones en pantalla (celular): aprietan las mismas teclas que el teclado, así sirven en
+// menús, en la pelea y en línea sin cambiar nada más
+export function setVirtualKey(code, down) {
+  if (down) { if (!keys.has(code)) pressedOnce.add(code); keys.add(code); }
+  else keys.delete(code);
+}
+
 // Teclas pulsadas desde el último consumo (para menús)
 export function consumeKey(...codes) {
   for (const c of codes) if (pressedOnce.has(c)) { pressedOnce.delete(c); return true; }
