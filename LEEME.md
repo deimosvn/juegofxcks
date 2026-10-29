@@ -79,8 +79,12 @@ en línea elige el anfitrión (quien mandó el reto) y el otro lo ve en vivo.
 - **Rollback**: tu personaje responde al instante; si el juego adivinó mal los botones del rival, rebobina unos
   frames y corrige sin que se note.
 
-La configuración del proyecto `juegofxcks` ya está en [`src/firebase-config.js`](src/firebase-config.js), así que
-**en Vercel no hay que poner variables**. En la consola de Firebase faltan 3 cosas (se hacen una sola vez):
+El proyecto `juegofxcks` ya está listo: su configuración está en [`src/firebase-config.js`](src/firebase-config.js),
+la Realtime Database está creada (Estados Unidos, us-central1) con las reglas de
+[`database.rules.json`](database.rules.json) publicadas, y el acceso anónimo está activado.
+**En Vercel no hay que poner variables.**
+
+Si algún día usas otro proyecto de Firebase, pega su `firebaseConfig` en ese archivo y en su consola haz esto una vez:
 
 1. **Compilación → Realtime Database → Crear base de datos** (cualquier ubicación; el juego encuentra la dirección
    solo) → empezar en *modo bloqueado*.
@@ -96,6 +100,7 @@ Opcional: variables `FIREBASE_*` (ver [`.env.example`](.env.example)) para usar 
 
 Para probar el modo en línea sin Firebase: http://localhost:8080/herramientas/prueba-online.html (dos jugadores
 en la misma pantalla con mala conexión simulada) o abre el juego con `?local=1` en dos pestañas.
+Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de datos real.
 
 ---
 

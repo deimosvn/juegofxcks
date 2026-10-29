@@ -524,6 +524,7 @@ class Game {
       const be = await createBackend(this.netCfg);
       await be.connect(name);
       this.net = be; this.myName = name;
+      $('netstatus').textContent = '';
       be.onPlayers((list) => this.renderPlayers(list));
       be.onChallenge((ch) => this.incomingChallenge(ch), (ch) => this.challengeCancelled(ch));
       be.onRanking((list) => this.renderRanking(list));
@@ -875,6 +876,8 @@ class Game {
       if (consumeKey('Escape', 'Enter')) { this.paused = false; this.show(this.prevScreen === 'fight' ? 'fight' : 'menu'); }
       if (this.prevScreen === 'fight' && consumeKey('KeyQ')) { this.paused = false; this.quitMatch(); this.show('menu'); }
     } else if (this.screen === 'fight') {
+      // los golpes que venían de la pelea no cuentan como "continuar" ni como "revancha"
+      if (this.phase === 'matchEnd' && this.phaseT <= 120) consumeKey('Enter', 'KeyF', 'KeyK', 'Space');
       if (this.mode === 'online') {
         if (this.phase === 'matchEnd') {
           this.reportResult();

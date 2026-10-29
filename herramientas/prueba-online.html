@@ -11,12 +11,14 @@
 </head>
 <body>
   <!-- Dos jugadores en la misma pantalla, conectados en "modo local" con mala conexión simulada.
-       Cambia lag/jitter/loss en la URL: prueba-online.html?lag=80&jitter=30&loss=0.05 -->
+       Cambia lag/jitter/loss en la URL: prueba-online.html?lag=80&jitter=30&loss=0.05
+       Con ?firebase=1 se conectan por la base de datos real (cada ventana con su propia sesión anónima). -->
   <iframe id="a"></iframe>
   <iframe id="b"></iframe>
   <script>
     const q = new URLSearchParams(location.search);
-    const params = `local=1&lag=${q.get('lag') ?? 60}&jitter=${q.get('jitter') ?? 25}&loss=${q.get('loss') ?? 0.05}`;
+    const modo = q.has('firebase') ? 'aislado=1' : 'local=1';
+    const params = `${modo}&lag=${q.get('lag') ?? 60}&jitter=${q.get('jitter') ?? 25}&loss=${q.get('loss') ?? 0.05}`;
     document.getElementById('a').src = '/?' + params;
     document.getElementById('b').src = '/?' + params;
   </script>
