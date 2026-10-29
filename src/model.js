@@ -573,6 +573,16 @@ function extraPose(a, P, e, t) {
     }
     case 'gas':
       Object.assign(P, { spin: Math.PI, torsoX: lerp(0.3, 1.15, e), torsoY: 0, headX: -0.6, shNX: -0.7, elNX: -0.2, shFX: -0.7, elFX: -0.2, hipNX: -0.4, knNX: 0.45, hipFX: -0.3, knFX: 0.4, hipsY: 0.92 }); return true;
+    // Alan: pose de JoJo (de tres cuartos hacia la cámara, una mano en la cara y la otra señalando)
+    case 'jojo': {
+      const k = clamp01(t / 10);
+      Object.assign(P, { spin: -0.75 * k, hipsY: 0.9, torsoX: -0.25 * k, torsoY: -0.35 * k, torsoZ: 0.18 * k, headX: -0.18 * k,
+        shFX: lerp(-0.8, -1.35, k), shFZ: -0.15, elFX: lerp(-2.0, -0.05, k),
+        shNX: lerp(-1.0, -2.55, k), shNZ: 0.55 * k, elNX: lerp(-1.8, -2.35, k),
+        hipNX: lerp(-0.35, -0.55, k), knNX: lerp(0.55, 0.35, k), hipFX: lerp(0.25, 0.35, k), knFX: lerp(0.4, 0.6, k) });
+      P.torsoZ += Math.sin(t * 0.12) * 0.015;
+      return true;
+    }
     // Diego con el traje de robot
     case 'canon':      // apunta el brazo como cañón; al disparar el retroceso lo echa un poco atrás
       Object.assign(P, { torsoY: -0.5, torsoX: lerp(0.08, -0.12, e), headX: -0.05, shFX: -1.55, shFZ: -0.05, elFX: -0.05, shNX: -1.2, shNZ: 0.25, elNX: -1.5,
@@ -711,7 +721,7 @@ const FALLBACK = {
   senton_suelo: ['agacharse'], twerk: ['agacharse'], gas: ['agacharse'],
   flexion: ['carga', 'especial'], agarrar: ['puno'], levantar: ['victoria'], pisar_arriba: ['patada'], pisar: ['patada'],
   silbido: ['victoria', 'especial'], chela: ['lanzar', 'especial'],
-  canon: ['puno_fuerte', 'especial'], propulsor: ['embestida', 'especial'], descarga: ['carga', 'especial'],
+  canon: ['puno_fuerte', 'especial'], jojo: ['victoria', 'especial'], propulsor: ['embestida', 'especial'], descarga: ['carga', 'especial'],
 };
 const LOOPING = new Set(['idle', 'caminar', 'caminar_atras', 'agacharse', 'bloqueo', 'bloqueo_bajo', 'mareado', 'victoria', 'carga']);
 const BURNT = new THREE.Color('#0d0806');

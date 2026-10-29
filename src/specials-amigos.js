@@ -17,6 +17,25 @@ SOLID_PROJECTILES.add('pescado');     // un pescado choca contra otros proyectil
 
 Object.assign(SPECIALS, {
   // ---------------- Alan ----------------
+  // Le chifla a su Camaro y hace una pose de JoJo: el carro entra por detrás del rival, lo atropella
+  // (no se bloquea; se salta), se queda derrapando junto a Alan y luego se va. El carro es un
+  // proyectil con datos simples; el modelo (`modelo` del especial) lo dibuja main.js.
+  camaro: {
+    total: 80, anim: 'jojo',
+    canStart: (f, o, s, g) => !g.projectiles.some((p) => p.alive && p.owner === f.side && p.kind === 'camaro'),
+    update(f, o, s, g, t) {
+      if (t === 2) sfx.honk();
+      if (t === 8) {
+        const dir = -f.facing;   // hacia Alan
+        spawnProjectile(g, f, 'camaro', s, {
+          x: f.x + f.facing * 15, y: 0, z: 0.15, vx: (s.velocidad ?? 26) * dir, dir, phase: 'llega',
+          stopX: clampT(f.x + f.facing * 1.9, -ARENA, ARENA), dmg: s.danio ?? 16,
+        });
+        sfx.vroom();
+      }
+      return t >= 80;
+    },
+  },
   // Cohete que acelera en línea recta y explota al impactar
   cohete: {
     total: 40, anim: 'lanzar', s: 12 / 40, a: 20 / 40,
@@ -355,6 +374,33 @@ export const BUTT_SPECIALS = new Set(['culazo', 'senton', 'twerk', 'gas']);
 // Proyectiles nuevos: cohete (acelera y explota) y gas (nube que se queda)
 export function updateProjectileExtra(p, g) {
   const owner = g.fighters[p.owner], opp = g.fighters[1 - p.owner];
+  // Camaro de Alan: llega, atropella, frena derrapando junto a Alan, se queda un momento y se va al fondo
+  if (p.kind === 'camaro') {
+    p.t++;
+    const dir = p.dir;
+    if (p.phase === 'llega' || p.phase === 'frena') {
+      const left = (p.x - p.stopX) * dir * -1;   // cuánto le falta para pararse
+      if (p.phase === 'llega' && left <= 4) { p.phase = 'frena'; sfx.screech(); }
+      if (p.phase === 'frena') p.vx = dir * Math.max(2, Math.sqrt(Math.max(0, 2 * 84 * left)));
+      p.x += p.vx / 60;
+      if ((p.x - p.stopX) * dir >= 0) { p.x = p.stopX; p.vx = 0; p.phase = 'parado'; p.pt = p.t; }
+      // atropellar: el carro ocupa ~4.8 m; si el rival va saltando alto, pasa por debajo
+      const front = p.x + dir * 2.35, rear = p.x - dir * 2.45;
+      const lo = Math.min(front, rear) - 0.25, hi = Math.max(front, rear) + 0.25;
+      if (!p.hit && Math.abs(p.vx) > 3 && opp.x > lo && opp.x < hi && opp.y < 1.15 && !opp.invulnerable()) {
+        p.hit = true;
+        opp.receive({ dmg: p.dmg, height: 'mid', unblockable: true, launch: 12, push: 10, color: '#ffffff' }, owner, V(opp.x, opp.y + 0.8, 0.5));
+        g.effects.dust(V(opp.x, 0.2), 34); g.effects.burst(V(opp.x, 0.9, 0.4), '#ffffff', 40, 6); g.effects.addShake(0.4);
+        sfx.crash();
+      }
+    } else if (p.phase === 'parado') {
+      if (p.t - p.pt >= 34) { p.phase = 'sale'; sfx.vroom(); }
+    } else {
+      p.z -= 0.32;   // se va hacia el fondo del escenario
+      if (p.z < -24) p.alive = false;
+    }
+    return;
+  }
   if (p.kind === 'cohete') {
     p.t++;
     p.vx = clampT(p.vx + 0.55 * Math.sign(p.vx), -17, 17);

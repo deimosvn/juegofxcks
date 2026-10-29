@@ -1,5 +1,6 @@
 // Herramienta local: optimiza un modelo de Meshy/Tripo y lo guarda en assets/peleadores/<id>/
 // Solo funciona con `node servidor.js` (usa la ruta /__guardar del servidor local).
+// Con ?prop=camaro&largo=4.8 convierte un objeto (un carro): tamaño real, sin esqueleto, a assets/props/.
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -10,6 +11,10 @@ import { MeshoptSimplifier } from 'meshoptimizer';
 import { FighterModel, TARGET_HEIGHT } from '../src/model.js';
 
 const $ = (id) => document.getElementById(id);
+const PROP = (() => {
+  const q = new URLSearchParams(location.search), name = (q.get('prop') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  return name ? { name, largo: +q.get('largo') || 4.8 } : null;
+})();
 const log = (...a) => { $('log').textContent += a.join(' ') + '\n'; console.log(...a); };
 
 // --------------------------------------------------------------- escena
@@ -94,7 +99,21 @@ async function waitTextures(obj) {
   for (let i = 0; i < 100 && texs.some((t) => !t.image || !t.image.width); i++) await new Promise((r) => setTimeout(r, 100));
 }
 
-function simplify(geo, targetTris) {
+// Para leer el color de la textura en una UV (los triángulos de un solo color eligen bien su color)
+function texSampler(tex) {
+  const img = tex?.image;
+  if (!img?.width) return null;
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S;
+  const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0, S, S);
+  const d = ctx.getImageData(0, 0, S, S).data;
+  return (u, v) => {
+    u -= Math.floor(u); v -= Math.floor(v);
+    const x = Math.min(S - 1, u * S | 0), y = Math.min(S - 1, (tex.flipY ? 1 - v : v) * S | 0), i = (y * S + x) * 4;
+    return [d[i], d[i + 1], d[i + 2]];
+  };
+}
+
+function simplify(geo, targetTris, sampler) {
   let g = geo.index ? geo : mergeVertices(geo, 1e-5);
   const before = g.index.count / 3;
   if (before <= targetTris) return { geo: g, before, after: before };
@@ -102,7 +121,7 @@ function simplify(geo, targetTris) {
   const pos = new Float32Array(g.attributes.position.array);
   let [out] = MeshoptSimplifier.simplify(idx, pos, 3, targetTris * 3, 0.01);
   if (out.length / 3 > targetTris * 1.5) [out] = MeshoptSimplifier.simplify(idx, pos, 3, targetTris * 3, 0.04);
-  if (out.length / 3 > targetTris * 1.5 && g.attributes.uv) return seamless(g, targetTris, before);
+  if (out.length / 3 > targetTris * 1.5 && g.attributes.uv) return seamless(g, targetTris, before, sampler);
   // compactar vértices
   const remap = new Int32Array(g.attributes.position.count).fill(-1);
   let next = 0;
@@ -122,8 +141,9 @@ function simplify(geo, targetTris) {
 // Algunos modelos (Meshy) traen la textura cortada en cientos de islas y esas costuras no dejan
 // simplificar. Entonces se simplifica solo por forma (una copia por posición) y cada esquina toma
 // la copia del vértice cuya UV cae en la misma isla que las otras dos. Si no hay ninguna (el triángulo
-// quedó entre dos islas), el triángulo entero toma el color de una esquina en vez de embarrar la textura.
-function seamless(g, targetTris, before) {
+// quedó entre dos islas), el triángulo entero toma el color de la esquina que más se parece a las
+// otras dos (en una puerta plateada, dos esquinas son plateadas) en vez de embarrar la textura.
+function seamless(g, targetTris, before, sampler) {
   const P = g.attributes.position.array, UV = g.attributes.uv.array, n = g.attributes.position.count;
   const groups = new Map(), slot = new Uint32Array(n), cands = [], pos = [];
   for (let v = 0; v < n; v++) {
@@ -143,9 +163,18 @@ function seamless(g, targetTris, before) {
     let best = Infinity, tri = [A[0], B[0], C[0]];
     for (const a of A) for (const b of B) for (const c of C) { const s = d(a, b) + d(b, c) + d(c, a); if (s < best) { best = s; tri = [a, b, c]; } }
     const oneColor = best > 0.15;
-    if (oneColor) flat++;
+    let paint = tri[0];
+    if (oneColor) {
+      flat++;
+      if (sampler) {
+        const col = tri.map((v) => sampler(UV[v * 2], UV[v * 2 + 1]));
+        const dc = (p, q) => Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]);
+        let bs = Infinity;
+        for (let i = 0; i < 3; i++) { const s = dc(col[i], col[(i + 1) % 3]) + dc(col[i], col[(i + 2) % 3]); if (s < bs) { bs = s; paint = tri[i]; } }
+      }
+    }
     for (const v of tri) attrs.forEach(([name, a], i) => {
-      const from = name === 'uv' && oneColor ? tri[0] : v;
+      const from = name === 'uv' && oneColor ? paint : v;
       for (let c = 0; c < a.itemSize; c++) outAttrs[i].push(a.array[from * a.itemSize + c]);
     });
   }
@@ -168,16 +197,18 @@ async function process(obj) {
   const texSize = +$('texsize').value;
   const out = new THREE.Group();
   const box = new THREE.Box3().setFromObject(obj);
-  const s = TARGET_HEIGHT / (box.max.y - box.min.y);
+  const size = box.getSize(new THREE.Vector3());
+  // peleador: 1.85 m de alto · objeto: su largo real (lo más largo entre X y Z)
+  const s = PROP ? PROP.largo / Math.max(size.x, size.z) : TARGET_HEIGHT / size.y;
   const fix = new THREE.Matrix4().makeScale(s, s, s).multiply(new THREE.Matrix4().makeTranslation(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2));
   for (const m of meshes) {
     const tris = (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
     const g0 = m.geometry.clone();
     for (const k of Object.keys(g0.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g0.deleteAttribute(k);
     g0.applyMatrix4(m.matrixWorld); g0.applyMatrix4(fix);
-    const r = simplify(g0, Math.max(500, Math.round(target * tris / totalTris)));
-    log(`malla ${m.name || '?'}: ${Math.round(r.before).toLocaleString()} → ${Math.round(r.after).toLocaleString()} triángulos`);
     const src = [].concat(m.material)[0];
+    const r = simplify(g0, Math.max(500, Math.round(target * tris / totalTris)), texSampler(src.map));
+    log(`malla ${m.name || '?'}: ${Math.round(r.before).toLocaleString()} → ${Math.round(r.after).toLocaleString()} triángulos`);
     const mat = new THREE.MeshStandardMaterial({
       name: src.name || 'piel', roughness: 0.75, metalness: 0,
       map: resizedTexture(src.map, texSize, 'image/jpeg'),
@@ -193,7 +224,17 @@ async function process(obj) {
 
 async function show(obj) {
   if (preview) preview.root.removeFromParent();
+  if (processed?.parent) processed.removeFromParent();
   processed = await process(obj);
+  if (PROP) {
+    // objeto: se ve tal cual; en el juego su frente debe mirar hacia +X (la línea roja)
+    scene.add(processed, new THREE.AxesHelper(3));
+    camera.position.set(4.5, 2.6, 6.5); controls.target.set(0, 0.6, 0); controls.update();
+    const sz = new THREE.Box3().setFromObject(processed).getSize(new THREE.Vector3());
+    log(`objeto: ${sz.x.toFixed(2)} × ${sz.y.toFixed(2)} × ${sz.z.toFixed(2)} m. El frente debe ver hacia la línea roja (+X); si no, usa Girar.`);
+    $('save').disabled = false;
+    return;
+  }
   preview = await FighterModel.fromAsset({ scene: processed, animations: [] }, { escala: 1, rotacionY: 0 });
   preview.setFacing(1);
   preview.root.rotation.y = 0;   // de frente a la cámara en la vista previa
@@ -238,8 +279,17 @@ async function portrait() {
 
 $('save').onclick = async () => {
   const id = $('fid').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-  if (!id) return alert('Escribe el id (nombre de la carpeta, sin espacios)');
+  if (!id && !PROP) return alert('Escribe el id (nombre de la carpeta, sin espacios)');
   $('save').disabled = true;
+  if (PROP) {
+    try {
+      const glb = await new GLTFExporter().parseAsync(processed, { binary: true });
+      const a = await post(`assets/props/${PROP.name}.glb`, new Blob([glb]));
+      log(`assets/props/${PROP.name}.glb guardado (${(a.bytes / 1048576).toFixed(1)} MB)`);
+    } catch (e) { log('ERROR: ' + e.message); }
+    $('save').disabled = false;
+    return;
+  }
   try {
     const glb = await new GLTFExporter().parseAsync(processed, { binary: true });
     const a = await post(`assets/peleadores/${id}/modelo.glb`, new Blob([glb]));
@@ -259,6 +309,8 @@ $('files').onchange = async (e) => {
 // ?src=/assets/peleadores/diego/raw_m.fbx&id=diego
 const qs = new URLSearchParams(location.search);
 if (qs.get('id')) $('fid').value = qs.get('id');
+if (qs.get('tris')) $('tris').value = qs.get('tris');
+if (qs.get('rot')) $('rot').value = qs.get('rot');
 if (qs.get('src')) { log('Cargando ' + qs.get('src') + '…'); loadUrl(qs.get('src')).then(show).catch((err) => log('ERROR: ' + err.message)); }
 // Colorea cada vértice según el hueso que lo mueve (para revisar el auto-rig)
 function showWeights() {

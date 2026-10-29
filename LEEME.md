@@ -54,13 +54,14 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | MEGA LÁSER | `↓ → + P` (o Especial + abajo) | Rayo gordo desde el pecho, 8 impactos; agacharse no lo esquiva |
 | DESCARGA ELÉCTRICA | `↓ ↓ + P` (o Especial + atrás) | Rayos alrededor, 4 toques de cerca; el último deja al rival mareado |
 
-### Alan (ingeniería aeroespacial) — trae jetpack en la espalda
+### Alan (ingeniería aeroespacial) — trae jetpack en la espalda… y su Camaro
 | Especial | Entrada | Qué hace |
 |---|---|---|
-| COHETE SATURNO | `← → + P` | Cohete que acelera y explota al impactar |
-| JETPACK | `→ ↓ → + K` | Despega y cae en picada sobre el rival |
-| ATAQUE ORBITAL | `↓ ← + P` | Un satélite dispara un rayo desde el cielo donde está el rival |
-| TURBINA | `← ← + K` | Turbina de avión: ráfaga caliente que empuja y golpea varias veces |
+| CAMARAZO | `→ → + P` (o el botón Especial solo) | Hace una pose de JoJo (con sus ゴゴゴ) y su Camaro entra por detrás del rival y lo atropella (16). No se bloquea: hay que saltarlo. Luego se queda derrapando junto a Alan y se va |
+| COHETE SATURNO | `← → + P` (o Especial + adelante) | Cohete que acelera y explota al impactar |
+| JETPACK | `→ ↓ → + K` (o Especial + abajo) | Despega y cae en picada sobre el rival |
+| ATAQUE ORBITAL | `↓ ← + P` (o Especial + atrás) | Un satélite dispara un rayo desde el cielo donde está el rival |
+| TURBINA | `← ← + K` (solo con la combinación) | Turbina de avión: ráfaga caliente que empuja y golpea varias veces |
 | ☠ DESPEGUE ESPACIAL | `↓ → ↓ + P` | Le amarra un cohete al rival y lo manda al espacio con fuegos artificiales |
 
 ### Gera (boxeo) — siempre con guantes de box
@@ -173,7 +174,7 @@ Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de
 
 Tipos de especial: `proyectil`, `congelar`, `teletransporte`, `embestida`, `terremoto`, `gancho`,
 `uppercut_volador`, `poder`, `rayo`; robot: `puno_cohete`, `laser`, `misiles`, `armadura`; aeroespacial:
-`cohete`, `jetpack`, `orbital`, `turbina`; robot con traje: `titan`, `plasma`, `megalaser`, `propulsores`, `descarga`; boxeo: `rafaga`, `resorte`, `contra`; nalgas: `culazo`, `senton`,
+`cohete`, `jetpack`, `orbital`, `turbina`, `camaro` (con `modelo`: el carro); robot con traje: `titan`, `plasma`, `megalaser`, `propulsores`, `descarga`; boxeo: `rafaga`, `resorte`, `contra`; nalgas: `culazo`, `senton`,
 `twerk`, `gas`; fuerza: `gigante`, `agarre`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
 `aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`. Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
 
@@ -181,6 +182,11 @@ Traje que se pone con un especial `titan` (como Diego): pasa el modelo por el co
 y en el roster agrega `traje: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 }` y la lista
 `especialesTitan` con lo que hace el botón de especial mientras lo trae puesto. Los modelos de Meshy con la textura
 partida en muchas islas también se reducen bien: el convertidor lo detecta solo.
+
+Objetos que salen en un especial (como el Camaro de Alan): abre el convertidor con
+`convertir.html?src=/assets/props/raw_camaro/archivo.fbx&prop=camaro&largo=4.8&rot=180` (`largo` en metros; con
+`rot` gíralo hasta que el frente vea hacia la línea roja) y guarda: queda en `assets/props/camaro.glb`. Pon los
+originales en `assets/props/raw_<algo>/` (no se suben a GitHub).
 
 Si el modelo sale de lado, usa "Girar" en el convertidor (o `rotacionY` en el roster). `escala` cambia la estatura
 (Conde usa `0.94`). Lo mejor es que el modelo venga en **pose de T o de A**; si viene con los brazos pegados al cuerpo

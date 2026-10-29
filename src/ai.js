@@ -40,6 +40,12 @@ export class CPU {
     const specials = me.specials;
     const findSpec = (...tipos) => specials.findIndex((s) => tipos.includes(s.tipo));
     const useSpec = (i) => {
+      if (i > 3) {   // sin lugar en el botón de especial: con su combinación de flechas
+        const p = specials[i].parsed, map = { F: { [fwd]: true }, B: { [back]: true }, D: { down: true }, U: { up: true } };
+        for (const s of p.seq) this.plan(this.tap(map[s]));
+        if (p.btn) this.plan(this.tap({ [p.btn]: true }));
+        return;
+      }
       const dir = i === 1 ? { [fwd]: true } : i === 2 ? { down: true } : i === 3 ? { [back]: true } : {};
       this.plan({ keys: dir, frames: 2 }, this.tap({ ...dir, special: true }));
     };
@@ -76,11 +82,11 @@ export class CPU {
     if (d > 4) {
       if (proj >= 0 && r < 0.35 && !g.hasProjectile(me)) useSpec(proj);
       else if (r < 0.5) this.plan({ keys: { [fwd]: true }, frames: 20 + Math.random() * 20 | 0 });
-      else if (r < 0.65) { const i = findSpec('rayo', 'teletransporte', 'gancho', 'embestida', 'misiles', 'lluvia_pescados', 'orbital', 'propulsores', 'megalaser'); if (i >= 0) useSpec(i); else this.plan({ keys: { up: true, [fwd]: true }, frames: 3 }); }
+      else if (r < 0.65) { const i = findSpec('rayo', 'teletransporte', 'gancho', 'embestida', 'misiles', 'lluvia_pescados', 'orbital', 'propulsores', 'megalaser', 'camaro'); if (i >= 0) useSpec(i); else this.plan({ keys: { up: true, [fwd]: true }, frames: 3 }); }
       else this.plan({ keys: { up: true, [fwd]: true }, frames: 3 });
     } else if (d > 1.9) {
       if (r < 0.45) this.plan({ keys: { [fwd]: true }, frames: 10 + Math.random() * 14 | 0 });
-      else if (r < 0.65) { const i = findSpec('embestida', 'terremoto', 'gancho', 'teletransporte', 'rayo', 'misiles', 'laser', 'chela', 'turbina', 'resorte', 'propulsores', 'megalaser', 'descarga'); if (i >= 0) useSpec(i); }
+      else if (r < 0.65) { const i = findSpec('embestida', 'terremoto', 'gancho', 'teletransporte', 'rayo', 'misiles', 'laser', 'chela', 'turbina', 'resorte', 'propulsores', 'megalaser', 'descarga', 'camaro'); if (i >= 0) useSpec(i); }
       else if (r < 0.8) this.plan({ keys: { up: true, [fwd]: true }, frames: 3 });
       else if (proj >= 0 && !g.hasProjectile(me)) useSpec(proj);
       else this.plan(this.tap({ [fwd]: true, punch: true }));

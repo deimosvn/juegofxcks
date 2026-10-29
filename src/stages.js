@@ -400,7 +400,8 @@ function cabana(root, env) {
 // =====================================================================
 //  CASA CHUY — de noche, con un Camaro blanco y hieleras de cheve
 // =====================================================================
-function camaro(parent, x, z, facing = -1) {
+// también lo usa el especial de Alan mientras carga su Camaro de verdad (sin la luz: no trabar el juego)
+export function camaro(parent, x, z, facing = -1, light = true) {
   const car = new THREE.Group(); car.position.set(x, 0, z); car.rotation.y = facing < 0 ? 0 : Math.PI; parent.add(car);
   const paint = std({ color: '#f4f4f1', metalness: 0.35, roughness: 0.22 });
   const glass = std({ color: '#0d1117', metalness: 0.6, roughness: 0.08, side: THREE.DoubleSide });
@@ -437,7 +438,7 @@ function camaro(parent, x, z, facing = -1) {
   }
   box(0.08, 0.1, 1.9, chrome, -2.42, 0.36, 0, car, false);
   box(0.08, 0.1, 1.9, chrome, 2.4, 0.36, 0, car, false);
-  const glow = new THREE.PointLight('#fff2c0', 4, 6); glow.position.set(-3.0, 0.6, 0); car.add(glow);
+  if (light) { const glow = new THREE.PointLight('#fff2c0', 4, 6); glow.position.set(-3.0, 0.6, 0); car.add(glow); }
   return car;
 }
 

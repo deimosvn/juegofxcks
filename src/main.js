@@ -4,7 +4,7 @@ import { FighterModel, loadAsset } from './model.js';
 import { Fighter, ARENA_HALF } from './fighter.js';
 import { PlayerInput, consumeKey, clearKeyEdges, decodeMask } from './input.js';
 import { Effects } from './effects.js';
-import { createStage, STAGES } from './stages.js';
+import { createStage, STAGES, camaro as buildCamaro } from './stages.js';
 import { CPU } from './ai.js';
 import { FATALITIES, impactProjectile, SOLID_PROJECTILES } from './specials.js';
 import { updateProjectileExtra as updateProjectile, BUTT_SPECIALS } from './specials-amigos.js';
@@ -62,6 +62,7 @@ class Game {
     this.models = []; this.projViews = new Map(); this.events = [];
     this.animFrames = 0; this.viewAnimFrames = 0; this.viewRound = -1; this.slowmo = 0; this.resim = false;
     this.cpu = null; this.session = null; this.online = null; this.net = null; this.salas = null;
+    this.props = new Map();   // modelos que usan los especiales (el Camaro de Alan), ya cargados
     this.screen = 'menu'; this.menuIdx = 0; this.mode = 'cpu';
     this.fxSeen = new Map(); this.fxCount = new Map();
     this.effects.gate = (name, args) => this.fxAllow(name, args);
@@ -480,7 +481,12 @@ class Game {
       }
       return m;
     };
-    const models = await Promise.all([make(def1, false), make(def2, def1 === def2)]);
+    // y los objetos de sus especiales (el Camaro de Alan), para que salgan sin esperar
+    const urls = [def1, def2].flatMap((d) => [...(d.especiales || []), ...(d.especialesTitan || [])]).map((s) => s.modelo).filter((u) => u && !this.props.has(u));
+    const [models] = await Promise.all([
+      Promise.all([make(def1, false), make(def2, def1 === def2)]),
+      Promise.all(urls.map((u) => loadAsset(u).then((a) => this.props.set(u, a), () => {}))),
+    ]);
     $('loading').classList.add('hidden');
     return models;
   }
@@ -1021,6 +1027,20 @@ class Game {
     // Alan: satélite con rayo orbital y turbina · Gera: resorte con guante · cohete de la fatalidad de Alan
     const glowMat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
     const metal = (c) => new THREE.MeshStandardMaterial({ color: c, metalness: 0.85, roughness: 0.3 });
+    // Pose de JoJo de Alan: letras "ゴ" moradas flotando (dibujadas a mano: no dependen de fuentes japonesas)
+    const go = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const x = c.getContext('2d');
+      x.setTransform(0.75, 0, -0.18, 0.75, 30, 14);   // en cursiva
+      const draw = (w, col) => {
+        x.lineWidth = w; x.strokeStyle = col; x.lineJoin = 'miter';
+        x.beginPath(); x.moveTo(24, 40); x.lineTo(88, 40); x.lineTo(88, 104); x.lineTo(20, 104); x.stroke();   // コ
+        x.beginPath(); x.moveTo(96, 12); x.lineTo(104, 30); x.moveTo(110, 8); x.lineTo(118, 26); x.stroke();  // ゛
+      };
+      draw(22, '#16001f'); draw(11, '#c23cff');
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    })();
     this.gadgets = [0, 1].map(() => {
       const sat = new THREE.Group();
       sat.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), metal('#d9b04a')));
@@ -1048,7 +1068,12 @@ class Game {
       for (let i = 0; i < 3; i++) { const pv = new THREE.Group(); pv.rotation.y = i * Math.PI * 2 / 3; const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.32, 0.22), new THREE.MeshStandardMaterial({ color: '#d1121b' })); fin.position.set(0, -0.5, 0.2); pv.add(fin); rocket.add(pv); }
       const rflame = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.7, 12), glowMat('#ffb347', 0.85)); rflame.rotation.x = Math.PI; rflame.position.y = -1.0; rocket.add(rflame);
       for (const o of [sat, aim, ray, turb, spring, sglove, rocket]) { o.visible = false; o.frustumCulled = false; this.scene.add(o); }
-      return { sat, aim, ray, turb, fan, spring, sglove, rocket, rflame };
+      const gogo = Array.from({ length: 6 }, () => {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: go, transparent: true, depthWrite: false, opacity: 0 }));
+        s.visible = false; this.scene.add(s);
+        return s;
+      });
+      return { sat, aim, ray, turb, fan, spring, sglove, rocket, rflame, gogo };
     });
     // Emi: pescado gigante de la fatality
     this.bigFish = makeFish({ body: '#6f8fa6', belly: '#e6edf1', fin: '#45606f' });
@@ -1115,6 +1140,16 @@ class Game {
         G.rflame.visible = this.phase === 'fatality' && this.phaseT >= 45;
         G.rflame.scale.y = 0.8 + Math.random() * 0.6;
       }
+      // pose de JoJo (Alan mandando su Camaro): "ゴゴゴ" subiendo a su alrededor
+      const jojo = tipo === 'camaro' && f.t >= 4 && f.t < 78;
+      G.gogo.forEach((s, j) => {
+        s.visible = jojo;
+        if (!jojo) return;
+        const ph = (f.t / 60 + j / G.gogo.length) % 1, side = j % 2 ? -1 : 1;
+        s.position.set((f.rx ?? f.x) + side * (0.85 + (j % 3) * 0.3), f.y + 0.5 + ph * 2.2, 0.35 + (j % 2) * 0.2);
+        s.scale.setScalar(0.78 + 0.16 * Math.sin(f.t * 0.35 + j * 1.7));
+        s.material.opacity = Math.sin(ph * Math.PI) * Math.min(1, (f.t - 4) / 8, (78 - f.t) / 8);
+      });
       // robot: fuego de los propulsores y chispas de la descarga eléctrica
       if (tipo === 'propulsores' && f.t >= 6 && f.t < 24) {
         const back = V((f.rx ?? f.x) - f.facing * 0.5, f.y + 1.1, -0.1);
@@ -1285,6 +1320,19 @@ class Game {
       spin = add(new THREE.SphereGeometry(0.34, 20, 14), glow(p.color, 0.55));
       tumble = new THREE.Group(); g.add(tumble);
       for (const rx of [0, Math.PI / 2]) { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.025, 8, 36), glow('#ffffff', 0.75)); ring.rotation.x = rx; tumble.add(ring); }
+    } else if (p.kind === 'camaro') {
+      // el Camaro de Alan (modelo del especial, mirando a +X); si no cargó, el de cajas de Casa Chuy
+      const url = this.fighters[p.owner]?.allSpecials.find((s) => s.tipo === 'camaro')?.modelo;
+      const asset = url && this.props.get(url);
+      if (asset) {
+        const car = asset.scene.clone();
+        car.traverse((o) => {
+          if (!o.isMesh) return;
+          o.castShadow = true;
+          for (const m of [].concat(o.material)) if (m.isMeshStandardMaterial) { m.metalness = 0.35; m.roughness = 0.35; }
+        });
+        g.add(car);
+      } else buildCamaro(g, 0, 0, 1, false);
     } else if (p.kind === 'gas') {
       // la nube de gas son partículas (ver syncProjectiles)
     } else {
@@ -1294,7 +1342,7 @@ class Game {
     }
     // brillo que ilumina alrededor (lo pone la luz fija de syncProjectiles, ver buildViews)
     const light = p.kind === 'pescado' || p.kind === 'kawama' ? null
-      : { color: p.kind === 'puno' || p.kind === 'cohete' ? '#ffb347' : p.color, power: p.kind === 'misil' ? 8 : p.kind === 'gas' ? 3 : p.kind === 'plasma' ? 32 : 22 };
+      : { color: p.kind === 'puno' || p.kind === 'cohete' ? '#ffb347' : p.color, power: p.kind === 'misil' ? 8 : p.kind === 'gas' ? 3 : p.kind === 'plasma' ? 32 : p.kind === 'camaro' ? 14 : 22 };
     this.scene.add(g);
     return { obj: g, spin, tumble, light, t: 0 };
   }
@@ -1314,6 +1362,7 @@ class Game {
       const dir = Math.sign(p.vx) || 1;
       if (p.kind === 'misil') v.obj.rotation.z = Math.atan2(p.vy, p.vx);
       else v.obj.rotation.y = dir > 0 ? 0 : Math.PI;
+      if (p.kind === 'camaro') { this.syncCamaro(p, v, dt, n); continue; }
       if (v.spin) { v.spin.rotation.x += dt * 12; v.spin.rotation.y += dt * 9; v.spin.scale.setScalar(1 + Math.sin(v.t * 36) * 0.12); }
       // pescado/caguama: da vueltas; el de la lluvia cae de cabeza coleteando
       if (v.tumble) v.tumble.rotation.z = p.fall ? -Math.PI / 2 + Math.sin(v.t * 9) * 0.35 : -v.t * (p.kind === 'kawama' ? 11 : 15);
@@ -1336,6 +1385,26 @@ class Game {
     const lit = [...this.projViews.values()].find((v) => v.light);
     this.projLight.intensity = lit ? lit.light.power : 0;
     if (lit) { this.projLight.position.copy(lit.obj.position); this.projLight.color.set(lit.light.color); }
+  }
+
+  // Camaro de Alan: llega derecho, al frenar derrapa y queda de lado, luego se da la vuelta y se va al fondo
+  syncCamaro(p, v, dt, n) {
+    const d = p.dir, o = v.obj;
+    let yaw = 0;
+    if (p.phase === 'frena') yaw = 1.25 * THREE.MathUtils.smoothstep(4 - Math.abs(p.x - p.stopX), 0, 4);
+    else if (p.phase === 'parado') yaw = 1.25;
+    else if (p.phase === 'sale') yaw = Math.min(Math.PI / 2, (v.yaw ?? 1.25) + dt * 2.5);
+    v.yaw = yaw;
+    o.rotation.set(0, (d > 0 ? 0 : Math.PI) + d * yaw, 0);
+    v.z = v.z == null ? p.z : v.z + (p.z - v.z) * Math.min(1, dt * 20);
+    o.position.z = v.z;
+    // humo de llantas al derrapar y al arrancar
+    if (p.phase === 'frena' || (p.phase === 'sale' && p.z > -6)) {
+      o.updateMatrixWorld(true);
+      for (const side of [-0.85, 0.85]) {
+        this.effects.solid.emit({ pos: o.localToWorld(V(-1.45, 0.2, side)), count: 2 * n, speed: 1.2, jitter: 0.25, color: '#d6d6d6', colorEnd: '#5a5a5a', life: 0.9, size: 0.45, grow: 2.2, drag: 1.5, gravity: -0.4 });
+      }
+    }
   }
 
   syncChains() {
@@ -1497,4 +1566,4 @@ window.game = new Game();
 initTouch(window.game);
 registerServiceWorker();
 // precargar en segundo plano los modelos de los peleadores
-for (const d of PELEADORES) for (const url of [d.modelo, d.traje?.modelo]) if (url) loadAsset(url).catch(() => {});
+for (const d of PELEADORES) for (const url of [d.modelo, d.traje?.modelo, ...(d.especiales || []).map((s) => s.modelo)]) if (url) loadAsset(url).catch(() => {});

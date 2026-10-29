@@ -27,7 +27,7 @@
 //    robot: puno_cohete, laser, misiles, armadura, titan (se pone el traje: más rápido y aguanta más)
 //    robot con traje: plasma (cañón), megalaser (rayo gordo desde el pecho), propulsores (embestida
 //      volando), descarga (eléctrica de cerca, deja mareado)
-//    aeroespacial: cohete, jetpack, orbital, turbina
+//    aeroespacial: cohete, jetpack, orbital, turbina, camaro (su Camaro atropella al rival; `modelo` = el carro)
 //    boxeo: rafaga, resorte, contra (y uppercut_volador)
 //    nalgas: culazo, senton, twerk, gas
 //    fuerza: gigante (se hace gigante y súper fuerte), agarre (lo levanta y lo avienta)
@@ -114,7 +114,9 @@ export const PELEADORES = [
     escala: 1, rotacionY: 0,
     accesorios: ['jetpack'],
     stats: { velocidad: 1, fuerza: 1, vida: 105 },
+    // CAMARAZO va primero: es el que sale con el botón de especial solo. TURBINA, con su combinación.
     especiales: [
+      { nombre: 'CAMARAZO', tipo: 'camaro', input: '→ → + P', color: '#cfd6dd', danio: 16, modelo: 'assets/props/camaro.glb' },
       { nombre: 'COHETE SATURNO', tipo: 'cohete', input: '← → + P', color: '#ff7a1a', danio: 12 },
       { nombre: 'JETPACK', tipo: 'jetpack', input: '→ ↓ → + K', color: '#4fd8ff', danio: 13 },
       { nombre: 'ATAQUE ORBITAL', tipo: 'orbital', input: '↓ ← + P', color: '#7fe3ff', danio: 14 },

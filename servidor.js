@@ -36,7 +36,7 @@ const TYPES = {
   '.ogg': 'audio/ogg',
   '.wav': 'audio/wav',
 };
-const SAVE_OK = /^assets\/peleadores\/[a-z0-9_-]+\/(modelo\.glb|retrato\.png)$/;
+const SAVE_OK = /^assets\/(peleadores\/[a-z0-9_-]+\/(modelo\.glb|retrato\.png)|props\/[a-z0-9_-]+\.glb)$/;
 const isLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 
 function save(req, res, rel) {

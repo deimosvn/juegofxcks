@@ -76,6 +76,11 @@ export const sfx = {
     for (let i = 0; i < 5; i++) setTimeout(() => { noise(0.06, 3800, 7, 0.45, 'bandpass'); tone(700 + i * 160, 0.08, 'square', 0.1); }, 100 + i * 85);
     setTimeout(() => { tone(880, 0.4, 'triangle', 0.2, 1760); tone(440, 0.4, 'square', 0.08, 880); }, 560);
   },
+  // Alan y su Camaro: claxon, motor, rechinido de llantas y el atropellón
+  honk: () => { tone(392, 0.2, 'square', 0.14); tone(494, 0.2, 'square', 0.1); setTimeout(() => { tone(392, 0.32, 'square', 0.14); tone(494, 0.32, 'square', 0.1); }, 240); },
+  vroom: () => { tone(70, 1.0, 'sawtooth', 0.3, 230); tone(105, 1.0, 'square', 0.1, 330); noise(1.0, 400, 0.8, 0.45, 'lowpass', 1600); },
+  screech: () => { noise(0.7, 3200, 9, 0.3, 'bandpass', 2300); tone(1900, 0.6, 'sawtooth', 0.04, 1500); },
+  crash: () => { noise(0.5, 1800, 0.8, 1.1); tone(80, 0.4, 'sine', 0.9, 35); setTimeout(() => noise(0.25, 4500, 4, 0.5, 'bandpass'), 60); },
   powerDown: () => { tone(620, 0.7, 'sawtooth', 0.12, 110); noise(0.5, 1500, 1, 0.3, 'lowpass', 300); },
   voxel: () => { for (let i = 0; i < 10; i++) setTimeout(() => tone(600 + Math.random() * 1600, 0.06, 'square', 0.06), i * 45); },
   // --- Gera y José ---
