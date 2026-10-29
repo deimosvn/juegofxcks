@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kombate de Amigos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rubik:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD de pelea -->
+  <div id="hud" class="hidden">
+    <div class="bar-row">
+      <div class="player p1">
+        <div class="name"><span id="name1">P1</span> <small id="player1"></small></div>
+        <div class="health"><div class="lag" id="lag1"></div><div class="fill" id="hp1"></div></div>
+        <div class="wins" id="wins1"></div>
+      </div>
+      <div class="timer" id="timer">99</div>
+      <div class="player p2">
+        <div class="name"><small id="player2"></small> <span id="name2">P2</span></div>
+        <div class="health"><div class="lag" id="lag2"></div><div class="fill" id="hp2"></div></div>
+        <div class="wins" id="wins2"></div>
+      </div>
+    </div>
+    <div class="combo left" id="combo1"></div>
+    <div class="combo right" id="combo2"></div>
+    <div class="special-name left" id="spec1"></div>
+    <div class="special-name right" id="spec2"></div>
+    <div id="netbadge" class="hidden"></div>
+  </div>
+
+  <div id="announcer"></div>
+
+  <!-- Menú principal -->
+  <div id="menu" class="screen">
+    <h1 class="logo">KOMBATE<span>DE AMIGOS</span></h1>
+    <div class="menu-options">
+      <button data-mode="cpu" class="sel">1 JUGADOR vs CPU</button>
+      <button data-mode="vs">1 vs 1 LOCAL</button>
+      <button data-mode="online">EN LÍNEA</button>
+      <button data-mode="controls">CONTROLES</button>
+    </div>
+    <p class="hint">↑ ↓ / W S para elegir · ENTER o F para aceptar</p>
+  </div>
+
+  <!-- Selección de personaje -->
+  <div id="select" class="screen hidden">
+    <h2>ELIGE TU PELEADOR</h2>
+    <div class="select-layout">
+      <div class="preview p1"><div class="pname" id="pick1">—</div><div class="ptag" id="ptag1">P1</div><div class="pspecials" id="pspec1"></div></div>
+      <div class="grid" id="grid"></div>
+      <div class="preview p2"><div class="pname" id="pick2">—</div><div class="ptag" id="ptag2">P2</div><div class="pspecials" id="pspec2"></div></div>
+    </div>
+    <p class="hint">P1: A D W S + F &nbsp;·&nbsp; P2: flechas + K &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; ESC volver</p>
+  </div>
+
+  <!-- Lobby en línea -->
+  <div id="lobby" class="screen hidden">
+    <h2>EN LÍNEA</h2>
+    <div id="lobby-login" class="panel login">
+      <label for="myname">Tu nombre de peleador</label>
+      <input id="myname" maxlength="16" autocomplete="off" placeholder="Ej: Diego">
+      <button id="connectBtn">CONECTAR</button>
+      <p id="netstatus" class="small"></p>
+    </div>
+    <div id="lobby-main" class="lobby-layout hidden">
+      <div class="panel grow">
+        <h3>CONECTADOS <span id="online-count"></span></h3>
+        <ul id="players"></ul>
+        <p id="lobby-mode" class="small"></p>
+      </div>
+      <div class="panel">
+        <h3>RANKING</h3>
+        <ol id="ranking"></ol>
+      </div>
+    </div>
+    <button id="lobbyBack" class="link">← VOLVER</button>
+    <p class="hint">Reta a alguien que esté libre · ESC para volver</p>
+  </div>
+
+  <!-- Controles / pausa -->
+  <div id="controls" class="screen hidden">
+    <h2 id="controls-title">CONTROLES</h2>
+    <div class="controls-grid">
+      <div>
+        <h3>JUGADOR 1</h3>
+        <table>
+          <tr><td>Moverse</td><td><kbd>A</kbd> <kbd>D</kbd></td></tr>
+          <tr><td>Saltar / Agacharse</td><td><kbd>W</kbd> <kbd>S</kbd></td></tr>
+          <tr><td>Puño</td><td><kbd>F</kbd></td></tr>
+          <tr><td>Patada</td><td><kbd>G</kbd></td></tr>
+          <tr><td>Bloqueo</td><td><kbd>H</kbd></td></tr>
+          <tr><td>Especial</td><td><kbd>R</kbd></td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>JUGADOR 2</h3>
+        <table>
+          <tr><td>Moverse</td><td><kbd>←</kbd> <kbd>→</kbd></td></tr>
+          <tr><td>Saltar / Agacharse</td><td><kbd>↑</kbd> <kbd>↓</kbd></td></tr>
+          <tr><td>Puño</td><td><kbd>K</kbd> / <kbd>Num1</kbd></td></tr>
+          <tr><td>Patada</td><td><kbd>L</kbd> / <kbd>Num2</kbd></td></tr>
+          <tr><td>Bloqueo</td><td><kbd>Ñ</kbd> / <kbd>Num3</kbd></td></tr>
+          <tr><td>Especial</td><td><kbd>I</kbd> / <kbd>Num0</kbd></td></tr>
+        </table>
+        <p class="small">En línea puedes usar cualquiera de las dos teclas o un mando.</p>
+      </div>
+      <div>
+        <h3>GOLPES</h3>
+        <table>
+          <tr><td>Gancho al aire</td><td>Abajo + Puño</td></tr>
+          <tr><td>Barrida</td><td>Abajo + Patada</td></tr>
+          <tr><td>Puño fuerte</td><td>Adelante + Puño</td></tr>
+          <tr><td>Patada giratoria</td><td>Atrás + Patada</td></tr>
+          <tr><td>Especial 1 / 2 / 3 / 4</td><td>Esp. / Adel.+Esp. / Abajo+Esp. / Atrás+Esp.</td></tr>
+          <tr><td>Bloqueo bajo</td><td>Abajo + Bloqueo</td></tr>
+        </table>
+        <p class="small">Mandos de Xbox/PlayStation también funcionan.</p>
+      </div>
+    </div>
+    <div id="movelist"></div>
+    <p class="hint" id="controls-hint">ESC para volver</p>
+  </div>
+
+  <div id="modal" class="hidden">
+    <div class="box">
+      <p id="modal-text"></p>
+      <div class="actions"><button id="modal-yes">ACEPTAR</button><button id="modal-no" class="ghost">RECHAZAR</button></div>
+    </div>
+  </div>
+  <div id="toast"></div>
+  <div id="loading" class="hidden"><div class="spinner"></div><span id="loading-text">Cargando peleadores…</span></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

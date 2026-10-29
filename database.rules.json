@@ -1,0 +1,35 @@
+{
+  "rules": {
+    "kombate": {
+      "conectados": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['nombre', 'estado']) && newData.child('nombre').isString() && newData.child('nombre').val().length <= 16"
+        }
+      },
+      "retos": {
+        "$to": {
+          ".read": "auth != null && auth.uid === $to",
+          "$from": {
+            ".write": "auth != null && (auth.uid === $from || auth.uid === $to)"
+          }
+        }
+      },
+      "salas": {
+        "$sala": {
+          ".read": "auth != null && (data.child('host').val() === auth.uid || data.child('guest').val() === auth.uid)",
+          ".write": "auth != null && (data.exists() ? (data.child('host').val() === auth.uid || data.child('guest').val() === auth.uid) : newData.child('host').val() === auth.uid)"
+        }
+      },
+      "ranking": {
+        ".read": true,
+        ".indexOn": ["victorias"],
+        "$jugador": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['nombre', 'victorias', 'derrotas'])"
+        }
+      }
+    }
+  }
+}

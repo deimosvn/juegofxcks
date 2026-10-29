@@ -1,0 +1,757 @@
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { ANIMACIONES } from './roster.js';
+
+export const TARGET_HEIGHT = 1.85;
+const gltfLoader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
+const assetCache = new Map();
+let sharedClips = null;     // { key: AnimationClip }
+let sharedHipsRef = 0;      // altura de cadera del esqueleto de las animaciones
+
+// ---------------------------------------------------------------------
+//  Carga de archivos
+// ---------------------------------------------------------------------
+export function loadAsset(url) {
+  if (!assetCache.has(url)) {
+    const isFbx = /\.fbx$/i.test(url);
+    const p = (isFbx ? fbxLoader : gltfLoader).loadAsync(url).then((r) => (
+      isFbx ? { scene: r, animations: r.animations || [] } : { scene: r.scene, animations: r.animations || [] }
+    ));
+    assetCache.set(url, p);
+  }
+  return assetCache.get(url);
+}
+
+const norm = (n) => (n || '').toLowerCase().replace(/^.*[:|]/, '').replace(/mixamorig\d*/g, '').replace(/[^a-z0-9]/g, '');
+
+// Alias para animaciones que ya vienen dentro del modelo (ej. exportadas de Tripo)
+const ALIAS = {
+  idle: 'idle', fightingidle: 'idle', walk: 'caminar', walking: 'caminar', walkback: 'caminar_atras',
+  jump: 'saltar', crouch: 'agacharse', block: 'bloqueo', punch: 'puno', jab: 'puno', kick: 'patada',
+  uppercut: 'gancho_arriba', sweep: 'barrida', hit: 'golpeado', hitreaction: 'golpeado', fall: 'caer',
+  death: 'caer', dying: 'caer', getup: 'levantarse', dizzy: 'mareado', victory: 'victoria', cheer: 'victoria',
+  special: 'especial', cast: 'especial', throw: 'lanzar',
+};
+
+export async function loadSharedAnimations(onlyIfModels) {
+  if (sharedClips || !onlyIfModels) return sharedClips || {};
+  sharedClips = {};
+  await Promise.all(Object.entries(ANIMACIONES).map(async ([key, url]) => {
+    try {
+      const a = await loadAsset(url);
+      if (a.animations[0]) {
+        const clip = a.animations[0].clone();
+        clip.name = key;
+        sharedClips[key] = clip;
+        if (key === 'idle') {
+          const t = clip.tracks.find((tr) => tr.name.endsWith('.position') && norm(tr.name.split('.')[0]) === 'hips');
+          if (t) sharedHipsRef = t.values[1];
+        }
+      }
+    } catch { /* archivo no existe todavía: se usa animación procedural */ }
+  }));
+  return sharedClips;
+}
+
+// Adapta un clip al esqueleto del modelo: renombra huesos, quita
+// desplazamientos de raíz y escala la altura de la cadera.
+function retarget(clip, boneMap, hipsRestY, refY, opts = {}) {
+  const tracks = [];
+  for (const tr of clip.tracks) {
+    const dot = tr.name.lastIndexOf('.');
+    const node = tr.name.slice(0, dot), prop = tr.name.slice(dot + 1);
+    const n = norm(node);
+    const target = boneMap.get(n);
+    if (!target) continue;
+    if (prop === 'quaternion') {
+      const t = tr.clone(); t.name = `${target}.quaternion`; tracks.push(t);
+    } else if (prop === 'position' && n === 'hips') {
+      const t = tr.clone(); t.name = `${target}.position`;
+      const v = t.values;
+      const x0 = v[0], z0 = v[2];
+      const ratio = refY && hipsRestY ? hipsRestY / refY : 1;
+      for (let i = 0; i < v.length; i += 3) {
+        v[i] = x0 * ratio; v[i + 2] = z0 * ratio;
+        v[i + 1] = opts.lockY ? v[1] * ratio : v[i + 1] * ratio;
+      }
+      tracks.push(t);
+    }
+  }
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+}
+
+// ---------------------------------------------------------------------
+//  Muñeco provisional (hasta que lleguen los modelos)
+// ---------------------------------------------------------------------
+function buildPlaceholder(def, tint) {
+  const base = new THREE.Color(def.color);
+  if (tint) base.offsetHSL(0.5, 0, 0.05);
+  const gi = new THREE.MeshStandardMaterial({ color: base, roughness: 0.7 });
+  const dark = new THREE.MeshStandardMaterial({ color: base.clone().multiplyScalar(0.35), roughness: 0.8 });
+  const skin = new THREE.MeshStandardMaterial({ color: '#d29a72', roughness: 0.6 });
+  const black = new THREE.MeshStandardMaterial({ color: '#141414', roughness: 0.5 });
+  const eye = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+
+  const cap = (r, len, mat) => {
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 12), mat);
+    m.castShadow = true; return m;
+  };
+  const P = {};
+  const hips = P.hips = new THREE.Group(); hips.position.y = 0.98;
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.22), dark); pelvis.castShadow = true; hips.add(pelvis);
+
+  const torso = P.torso = new THREE.Group(); torso.position.y = 0.05; hips.add(torso);
+  const chest = cap(0.17, 0.32, gi); chest.position.y = 0.3; chest.scale.set(1.3, 1, 0.8); torso.add(chest);
+  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.035, 8, 20), black); belt.rotation.x = Math.PI / 2; belt.scale.set(1.25, 0.85, 1); belt.position.y = 0.05; torso.add(belt);
+
+  const head = P.head = new THREE.Group(); head.position.y = 0.6; torso.add(head);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.125, 20, 16), skin); skull.position.y = 0.13; skull.castShadow = true; head.add(skull);
+  const mask = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 16, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5), gi); mask.position.y = 0.13; head.add(mask);
+  const hood = new THREE.Mesh(new THREE.SphereGeometry(0.135, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.42), gi); hood.position.y = 0.13; head.add(hood);
+  for (const sx of [-0.045, 0.045]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 8), eye); e.position.set(sx, 0.15, 0.115); head.add(e); }
+  const neck = cap(0.055, 0.06, skin); neck.position.y = 0.0; head.add(neck);
+
+  const arm = (side) => {
+    const sh = new THREE.Group(); sh.position.set(side * 0.25, 0.5, 0); torso.add(sh);
+    const up = cap(0.06, 0.2, gi); up.position.y = -0.14; sh.add(up);
+    const el = new THREE.Group(); el.position.y = -0.29; sh.add(el);
+    const fo = cap(0.05, 0.18, skin); fo.position.y = -0.12; el.add(fo);
+    const wrap = cap(0.055, 0.06, black); wrap.position.y = -0.2; el.add(wrap);
+    const fist = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 10), skin); fist.position.y = -0.29; fist.castShadow = true; el.add(fist);
+    return [sh, el];
+  };
+  // N = lado cercano a la cámara (x local negativa), F = lado lejano
+  [P.shN, P.elN] = arm(-1);
+  [P.shF, P.elF] = arm(1);
+
+  const leg = (side) => {
+    const hp = new THREE.Group(); hp.position.set(side * 0.1, -0.04, 0); hips.add(hp);
+    const th = cap(0.08, 0.3, dark); th.position.y = -0.22; hp.add(th);
+    const kn = new THREE.Group(); kn.position.y = -0.45; hp.add(kn);
+    const sh = cap(0.065, 0.3, dark); sh.position.y = -0.2; kn.add(sh);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.24), black); foot.position.set(0, -0.44, 0.05); foot.castShadow = true; kn.add(foot);
+    return [hp, kn];
+  };
+  [P.hipN, P.knN] = leg(-1);
+  [P.hipF, P.knF] = leg(1);
+
+  const g = new THREE.Group(); g.add(hips);
+  return { object: g, parts: P, eyes: { bone: head, local: new THREE.Vector3(0, 0.15, 0.12) } };
+}
+
+// ---------------------------------------------------------------------
+//  AUTO-RIG: esqueleto automático para modelos sin huesos (Meshy, Tripo…)
+//  Requisitos: cuerpo completo, de pie, mirando a +Z, en pose T o A.
+// ---------------------------------------------------------------------
+const DOWN = new THREE.Vector3(0, -1, 0);
+
+function distToSegment(px, py, pz, a, b) {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const apx = px - a.x, apy = py - a.y, apz = pz - a.z;
+  const len2 = abx * abx + aby * aby + abz * abz || 1e-9;
+  let t = (apx * abx + apy * aby + apz * abz) / len2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const dx = apx - abx * t, dy = apy - aby * t, dz = apz - abz * t;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// Agrupa los puntos (x,z intercalados) de una rebanada por cercanía en x
+function clusterSlice(bin, gap) {
+  const n = bin.length / 2;
+  if (!n) return [];
+  const idx = Array.from({ length: n }, (_, i) => i).sort((i, j) => bin[i * 2] - bin[j * 2]);
+  const out = [];
+  let cur = null;
+  for (const i of idx) {
+    const x = bin[i * 2], z = bin[i * 2 + 1];
+    if (!cur || x - cur.max > gap) { cur = { min: x, max: x, n: 0, sx: 0, sz: 0, minZ: z, maxZ: z }; out.push(cur); }
+    cur.max = x; cur.n++; cur.sx += x; cur.sz += z;
+    if (z < cur.minZ) cur.minZ = z; if (z > cur.maxZ) cur.maxZ = z;
+  }
+  for (const c of out) { c.mx = c.sx / c.n; c.mz = c.sz / c.n; }
+  return out;
+}
+
+export function autoRig(obj, height) {
+  obj.updateMatrixWorld(true);
+  const meshes = [];
+  obj.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) meshes.push(o); });
+  if (!meshes.length) return null;
+
+  // 1) Geometría al espacio del modelo: pies en y=0, centrado y con la altura deseada
+  const geos = meshes.map((m) => { const g = m.geometry.clone(); g.applyMatrix4(m.matrixWorld); return g; });
+  const box = new THREE.Box3();
+  for (const g of geos) { g.computeBoundingBox(); box.union(g.boundingBox); }
+  const H = height;
+  const s = H / ((box.max.y - box.min.y) || 1);
+  const fix = new THREE.Matrix4().makeScale(s, s, s).multiply(new THREE.Matrix4().makeTranslation(
+    -(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2));
+  for (const g of geos) { g.applyMatrix4(fix); g.computeBoundingSphere(); }
+
+  // 2) Nube de puntos en rebanadas horizontales
+  let total = 0; for (const g of geos) total += g.attributes.position.count;
+  const step = Math.max(1, Math.floor(total / 90000));
+  const NB = 120;
+  const bins = Array.from({ length: NB }, () => []);
+  const pts = [];
+  for (const g of geos) {
+    const a = g.attributes.position.array;
+    for (let i = 0; i < a.length / 3; i += step) {
+      const x = a[i * 3], y = a[i * 3 + 1], z = a[i * 3 + 2];
+      const b = Math.min(NB - 1, Math.max(0, Math.floor(y / H * NB)));
+      bins[b].push(x, z); pts.push(x, y, z);
+    }
+  }
+  const binAt = (y) => bins[Math.min(NB - 1, Math.max(0, Math.floor(y / H * NB)))];
+  const clamp = THREE.MathUtils.clamp;
+
+  // Entrepierna: donde la profundidad del cuerpo en el centro (x≈0) alcanza la de la cadera.
+  // Funciona aunque las piernas del pantalón se toquen.
+  let crotchY = null;
+  const ratio = (b) => {
+    const bin = bins[b];
+    let cmin = Infinity, cmax = -Infinity, bmin = Infinity, bmax = -Infinity;
+    for (let k = 0; k < bin.length; k += 2) {
+      const x = bin[k], z = bin[k + 1];
+      if (Math.abs(x) < 0.015 * H) { if (z < cmin) cmin = z; if (z > cmax) cmax = z; }
+      if (Math.abs(x) < 0.2 * H) { if (z < bmin) bmin = z; if (z > bmax) bmax = z; }
+    }
+    return cmax > cmin && bmax > bmin ? (cmax - cmin) / (bmax - bmin) : 0;
+  };
+  for (let b = Math.floor(0.3 * NB); b < Math.floor(0.6 * NB); b++) {
+    if (ratio(b) >= 0.95 && ratio(b + 1) >= 0.95) { crotchY = b / NB * H; break; }
+  }
+  crotchY = clamp(crotchY ?? 0.47 * H, 0.4 * H, 0.54 * H);
+
+  const centralZ = (y, fallback = 0) => {
+    const cl = clusterSlice(binAt(y), 0.01 * H).filter((c) => c.min < 0.02 * H && c.max > -0.02 * H);
+    return cl.length ? cl.sort((a, b) => b.n - a.n)[0].mz : fallback;
+  };
+  const torsoZ = centralZ(0.68 * H);
+  const chest = clusterSlice(binAt(0.66 * H), 0.008 * H).find((c) => c.min < 0 && c.max > 0);
+  const torsoHalf = clamp(chest ? (chest.max - chest.min) / 2 : 0.1 * H, 0.07 * H, 0.13 * H);
+
+  // Manos: los puntos más extremos en x por encima de la cadera
+  const tipN = new THREE.Vector3(-torsoHalf, 0.45 * H, torsoZ), tipF = new THREE.Vector3(torsoHalf, 0.45 * H, torsoZ);
+  let minX = Infinity, maxX = -Infinity;
+  for (let i = 0; i < pts.length; i += 3) {
+    const x = pts[i], y = pts[i + 1], z = pts[i + 2];
+    if (y < crotchY - 0.12 * H || y > 0.86 * H) continue;
+    if (x < minX) { minX = x; tipN.set(x, y, z); }
+    if (x > maxX) { maxX = x; tipF.set(x, y, z); }
+  }
+  // Hombros: recta por los centros del brazo (rebanadas donde el brazo está separado del torso),
+  // prolongada hasta tocar el costado del torso.
+  const armAxis = (tip, side) => {
+    const ys = [], xs = [], zs = [];
+    for (let y = tip.y + 0.04 * H; y < 0.86 * H; y += H / NB) {
+      const cl = clusterSlice(binAt(y), 0.008 * H).filter((c) => c.mx * side > torsoHalf * 1.15 && c.n > 2);
+      if (!cl.length) continue;
+      const c = cl.sort((a, b) => b.mx * side - a.mx * side)[0];
+      ys.push(y); xs.push(c.mx); zs.push(c.mz);
+    }
+    let sy = 0.81 * H, sz = torsoZ;
+    if (Math.abs(tip.y - 0.81 * H) < 0.06 * H) sy = tip.y;                // pose en T
+    else if (ys.length >= 4) {
+      const n = ys.length, my = ys.reduce((a, b) => a + b) / n, mx = xs.reduce((a, b) => a + b) / n, mz = zs.reduce((a, b) => a + b) / n;
+      let sxy = 0, syy = 0, szy = 0;
+      for (let i = 0; i < n; i++) { sxy += (ys[i] - my) * (xs[i] - mx); szy += (ys[i] - my) * (zs[i] - mz); syy += (ys[i] - my) ** 2; }
+      const kx = syy ? sxy / syy : 0, kz = syy ? szy / syy : 0;           // dx/dy y dz/dy
+      if (Math.abs(kx) > 0.15) sy = my + (side * torsoHalf * 0.95 - mx) / kx;
+      sz = mz + kz * (sy - my);
+    }
+    sy = clamp(sy - 0.015 * H, 0.76 * H, 0.83 * H);
+    return new THREE.Vector3(side * torsoHalf * 0.95, sy, clamp(sz, torsoZ - 0.05 * H, torsoZ + 0.05 * H));
+  };
+  const SN = armAxis(tipN, -1), SF = armAxis(tipF, 1);
+  const shoulderY = (SN.y + SF.y) / 2, shoulderX = (SF.x - SN.x) / 2, armpitY = null;
+  const EN = SN.clone().lerp(tipN, 0.43), EF = SF.clone().lerp(tipF, 0.43);
+
+  // Piernas: centro de cada lado (sirve aunque las piernas se toquen)
+  const legPoint = (y, side, fallbackX) => {
+    const bin = binAt(y);
+    let sx = 0, sz = 0, n = 0;
+    for (let k = 0; k < bin.length; k += 2) {
+      const x = bin[k];
+      if (x * side > 0.002 * H && Math.abs(x) < 0.2 * H) { sx += x; sz += bin[k + 1]; n++; }
+    }
+    return n > 3 ? new THREE.Vector3(sx / n, y, sz / n) : new THREE.Vector3(fallbackX, y, torsoZ);
+  };
+  const hipJY = crotchY + 0.035 * H;
+  const upN = legPoint(crotchY - 0.04 * H, -1, -0.055 * H), upF = legPoint(crotchY - 0.04 * H, 1, 0.055 * H);
+  const HN = new THREE.Vector3(upN.x, hipJY, upN.z), HF = new THREE.Vector3(upF.x, hipJY, upF.z);
+  const KN = legPoint(0.285 * H, -1, upN.x), KF = legPoint(0.285 * H, 1, upF.x);
+  const AN = legPoint(0.05 * H, -1, KN.x), AF = legPoint(0.05 * H, 1, KF.x);
+
+  const pelvisY = crotchY + 0.06 * H, torsoY = crotchY + 0.12 * H;
+  const neckY = clamp(shoulderY + 0.05 * H, 0.84 * H, 0.9 * H);
+  const zPelvis = centralZ(pelvisY, torsoZ), zTorso = centralZ(torsoY, torsoZ), zNeck = centralZ(neckY, torsoZ), zHead = centralZ(0.93 * H, torsoZ);
+  // Ojos: la cara es lo más adelantado de la cabeza a la altura de los ojos
+  let zFace = zHead;
+  { const bin = binAt(0.935 * H); for (let k = 0; k < bin.length; k += 2) if (Math.abs(bin[k]) < 0.04 * H && bin[k + 1] > zFace) zFace = bin[k + 1]; }
+
+  // 3) Huesos (identidad = brazos/piernas hacia abajo, como el muñeco provisional)
+  const bone = (name) => { const b = new THREE.Bone(); b.name = 'ar_' + name; return b; };
+  const hips = bone('hips'); hips.position.set(0, pelvisY, zPelvis);
+  const torso = bone('torso'); torso.position.set(0, torsoY - pelvisY, zTorso - zPelvis); hips.add(torso);
+  const head = bone('head'); head.position.set(0, neckY - torsoY, zNeck - zTorso); torso.add(head);
+  const torsoW = new THREE.Vector3(0, torsoY, zTorso);
+  const arm = (S, E, T, side) => {
+    const sh = bone('sh' + side); torso.add(sh);
+    sh.position.copy(S).sub(torsoW);
+    sh.quaternion.setFromUnitVectors(DOWN, T.clone().sub(S).normalize());
+    const el = bone('el' + side); sh.add(el); el.position.set(0, -S.distanceTo(E), 0);
+    return [sh, el];
+  };
+  const [shN, elN] = arm(SN, EN, tipN, 'N');
+  const [shF, elF] = arm(SF, EF, tipF, 'F');
+  const hipsW = new THREE.Vector3(0, pelvisY, zPelvis);
+  const leg = (Hj, K, A, side) => {
+    const hp = bone('hip' + side); hips.add(hp);
+    hp.position.copy(Hj).sub(hipsW);
+    const dir = K.clone().sub(Hj).normalize();
+    hp.quaternion.setFromUnitVectors(DOWN, dir);
+    const kn = bone('kn' + side); hp.add(kn); kn.position.set(0, -Hj.distanceTo(K), 0);
+    kn.quaternion.setFromUnitVectors(DOWN, A.clone().sub(K).normalize().applyQuaternion(hp.quaternion.clone().invert()));
+    return [hp, kn, Math.atan2(dir.x, -dir.y)];
+  };
+  const [hipN, knN, abdN] = leg(HN, KN, AN, 'N');
+  const [hipF, knF, abdF] = leg(HF, KF, AF, 'F');
+
+  // 4) Pesos: cada vértice sigue a los huesos más cercanos (distancia / grosor del hueso)
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const segs = [
+    { b: hips, a: V(0, crotchY + 0.01 * H, zPelvis), e: V(0, torsoY, zTorso), r: 0.09 * H, hips: true, core: true },
+    { b: torso, a: V(0, torsoY, zTorso), e: V(0, neckY, zNeck), r: 0.1 * H, core: true },
+    { b: head, a: V(0, neckY, zNeck), e: V(0, 0.97 * H, zHead), r: 0.075 * H, core: true },
+    { b: shN, a: SN, e: EN, r: 0.06 * H, side: -1, arm: true }, { b: elN, a: EN, e: tipN, r: 0.045 * H, side: -1, arm: true },
+    { b: shF, a: SF, e: EF, r: 0.06 * H, side: 1, arm: true }, { b: elF, a: EF, e: tipF, r: 0.045 * H, side: 1, arm: true },
+    { b: hipN, a: HN, e: KN, r: 0.055 * H, side: -1, leg: true }, { b: knN, a: KN, e: AN.clone().setY(0.02 * H), r: 0.045 * H, side: -1, leg: true },
+    { b: hipF, a: HF, e: KF, r: 0.055 * H, side: 1, leg: true }, { b: knF, a: KF, e: AF.clone().setY(0.02 * H), r: 0.045 * H, side: 1, leg: true },
+  ];
+  const boneList = [hips, torso, head, shN, elN, shF, elF, hipN, knN, hipF, knF];
+  segs.forEach((sg) => { sg.i = boneList.indexOf(sg.b); });
+  const sideTol = 0.004 * H, legTop = crotchY + 0.08 * H;
+  const sc = new Float32Array(segs.length);
+  for (const g of geos) {
+    const a = g.attributes.position.array, n = a.length / 3;
+    const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+    for (let v = 0; v < n; v++) {
+      const x = a[v * 3], y = a[v * 3 + 1], z = a[v * 3 + 2];
+      const lateral = Math.abs(x) > torsoHalf + 0.012 * H && y > crotchY + 0.05 * H;
+      let best = Infinity;
+      for (let k = 0; k < segs.length; k++) {
+        const sg = segs[k];
+        if ((sg.side && x * sg.side < -sideTol) || (sg.leg && y > legTop)) { sc[k] = Infinity; continue; }
+        let d = distToSegment(x, y, z, sg.a, sg.e) / sg.r;
+        if (sg.hips && y < crotchY) d *= 2;
+        // fuera del ancho del torso (y por encima de la cadera) solo pueden estar los brazos
+        if (sg.core && lateral) d *= 3;
+        if (sg.arm && Math.abs(x) < torsoHalf * 0.6) d *= 3;
+        sc[k] = d; if (d < best) best = d;
+      }
+      // las 4 mejores, con mezcla suave en las articulaciones
+      const top = [];
+      for (let k = 0; k < segs.length; k++) {
+        if (sc[k] === Infinity) continue;
+        const w = Math.exp(-6 * (sc[k] - best));
+        if (w < 0.01) continue;
+        top.push([segs[k].i, w]);
+      }
+      top.sort((p, q) => q[1] - p[1]);
+      let sum = 0; for (let j = 0; j < Math.min(4, top.length); j++) sum += top[j][1];
+      for (let j = 0; j < Math.min(4, top.length); j++) { si[v * 4 + j] = top[j][0]; sw[v * 4 + j] = top[j][1] / sum; }
+    }
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  }
+
+  // 5) Mallas con piel
+  const group = new THREE.Group();
+  group.add(hips);
+  group.updateMatrixWorld(true);
+  const skeleton = new THREE.Skeleton(boneList);
+  const skinned = geos.map((g, i) => {
+    const sm = new THREE.SkinnedMesh(g, meshes[i].material);
+    sm.castShadow = true; sm.frustumCulled = false;
+    group.add(sm);
+    sm.bind(skeleton);
+    return sm;
+  });
+  const eyeLocal = new THREE.Vector3(0, 0.935 * H, zFace + 0.005 * H).sub(new THREE.Vector3(0, neckY, zNeck));
+  return {
+    group, skinned,
+    parts: { hips, torso, head, shN, elN, shF, elF, hipN, knN, hipF, knF },
+    rig: { pelvisY, spread: 0.13, abdN, abdF, H },
+    eyes: { bone: head, local: eyeLocal },
+    debug: { crotchY, armpitY, shoulderY, shoulderX, tipN, tipF, KN, KF },
+  };
+}
+
+// ---------------------------------------------------------------------
+//  Poses procedurales
+// ---------------------------------------------------------------------
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+// Curva de extensión de un golpe: sube durante el arranque, se mantiene en frames activos y baja en la recuperación
+function ext(a) {
+  if (!a.total) return 0;
+  const p = a.t / a.total;
+  if (p < a.s) return clamp01(p / a.s) ** 0.6;
+  if (p < a.a) return 1;
+  return 1 - clamp01((p - a.a) / (1 - a.a)) ** 1.4;
+}
+
+const GUARD = { hipsY: 0.93, hipsX: 0, torsoX: 0.1, torsoY: 0.35, torsoZ: 0, headX: 0, spin: 0,
+  shNX: -1.0, shNZ: 0.1, elNX: -1.8, shFX: -0.8, shFZ: -0.1, elFX: -2.0,
+  hipNX: -0.35, knNX: 0.55, hipFX: 0.25, knFX: 0.4 };
+
+export function proceduralPose(a) {
+  const t = a.t, e = ext(a), p = a.total ? clamp01(a.t / a.total) : 0;
+  const P = { ...GUARD };
+  const crouch = () => Object.assign(P, { hipsY: 0.56, hipNX: -1.45, knNX: 2.2, hipFX: -0.95, knFX: 2.1, torsoX: 0.35 });
+  switch (a.key) {
+    case 'idle': P.hipsY += Math.sin(t * 0.08) * 0.015; P.elNX += Math.sin(t * 0.08) * 0.05; break;
+    case 'caminar': case 'caminar_atras': {
+      const s = Math.sin(t * 0.22 * (a.key === 'caminar' ? 1 : -1));
+      P.hipNX = -0.3 + s * 0.45; P.knNX = 0.4 + Math.max(0, -s) * 0.8;
+      P.hipFX = -0.1 - s * 0.45; P.knFX = 0.4 + Math.max(0, s) * 0.8;
+      P.hipsY = 0.94 + Math.abs(s) * 0.02; break;
+    }
+    case 'agacharse': crouch(); break;
+    case 'saltar': Object.assign(P, { hipNX: -1.3, knNX: 2.1, hipFX: -0.9, knFX: 1.9, shNX: -1.4, shFX: -1.2 }); P.spin = a.flip ? -p * Math.PI * 2 : 0; break;
+    case 'bloqueo': Object.assign(P, { shNX: -1.45, elNX: -2.1, shFX: -1.35, elFX: -2.2, shNZ: 0.35, shFZ: -0.35, torsoX: -0.05, torsoY: 0.1 }); break;
+    case 'bloqueo_bajo': crouch(); Object.assign(P, { shNX: -1.45, elNX: -2.1, shFX: -1.35, elFX: -2.2, shNZ: 0.35, shFZ: -0.35 }); break;
+    case 'puno':
+      P.shNX = lerp(-1.0, -1.6, e); P.elNX = lerp(-1.8, -0.05, e); P.torsoY = lerp(0.35, -0.15, e); P.hipNX = lerp(-0.35, -0.6, e); break;
+    case 'puno_fuerte':
+      P.shFX = lerp(-0.8, -1.6, e); P.elFX = lerp(-2.0, -0.05, e); P.torsoY = lerp(0.35, -0.75, e); P.torsoX = lerp(0.1, 0.3, e);
+      P.hipNX = lerp(-0.35, -0.8, e); P.knNX = lerp(0.55, 0.9, e); P.hipsY = lerp(0.93, 0.86, e); break;
+    case 'patada':
+      P.hipNX = lerp(-0.35, -1.65, e); P.knNX = lerp(0.55, 0.05, e); P.torsoX = lerp(0.1, -0.45, e); P.hipFX = lerp(0.25, 0.05, e); P.knFX = 0.2; break;
+    case 'patada_giratoria':
+      P.spin = -Math.min(1, p / a.a) * Math.PI * 2; P.hipFX = lerp(0.25, -1.5, e); P.knFX = lerp(0.4, 0.05, e); P.torsoX = lerp(0.1, -0.5, e); break;
+    case 'gancho_arriba':
+      if (a.t / a.total < a.s) { crouch(); P.shFX = -0.4; P.elFX = -1.6; }
+      else { P.shFX = lerp(-0.8, -3.0, e); P.elFX = lerp(-2.0, -0.3, e); P.torsoX = lerp(0.3, -0.3, e); P.hipsY = lerp(0.62, 1.0, e); P.torsoY = -0.3; }
+      break;
+    case 'barrida':
+      Object.assign(P, { hipsY: 0.42, hipFX: -0.3, knFX: 2.5, torsoX: 0.3, torsoZ: 0.2 });
+      P.hipNX = lerp(-1.4, -1.55, e); P.knNX = lerp(2.2, 0.0, e); P.spin = -e * 0.4; break;
+    case 'patada_aerea':
+      Object.assign(P, { hipFX: -0.9, knFX: 1.9, shNX: -1.3, shFX: -1.0 }); P.hipNX = lerp(-1.3, -1.0, e); P.knNX = lerp(2.0, 0.05, e); P.torsoX = -0.3 * e; break;
+    case 'golpeado': {
+      const k = 1 - clamp01(t / 14);
+      Object.assign(P, { torsoX: lerp(0.1, -0.55, k), headX: -0.5 * k, shNX: lerp(-1.0, 0.4, k), elNX: lerp(-1.8, -0.4, k), shFX: lerp(-0.8, 0.5, k), hipsY: 0.9 });
+      break;
+    }
+    case 'caer': case 'muerto': {
+      const l = clamp01(t / 14);
+      Object.assign(P, { hipsX: -Math.PI / 2 * l, hipsY: lerp(0.9, 0.17, l), torsoX: lerp(-0.3, 0, l), shNX: lerp(0.4, -2.6, l), elNX: -0.3, shFX: lerp(0.5, -2.4, l), elFX: -0.3,
+        hipNX: -0.2, knNX: 0.3, hipFX: -0.5, knFX: 0.9, torsoY: 0, headX: 0.2 * l });
+      break;
+    }
+    case 'levantarse': {
+      const l = 1 - clamp01(p * 1.2);
+      Object.assign(P, { hipsX: -Math.PI / 2 * l, hipsY: lerp(0.93, 0.17, l), shNX: lerp(-1, -2.6, l), shFX: lerp(-0.8, -2.4, l), hipNX: lerp(-0.35, -1.2, l), knNX: lerp(0.55, 1.8, l) });
+      break;
+    }
+    case 'mareado':
+      Object.assign(P, { shNX: -0.15, elNX: -0.3, shFX: -0.1, elFX: -0.25, torsoX: 0.3 + Math.sin(t * 0.05) * 0.1, torsoZ: Math.sin(t * 0.07) * 0.28, headX: 0.35, hipsY: 0.9, torsoY: 0 });
+      break;
+    case 'victoria': {
+      const b = Math.abs(Math.sin(t * 0.09));
+      Object.assign(P, { shFX: -3.0, elFX: -0.25, shFZ: -0.2, shNX: -0.2, shNZ: 0.5, elNX: -1.6, torsoY: 0, torsoX: -0.1, hipsY: 0.93 + b * 0.06, hipNX: -0.1, knNX: 0.2, hipFX: 0.1, knFX: 0.2 });
+      break;
+    }
+    case 'especial': case 'lanzar':
+      P.shNX = lerp(-1.0, -1.55, e); P.shFX = lerp(-0.8, -1.5, e); P.elNX = lerp(-1.8, -0.1, e); P.elFX = lerp(-2.0, -0.1, e);
+      P.torsoY = lerp(0.35, 0.0, e); P.hipNX = lerp(-0.35, -0.7, e); P.knNX = 0.8; P.hipsY = 0.88; break;
+    case 'carga':
+      Object.assign(P, { shNX: -0.6, elNX: -1.2, shFX: -0.5, elFX: -1.2, shNZ: 0.6, shFZ: -0.6, torsoX: -0.2, headX: -0.3, hipsY: 0.9 + Math.sin(t * 0.5) * 0.01 }); break;
+    case 'embestida':
+      Object.assign(P, { torsoX: 0.9, shNX: -1.6, elNX: 0, shFX: -1.5, elFX: 0, hipNX: 0.5, knNX: 0.3, hipFX: 0.9, knFX: 0.2, hipsY: 0.75, torsoY: 0 }); break;
+    case 'laser':   // mirada fija hacia adelante, brazos firmes y la cabeza un poco inclinada
+      Object.assign(P, { torsoY: 0, torsoX: -0.05, headX: -0.08 - e * 0.05, shNX: -0.3, shNZ: 0.5, elNX: -1.3, shFX: -0.3, shFZ: -0.5, elFX: -1.3, hipNX: -0.4, knNX: 0.5, hipFX: 0.3, knFX: 0.4 });
+      P.hipsY = 0.92 - e * 0.03; break;
+    case 'misiles':   // se agacha y lanza desde la espalda
+      Object.assign(P, { torsoX: lerp(0.1, 0.55, e), torsoY: 0, headX: -0.3 * e, shNX: lerp(-1.0, -0.3, e), shNZ: 0.7, elNX: -1.5, shFX: lerp(-0.8, -0.3, e), shFZ: -0.7, elFX: -1.5, hipsY: lerp(0.93, 0.8, e), knNX: 0.9, knFX: 0.8 }); break;
+    case 'retrato':   // de pie y relajado, para la foto de la pantalla de selección
+      Object.assign(P, { hipsY: 0.98, torsoX: 0, torsoY: 0, headX: 0.05, shNX: -0.1, shNZ: 0, elNX: -0.25, shFX: -0.1, shFZ: 0, elFX: -0.25, hipNX: 0, knNX: 0, hipFX: 0, knFX: 0 });
+      break;
+    case 'congelado': return null;
+  }
+  return P;
+}
+
+// ---------------------------------------------------------------------
+//  FighterModel
+// ---------------------------------------------------------------------
+const FALLBACK = {
+  caminar_atras: ['caminar'], bloqueo_bajo: ['agacharse'], puno_fuerte: ['puno'], patada_giratoria: ['patada'],
+  patada_aerea: ['patada'], gancho_arriba: ['puno_fuerte', 'puno'], barrida: ['patada'], muerto: ['caer'],
+  lanzar: ['especial', 'puno'], embestida: ['especial'], carga: ['especial', 'victoria'], mareado: ['idle'],
+  laser: ['especial'], misiles: ['especial'],
+};
+const LOOPING = new Set(['idle', 'caminar', 'caminar_atras', 'agacharse', 'bloqueo', 'bloqueo_bajo', 'mareado', 'victoria', 'carga']);
+const BURNT = new THREE.Color('#0d0806');
+
+export class FighterModel {
+  constructor() {
+    this.root = new THREE.Group();     // posición y orientación en el mundo
+    this.pivot = new THREE.Group();    // para poses procedurales de cuerpo entero
+    this.root.add(this.pivot);
+    this.parts = null;
+    this.rig = null;
+    this.eyes = null;
+    this.mixer = null;
+    this.actions = {};
+    this.current = null;
+    this.materials = [];
+    this.flashAmt = 0;
+    this.burn = 0;
+    this.squash = 1;
+    this.paused = false;
+    this.detachArm = false;
+    this.pose = { ...GUARD };
+  }
+
+  static async create(def, altTint = false) {
+    let asset = null;
+    if (def.modelo) {
+      try { asset = await loadAsset(def.modelo); } catch (err) { console.warn(`No se pudo cargar ${def.modelo}, usando muñeco provisional`, err); }
+    }
+    return FighterModel.fromAsset(asset, def, altTint);
+  }
+
+  static async fromAsset(asset, def, altTint = false) {
+    const fm = new FighterModel();
+    if (!asset) {
+      const ph = buildPlaceholder(def, altTint);
+      fm.parts = ph.parts; fm.eyes = ph.eyes;
+      fm.pivot.add(ph.object);
+      ph.object.traverse((o) => { if (o.material && !fm.materials.includes(o.material)) fm.materials.push(o.material); });
+      return fm;
+    }
+    const obj = SkeletonUtils.clone(asset.scene);
+    obj.rotation.y = THREE.MathUtils.degToRad(def.rotacionY || 0);
+    let hasBones = false;
+    obj.traverse((o) => { if (o.isBone || o.isSkinnedMesh) hasBones = true; });
+    if (hasBones) {
+      fm.setupLoaded(obj, def, altTint);
+      await fm.setupClips(obj, asset.animations, def);
+    } else {
+      const r = autoRig(obj, TARGET_HEIGHT * (def.escala || 1));
+      fm.parts = r.parts; fm.rig = r.rig; fm.eyes = r.eyes; fm.rigDebug = r.debug;
+      fm.pivot.add(r.group);
+      fm.cloneMaterials(r.group, altTint);
+    }
+    return fm;
+  }
+
+  cloneMaterials(root, altTint) {
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.frustumCulled = false;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const cloned = mats.map((m) => {
+        const c = m.clone();
+        if (altTint && c.color) c.color.multiply(new THREE.Color('#9db8ff'));
+        c.userData.baseColor = c.color ? c.color.clone() : null;
+        this.materials.push(c);
+        return c;
+      });
+      o.material = Array.isArray(o.material) ? cloned : cloned[0];
+    });
+  }
+
+  setupLoaded(obj, def, altTint) {
+    const holder = new THREE.Group();
+    holder.add(obj);
+    holder.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(holder);
+    const size = box.getSize(new THREE.Vector3());
+    const s = (TARGET_HEIGHT * (def.escala || 1)) / (size.y || 1);
+    holder.scale.setScalar(s);
+    holder.position.set(-((box.min.x + box.max.x) / 2) * s, -box.min.y * s, -((box.min.z + box.max.z) / 2) * s);
+    this.cloneMaterials(obj, altTint);
+    this.pivot.add(holder);
+    this.loaded = obj;
+    obj.traverse((o) => { if (!this.eyes && o.isBone && norm(o.name) === 'head') this.eyes = { bone: o, local: new THREE.Vector3(0, 10, 9) }; });
+  }
+
+  async setupClips(obj, embedded, def) {
+    this.mixer = new THREE.AnimationMixer(obj);
+    const boneMap = new Map();
+    let hipsRestY = 0;
+    obj.traverse((o) => {
+      const n = norm(o.name);
+      if (n && !boneMap.has(n)) boneMap.set(n, o.name);
+      if (n === 'hips' && o.isBone && !hipsRestY) hipsRestY = o.position.y;
+    });
+    const isRigged = [...boneMap.keys()].some((k) => k === 'hips' || k === 'spine');
+    const shared = isRigged ? await loadSharedAnimations(true) : {};
+    const all = {};
+    for (const [key, clip] of Object.entries(shared)) all[key] = retarget(clip, boneMap, hipsRestY, sharedHipsRef, { lockY: key === 'saltar' });
+    // Las animaciones del propio modelo tienen prioridad
+    for (const clip of embedded) {
+      const n = norm(clip.name);
+      const key = ALIAS[n] || Object.keys(ANIMACIONES).find((k) => norm(k) === n) || (def.especiales || []).map((s) => s.animacion).find((k) => k && norm(k) === n);
+      if (key) all[key] = clip;
+    }
+    // Animaciones extra por peleador: { especial1: 'assets/peleadores/x/bola.fbx' }
+    for (const [key, url] of Object.entries(def.animaciones || {})) {
+      try { const a = await loadAsset(url); if (a.animations[0]) all[key] = retarget(a.animations[0], boneMap, hipsRestY, sharedHipsRef); } catch { /* sin archivo */ }
+    }
+    for (const [key, clip] of Object.entries(all)) this.actions[key] = this.mixer.clipAction(clip);
+  }
+
+  resolveAction(key) {
+    if (this.actions[key]) return { action: this.actions[key], key };
+    for (const k of FALLBACK[key] || []) if (this.actions[k]) return { action: this.actions[k], key: k, reverse: key === 'caminar_atras' };
+    return null;
+  }
+
+  // anim = { key, t, total, s, a, id }
+  apply(anim, dt) {
+    if (this.paused) return;
+    const r = this.mixer ? this.resolveAction(anim.key) : null;
+    if (r) {
+      const tag = anim.key + ':' + (anim.id || 0);
+      if (this.current !== tag) {
+        const prev = this.currentAction;
+        const act = r.action;
+        act.reset();
+        act.setLoop(LOOPING.has(anim.key) ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+        act.clampWhenFinished = true;
+        let ts = 1;
+        if (anim.total && !LOOPING.has(anim.key)) ts = act.getClip().duration / (anim.total / 60);
+        act.timeScale = (r.reverse ? -1 : 1) * ts;
+        if (r.reverse) act.time = act.getClip().duration;
+        act.enabled = true;
+        act.setEffectiveWeight(1);
+        act.play();
+        if (prev && prev !== act) act.crossFadeFrom(prev, anim.fade ?? 0.08, false);
+        this.currentAction = act;
+        this.current = tag;
+      }
+      this.mixer.update(dt);
+      this.wholeBodyFallback(anim, true);
+    } else if (this.parts) {
+      this.current = null;
+      const target = proceduralPose(anim);
+      if (target) {
+        // suavizado independiente de los fps
+        const rate = 1 - Math.pow(1 - (anim.total ? 0.55 : 0.25), Math.max(dt, 0) * 60);
+        for (const k in target) this.pose[k] = lerp(this.pose[k] ?? target[k], target[k], rate);
+        this.applyPose();
+      }
+    } else {
+      if (this.mixer) this.mixer.update(dt);
+      this.wholeBodyFallback(anim, false);
+    }
+  }
+
+  applyPose() {
+    const P = this.parts, q = this.pose, R = this.rig;
+    if (R) {
+      P.hips.position.y = R.pelvisY * (q.hipsY / 0.98);
+      P.shN.rotation.set(q.shNX, 0, q.shNZ - R.spread); P.shF.rotation.set(q.shFX, 0, q.shFZ + R.spread);
+      P.hipN.rotation.set(q.hipNX, 0, R.abdN); P.hipF.rotation.set(q.hipFX, 0, R.abdF);
+      P.knN.rotation.set(q.knNX, 0, 0); P.knF.rotation.set(q.knFX, 0, 0);
+    } else {
+      P.hips.position.y = q.hipsY;
+      P.shN.rotation.set(q.shNX, 0, q.shNZ); P.shF.rotation.set(q.shFX, 0, q.shFZ);
+      P.hipN.rotation.x = q.hipNX; P.knN.rotation.x = q.knNX;
+      P.hipF.rotation.x = q.hipFX; P.knF.rotation.x = q.knFX;
+    }
+    P.hips.rotation.x = q.hipsX;
+    P.torso.rotation.set(q.torsoX, q.torsoY, q.torsoZ);
+    P.head.rotation.x = q.headX;
+    P.elN.rotation.set(q.elNX, 0, 0);
+    P.elF.rotation.set(q.elFX, 0, 0);
+    P.elF.scale.setScalar(this.detachArm ? 0.001 : 1);   // ¡el antebrazo salió volando!
+    this.pivot.rotation.y = q.spin;
+    this.pivot.scale.y = this.squash;
+  }
+
+  // Modelo con esqueleto pero sin animación para este estado: mover el cuerpo completo
+  wholeBodyFallback(anim, hasClip) {
+    const pv = this.pivot;
+    const e = ext(anim), t = anim.t;
+    let sy = 1, rx = 0, rz = 0, ry = 0, pz = 0, py = 0;
+    if (!hasClip) {
+      switch (anim.key) {
+        case 'agacharse': case 'bloqueo_bajo': sy = 0.68; break;
+        case 'puno': case 'puno_fuerte': case 'especial': case 'lanzar': case 'laser': pz = e * 0.2; rx = e * 0.12; break;
+        case 'patada': case 'patada_aerea': pz = e * 0.15; rx = -e * 0.2; break;
+        case 'patada_giratoria': ry = -Math.min(1, anim.t / anim.total / anim.a) * Math.PI * 2; break;
+        case 'gancho_arriba': py = e * 0.15; rx = -e * 0.15; break;
+        case 'barrida': sy = 0.6; pz = e * 0.25; break;
+        case 'golpeado': rx = -0.3 * (1 - clamp01(t / 14)); break;
+        case 'caer': case 'muerto': rx = -Math.PI / 2 * clamp01(t / 14); py = 0.15 * clamp01(t / 14); break;
+        case 'levantarse': rx = -Math.PI / 2 * (1 - clamp01(t / anim.total * 1.2)); break;
+        case 'mareado': rz = Math.sin(t * 0.07) * 0.2; break;
+        case 'victoria': py = Math.abs(Math.sin(t * 0.09)) * 0.12; break;
+        case 'saltar': if (anim.flip) rx = -(anim.t / anim.total) * Math.PI * 2; break;
+        case 'embestida': rx = 0.6; break;
+        case 'misiles': rx = e * 0.4; break;
+        case 'idle': sy = 1 + Math.sin(t * 0.08) * 0.008; break;
+      }
+    }
+    pv.scale.y = lerp(pv.scale.y, sy * this.squash, 0.4);
+    pv.rotation.x = rx; pv.rotation.z = rz; pv.rotation.y = ry;
+    pv.position.z = pz; pv.position.y = py;
+  }
+
+  setFacing(facing) {
+    this.root.rotation.y = Math.PI / 2;
+    this.root.scale.z = facing;   // espejo, como en los juegos 2D
+  }
+
+  setIced(on) {
+    if (on && !this.ice) {
+      this.ice = new THREE.Mesh(
+        new THREE.BoxGeometry(1.0, 2.1, 0.9),
+        new THREE.MeshStandardMaterial({ color: '#bfefff', transparent: true, opacity: 0.45, roughness: 0.05, metalness: 0.2, emissive: '#3aa8ff', emissiveIntensity: 0.25 }),
+      );
+      this.ice.position.y = 1.0;
+      this.root.add(this.ice);
+    } else if (!on && this.ice) {
+      this.ice.removeFromParent(); this.ice = null;
+    }
+  }
+
+  // Posición de los ojos en el mundo (para el láser)
+  eyeWorld(out = new THREE.Vector3()) {
+    if (!this.eyes) return out.set(0, 1.65, 0.1).applyMatrix4(this.root.matrixWorld);
+    this.eyes.bone.updateWorldMatrix(true, false);
+    return out.copy(this.eyes.local).applyMatrix4(this.eyes.bone.matrixWorld);
+  }
+
+  flash(amount = 1) { this.flashAmt = amount; }
+
+  tickMaterials(dt, tintColor, tintAmount = 0.6) {
+    this.flashAmt = Math.max(0, this.flashAmt - dt * 6);
+    for (const m of this.materials) {
+      if (m.emissive) {
+        if (tintColor) m.emissive.set(tintColor).multiplyScalar(tintAmount);
+        else m.emissive.setScalar(this.flashAmt * 0.8);
+      }
+      if (m.color) {
+        if (!m.userData.baseColor) m.userData.baseColor = m.color.clone();
+        if (this.burn > 0) m.color.copy(m.userData.baseColor).lerp(BURNT, this.burn);
+        else if (m.userData.burnt) m.color.copy(m.userData.baseColor);
+        m.userData.burnt = this.burn > 0;
+      }
+    }
+  }
+
+  dispose() {
+    this.root.removeFromParent();
+    if (this.mixer) this.mixer.stopAllAction();
+  }
+}
