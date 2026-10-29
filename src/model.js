@@ -191,19 +191,40 @@ export function autoRig(obj, height) {
     -(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2));
   for (const g of geos) { g.applyMatrix4(fix); g.computeBoundingSphere(); }
 
-  // 2) Nube de puntos en rebanadas horizontales
-  let total = 0; for (const g of geos) total += g.attributes.position.count;
-  const step = Math.max(1, Math.floor(total / 90000));
+  // 2) Nube de puntos repartida por toda la superficie (no por vértices: así funciona
+  //    igual con modelos pesados o reducidos) y agrupada en rebanadas horizontales
   const NB = 120;
   const bins = Array.from({ length: NB }, () => []);
   const pts = [];
+  const tris = [];
+  let area = 0;
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
   for (const g of geos) {
-    const a = g.attributes.position.array;
-    for (let i = 0; i < a.length / 3; i += step) {
-      const x = a[i * 3], y = a[i * 3 + 1], z = a[i * 3 + 2];
-      const b = Math.min(NB - 1, Math.max(0, Math.floor(y / H * NB)));
-      bins[b].push(x, z); pts.push(x, y, z);
+    const p = g.attributes.position, idx = g.index;
+    const n = idx ? idx.count : p.count;
+    for (let i = 0; i < n; i += 3) {
+      const ia = idx ? idx.getX(i) : i, ib = idx ? idx.getX(i + 1) : i + 1, ic = idx ? idx.getX(i + 2) : i + 2;
+      A.fromBufferAttribute(p, ia); B.fromBufferAttribute(p, ib); C.fromBufferAttribute(p, ic);
+      area += B.sub(A).cross(C.sub(A)).length() / 2;
+      tris.push(p, ia, ib, ic, area);
     }
+  }
+  let seed = 12345;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const SAMPLES = 120000, ntri = tris.length / 5;
+  for (let s = 0; s < SAMPLES; s++) {
+    const target = rnd() * area;
+    let lo = 0, hi = ntri - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (tris[mid * 5 + 4] < target) lo = mid + 1; else hi = mid; }
+    const p = tris[lo * 5];
+    A.fromBufferAttribute(p, tris[lo * 5 + 1]); B.fromBufferAttribute(p, tris[lo * 5 + 2]); C.fromBufferAttribute(p, tris[lo * 5 + 3]);
+    let u = rnd(), v = rnd();
+    if (u + v > 1) { u = 1 - u; v = 1 - v; }
+    const x = A.x + (B.x - A.x) * u + (C.x - A.x) * v;
+    const y = A.y + (B.y - A.y) * u + (C.y - A.y) * v;
+    const z = A.z + (B.z - A.z) * u + (C.z - A.z) * v;
+    const b = Math.min(NB - 1, Math.max(0, Math.floor(y / H * NB)));
+    bins[b].push(x, z); pts.push(x, y, z);
   }
   const binAt = (y) => bins[Math.min(NB - 1, Math.max(0, Math.floor(y / H * NB)))];
   const clamp = THREE.MathUtils.clamp;
@@ -243,27 +264,22 @@ export function autoRig(obj, height) {
     if (x < minX) { minX = x; tipN.set(x, y, z); }
     if (x > maxX) { maxX = x; tipF.set(x, y, z); }
   }
-  // Hombros: recta por los centros del brazo (rebanadas donde el brazo está separado del torso),
-  // prolongada hasta tocar el costado del torso.
+  // Hombros: la articulación queda un poco por debajo de lo más alto del hombro,
+  // justo encima del costado del torso.
   const armAxis = (tip, side) => {
-    const ys = [], xs = [], zs = [];
-    for (let y = tip.y + 0.04 * H; y < 0.86 * H; y += H / NB) {
-      const cl = clusterSlice(binAt(y), 0.008 * H).filter((c) => c.mx * side > torsoHalf * 1.15 && c.n > 2);
-      if (!cl.length) continue;
-      const c = cl.sort((a, b) => b.mx * side - a.mx * side)[0];
-      ys.push(y); xs.push(c.mx); zs.push(c.mz);
+    let top = -Infinity, sz = 0, nz = 0;
+    for (let i = 0; i < pts.length; i += 3) {
+      const ax = pts[i] * side, y = pts[i + 1];
+      if (ax > torsoHalf * 0.9 && ax < torsoHalf * 1.15 && y < 0.9 * H && y > top) top = y;
     }
-    let sy = 0.81 * H, sz = torsoZ;
+    for (let i = 0; i < pts.length; i += 3) {
+      const ax = pts[i] * side, y = pts[i + 1];
+      if (ax > torsoHalf * 0.9 && ax < torsoHalf * 1.15 && y > top - 0.06 * H && y < 0.9 * H) { sz += pts[i + 2]; nz++; }
+    }
+    let sy = top > 0 ? top - 0.035 * H : 0.81 * H;
     if (Math.abs(tip.y - 0.81 * H) < 0.06 * H) sy = tip.y;                // pose en T
-    else if (ys.length >= 4) {
-      const n = ys.length, my = ys.reduce((a, b) => a + b) / n, mx = xs.reduce((a, b) => a + b) / n, mz = zs.reduce((a, b) => a + b) / n;
-      let sxy = 0, syy = 0, szy = 0;
-      for (let i = 0; i < n; i++) { sxy += (ys[i] - my) * (xs[i] - mx); szy += (ys[i] - my) * (zs[i] - mz); syy += (ys[i] - my) ** 2; }
-      const kx = syy ? sxy / syy : 0, kz = syy ? szy / syy : 0;           // dx/dy y dz/dy
-      if (Math.abs(kx) > 0.15) sy = my + (side * torsoHalf * 0.95 - mx) / kx;
-      sz = mz + kz * (sy - my);
-    }
-    sy = clamp(sy - 0.015 * H, 0.76 * H, 0.83 * H);
+    sy = clamp(sy, 0.74 * H, 0.86 * H);
+    sz = nz ? sz / nz : torsoZ;
     return new THREE.Vector3(side * torsoHalf * 0.95, sy, clamp(sz, torsoZ - 0.05 * H, torsoZ + 0.05 * H));
   };
   const SN = armAxis(tipN, -1), SF = armAxis(tipF, 1);
