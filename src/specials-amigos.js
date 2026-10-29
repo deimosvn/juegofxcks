@@ -1,0 +1,318 @@
+import * as THREE from 'three';
+import { sfx } from './audio.js';
+import { SPECIALS, FATALITIES, spawnProjectile, updateProjectile } from './specials.js';
+
+// =====================================================================
+//  ALAN (ingeniería aeroespacial) · GERA (boxeo) · JOSÉ CORTEZ (nalgas)
+//  Mismas reglas que specials.js: estado con datos simples, lo visual
+//  (satélite, turbina, resorte, cohete en la espalda…) se dibuja en main.js.
+// =====================================================================
+
+const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
+const ARENA = 9;
+const clampT = THREE.MathUtils.clamp;
+
+Object.assign(SPECIALS, {
+  // ---------------- Alan ----------------
+  // Cohete que acelera en línea recta y explota al impactar
+  cohete: {
+    total: 40, anim: 'lanzar', s: 12 / 40, a: 20 / 40,
+    canStart: (f, o, s, g) => !g.hasProjectile(f),
+    update(f, o, s, g, t) {
+      if (t === 2) sfx.servo();
+      if (t === 12) {
+        spawnProjectile(g, f, 'cohete', s, { y: f.y + 1.45, vx: 3 * f.facing });
+        g.effects.smoke(f.hand, '#888', 14); sfx.rocket();
+      }
+      return t >= 40;
+    },
+  },
+
+  // Despega con el jetpack y cae en picada sobre el rival
+  jetpack: {
+    total: 0, anim: 'agacharse',
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 6) { d.phase = 'up'; f.vy = 13; f.vx = 1.5 * f.facing; f.anim('jet_sube'); sfx.rocket(); }
+      if (d.phase === 'up') {
+        f.vy += 0.6;                                    // empuje del jetpack
+        if (t >= 24) {
+          d.phase = 'dive';
+          const dx = o.x - f.x;
+          f.facing = dx >= 0 ? 1 : -1;
+          f.vy = -10;
+          const T = (-10 + Math.sqrt(100 + 64 * Math.max(f.y, 0.1))) / 32;   // tiempo hasta el suelo
+          f.vx = clampT(dx / Math.max(T, 0.12), -16, 16);
+          f.anim('jet_cae'); sfx.whoosh();
+        }
+      }
+      if (d.phase === 'dive' && !d.hit && f.reaches(o, 0.9, 0.9)) {
+        d.hit = true;
+        o.receive({ dmg: s.danio ?? 13, height: 'overhead', knockdown: true, push: 6, color: s.color }, f);
+      }
+      return d.phase === 'land' && f.t - d.landT >= 16;
+    },
+    onLand(f, o, s, g) {
+      const d = f.specData;
+      if (d.phase !== 'dive') return;
+      d.phase = 'land'; d.landT = f.t; f.vx = 0; f.anim('agacharse');
+      g.effects.explosion(V(f.x, 0.3, 0.2), s.color || '#4fd8ff', 0.9); sfx.smallBoom();
+      if (!d.hit && o.y < 0.2 && Math.abs(o.x - f.x) < 1.6) o.receive({ dmg: (s.danio ?? 13) * 0.6, height: 'low', knockdown: true, push: 4, color: s.color }, f, V(o.x, 0.3, 0.3));
+    },
+  },
+
+  // Un satélite en órbita dispara un rayo donde estaba el rival (se dibuja en main.js)
+  orbital: {
+    total: 56, anim: 'orbital', s: 0.3, a: 0.9,
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 6) {
+        d.x = o.x; sfx.charge();
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 40), new THREE.MeshBasicMaterial({ color: s.color, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+        ring.rotation.x = -Math.PI / 2; ring.position.set(d.x, 0.04, 0);
+        g.effects.addTemp(ring, 0.5, (dt, k) => { ring.material.opacity = 0.35 + Math.sin(k * 40) * 0.35; ring.scale.setScalar(1.4 - k * 0.6); });
+      }
+      if (t === 34) {
+        g.effects.burst(V(d.x, 0.3), s.color, 90, 7); g.effects.ring(d.x, s.color, 2.6); g.effects.ring(d.x, '#ffffff', 1.6, 0.3);
+        g.effects.addShake(0.35); sfx.laser(); sfx.zap();
+        if (Math.abs(o.x - d.x) < 1.0) o.receive({ dmg: s.danio ?? 14, height: 'mid', knockdown: true, push: 2, color: s.color }, f, V(o.x, 1.2, 0.3));
+      }
+      return t >= 56;
+    },
+  },
+
+  // Turbina de avión: ráfaga de aire caliente que empuja y golpea varias veces
+  turbina: {
+    total: 62, anim: 'turbina',
+    update(f, o, s, g, t) {
+      if (t === 4) sfx.servo();
+      if (t === 12) sfx.rocket();
+      if (t >= 12 && t < 52) {
+        const dx = (o.x - f.x) * f.facing;
+        if (dx > 0 && dx < 3.8 && o.y < 2 && !o.invulnerable()) {
+          if (o.state === 'hitstun' || o.state === 'blockstun') o.vx += f.facing * 0.35;
+          if ((t - 12) % 8 === 0) o.receive({ dmg: (s.danio ?? 12) / 5, height: 'mid', hitstun: 12, push: 3.2, color: s.color }, f, V(o.x - f.facing * 0.3, o.y + 1.2, 0.3));
+        }
+      }
+      return t >= 62;
+    },
+  },
+
+  // ---------------- Gera ----------------
+  // Ráfaga de jabs: 6 golpes seguidos avanzando (fallan si el rival se agacha)
+  rafaga: {
+    total: 44, anim: 'rafaga',
+    update(f, o, s, g, t) {
+      if ([8, 13, 18, 23, 28, 33].includes(t)) {
+        sfx.whoosh();
+        if (f.reaches(o, 1.2, 1.45)) {
+          const last = t === 33;
+          o.receive({ dmg: (s.danio ?? 14) / 6, height: 'high', hitstun: last ? 22 : 14, push: last ? 4.5 : 0.5, color: s.color }, f);
+        }
+      }
+      f.vx = t < 30 ? 1.2 * f.facing : 0;
+      return t >= 44;
+    },
+  },
+
+  // Guante con resorte que sale disparado y regresa (se dibuja en main.js)
+  resorte: {
+    total: 50, anim: 'resorte', s: 8 / 50, a: 36 / 50,
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 8) { d.len = 0; d.phase = 'out'; sfx.boing(); }
+      if (d.phase === 'out') {
+        d.len += 0.4;
+        const tipX = f.hand.x + f.facing * d.len, y = f.y + 1.45;
+        if (!d.hit && !o.invulnerable() && Math.abs(o.x - tipX) < 0.45 && y >= o.y && y <= o.y + o.height + 0.1) {
+          d.hit = true; d.phase = 'back';
+          o.receive({ dmg: s.danio ?? 11, height: 'high', knockdown: true, push: 7, color: s.color }, f, V(tipX, y, 0.3));
+        } else if (d.len >= 4.4) d.phase = 'back';
+      } else if (d.phase === 'back') {
+        d.len -= 0.55;
+        if (d.len <= 0) { d.len = 0; d.phase = 'end'; }
+      }
+      return t >= 50 && d.phase !== 'out' && d.phase !== 'back';
+    },
+  },
+
+  // Guardia de contragolpe: si le pegan en los primeros frames, responde con un gancho
+  contra: {
+    total: 46, anim: 'contra',
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 1) sfx.block();
+      if (d.countered) return f.t - d.ct >= 30;
+      return t >= 46;
+    },
+    // Lo llama Fighter.receive mientras Gera está en esta guardia
+    counter(f, attacker, hit, g) {
+      const d = f.specData;
+      if (d.countered || f.t > 36) return null;
+      d.countered = true; d.ct = f.t;
+      f.anim('gancho_arriba', 30, 0.15, 0.6);
+      g.effects.metalSpark(f.chest, '#ffffff'); sfx.clank();
+      g.event('special', { side: f.side, nombre: '¡CONTRAGOLPE!', color: f.spec.color });
+      if (attacker !== f && Math.abs(attacker.x - f.x) < 2.6) {
+        f.facing = attacker.x >= f.x ? 1 : -1;
+        attacker.receive({ dmg: f.spec.danio ?? 16, height: 'mid', launch: 13, push: 3, color: f.spec.color, unblockable: true, isCounter: true }, f);
+      }
+      g.hitstop = 8;
+      return 'countered';
+    },
+  },
+
+  // ---------------- José Cortez ----------------
+  // Se lanza de espaldas con las nalgas por delante
+  culazo: {
+    total: 42, anim: 'culazo',
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 6) sfx.whoosh();
+      if (t >= 6 && t < 24 && !d.hit) {
+        f.vx = 12 * f.facing * f.speed;
+        if (t % 2 === 0) g.effects.emitGlow({ pos: V(f.x + f.facing * 0.3, f.y + 1.0), count: 4, speed: 1, jitter: 0.6, color: '#ffffff', colorEnd: s.color, life: 0.3, size: 0.3 });
+        if (f.reaches(o, 0.85, 1.0)) {
+          d.hit = true; f.vx = -2 * f.facing;
+          o.receive({ dmg: s.danio ?? 11, height: 'mid', knockdown: true, push: 7, color: s.color }, f);
+          sfx.slap();
+        }
+      } else f.vx *= 0.8;
+      return t >= 42;
+    },
+  },
+
+  // Salta y cae sentado: aplasta al que está debajo y hace una onda alrededor
+  senton: {
+    total: 0, anim: 'agacharse',
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 5) { f.vy = 13; f.vx = clampT((o.x - f.x) / 0.8, -7, 7); f.anim('senton'); sfx.jump(); }
+      if (t > 5 && !d.landed && f.vy < 0) f.vy -= 1.2;
+      return d.landed && f.t - d.landT >= 24;
+    },
+    onLand(f, o, s, g) {
+      const d = f.specData;
+      if (d.landed || f.t < 6) return;
+      d.landed = true; d.landT = f.t; f.vx = 0; f.anim('senton_suelo');
+      g.effects.ring(f.x, s.color, 3.2); g.effects.dust(V(f.x, 0.1), 50); g.effects.addShake(0.45); sfx.boom(); sfx.slap();
+      const dx = Math.abs(o.x - f.x);
+      if (o.y < 0.3 && dx < 1.1) o.receive({ dmg: s.danio ?? 13, height: 'mid', unblockable: true, knockdown: true, push: 3, color: s.color }, f, V(o.x, 0.6, 0.3));
+      else if (o.y < 0.3 && dx < 3) o.receive({ dmg: (s.danio ?? 13) * 0.6, height: 'low', knockdown: true, push: 4, color: s.color }, f, V(o.x, 0.3, 0.3));
+    },
+  },
+
+  // Twerk sísmico: cada sacudida manda una onda que golpea de cerca (7 golpes)
+  twerk: {
+    total: 66, anim: 'twerk',
+    update(f, o, s, g, t) {
+      if (t >= 10 && t <= 58 && (t - 10) % 8 === 0) {
+        g.effects.ring(f.x + f.facing * 0.5, s.color, 1.6, 0.3); sfx.thump();
+        const last = t >= 58;
+        if (Math.abs(o.x - f.x) < 1.9 && o.y < 1.5) {
+          o.receive({ dmg: (s.danio ?? 14) / 7, height: 'mid', hitstun: 14, push: last ? 7 : 1.8, knockdown: last, color: s.color }, f, V(o.x, o.y + 1.0, 0.3));
+        }
+      }
+      return t >= 66;
+    },
+  },
+
+  // Nube verde que avanza despacio y lastima mientras el rival esté dentro (no se puede bloquear)
+  gas: {
+    total: 50, anim: 'gas', s: 16 / 50, a: 40 / 50,
+    canStart: (f, o, s, g) => !g.projectiles.some((p) => p.alive && p.owner === f.side && p.kind === 'gas'),
+    update(f, o, s, g, t) {
+      if (t === 16) {
+        spawnProjectile(g, f, 'gas', s, { x: f.x + f.facing * 0.6, y: f.y + 0.95, vx: 2.4 * f.facing, life: 150, dmg: (s.danio ?? 12) / 6 });
+        sfx.fart();
+      }
+      return t >= 50;
+    },
+  },
+});
+
+// Especiales en los que José saca las nalgas (la vista las infla)
+export const BUTT_SPECIALS = new Set(['culazo', 'senton', 'twerk', 'gas']);
+
+// Proyectiles nuevos: cohete (acelera y explota) y gas (nube que se queda)
+export function updateProjectileExtra(p, g) {
+  const owner = g.fighters[p.owner], opp = g.fighters[1 - p.owner];
+  if (p.kind === 'cohete') {
+    p.t++;
+    p.vx = clampT(p.vx + 0.55 * Math.sign(p.vx), -17, 17);
+    p.x += p.vx / 60;
+    if (Math.abs(p.x) > ARENA + 2) { p.alive = false; return; }
+    if (!opp.invulnerable() && Math.abs(opp.x - p.x) < 0.5 && p.y > opp.y - 0.1 && p.y < opp.y + opp.height + 0.1) {
+      opp.receive({ dmg: p.dmg, height: 'mid', knockdown: true, push: 6, color: p.color }, owner, V(p.x, p.y, 0.3));
+      p.alive = false;
+      g.effects.explosion(V(p.x, p.y, 0.2), '#ff7a1a', 1.1); sfx.smallBoom();
+    }
+    return;
+  }
+  if (p.kind === 'gas') {
+    p.t++; p.life--;
+    p.x += p.vx / 60; p.vx *= 0.985;
+    if (p.life <= 0 || Math.abs(p.x) > ARENA + 2) { p.alive = false; return; }
+    if (p.t % 15 === 0 && !opp.invulnerable() && Math.abs(opp.x - p.x) < 1.15 && opp.y < 2) {
+      opp.receive({ dmg: p.dmg, height: 'mid', unblockable: true, hitstun: 18, push: 0.6, color: p.color }, owner, V(opp.x, opp.y + 1.3, 0.3));
+    }
+    return;
+  }
+  updateProjectile(p, g);
+}
+
+Object.assign(FATALITIES, {
+  // Alan: le amarra un cohete al rival y lo manda al espacio (fuegos artificiales)
+  despegue(t, w, l, fat, g, data) {
+    if (t === 1) { w.anim('orbital', 60, 0.3, 0.95); l.anim('mareado'); sfx.servo(); }
+    if (t === 20) { l.rocket = true; sfx.clank(); }
+    if (t === 45) sfx.rocket();
+    if (t >= 45 && !l.hidden) {
+      data.v = (data.v || 0) + (t < 60 ? 0.002 : 0.012);
+      l.y += data.v;
+      if (t % 2 === 0) g.effects.smoke(V(l.x, l.y + 0.2), '#aaa', 4);
+      g.effects.emitGlow({ pos: V(l.x, l.y + 0.4, -0.15), count: 3, speed: 3, dir: [0, -1, 0], spread: 0.3, color: '#fff3c0', colorEnd: '#ff5a00', life: 0.3, size: 0.3 });
+    }
+    if (t === 130) {
+      l.hidden = true;
+      const p = V(l.x, l.y, -1);
+      for (const c of ['#ff3a3a', '#ffd23a', '#4fd8ff', '#9be15d']) g.effects.burst(p, c, 70, 9, 0.25);
+      g.effects.flash(p, '#ffffff', 12); sfx.boom();
+    }
+    if (t === 150) w.anim('victoria');
+    return t >= 220;
+  },
+
+  // Gera: ráfaga de golpes y un gancho que lo manda a volar hasta las estrellas
+  nocaut(t, w, l, fat, g, data) {
+    if (t === 1) { w.x = l.x - w.facing * 1.0; w.anim('rafaga', 60); }
+    if (t > 4 && t < 60 && t % 5 === 0) {
+      l.anim('golpeado');
+      g.effects.hitSpark(l.chest, fat.color || '#ffd23a', t % 10 === 0); sfx.hit(t % 10 === 0); g.effects.addShake(0.08);
+    }
+    if (t === 64) w.anim('gancho_arriba', 30, 0.15, 0.6);
+    if (t === 70) { data.vy = 0.45; l.anim('caer'); g.effects.hitSpark(l.chest, '#ffffff', true); g.effects.addShake(0.5); sfx.boom(); }
+    if (t > 70 && !l.hidden) { l.y += data.vy; data.vy += 0.008; l.x += w.facing * 0.03; }
+    if (t === 150) { l.hidden = true; g.effects.burst(V(l.x, l.y, -1), '#ffffff', 50, 4, 0.2); sfx.ding(); }
+    if (t === 160) w.anim('victoria');
+    return t >= 210;
+  },
+
+  // José: brinca altísimo, las nalgas le crecen y aplasta al rival
+  nalgon(t, w, l, fat, g, data) {
+    if (t === 1) { data.x0 = w.x; w.anim('saltar', 40); sfx.jump(); }
+    if (t <= 40) {
+      const k = t / 40;
+      w.x = data.x0 + (l.x - data.x0) * k;
+      w.y = Math.sin(Math.PI * k) * 6;
+    }
+    if (t === 18) w.anim('senton');
+    if (t === 40) {
+      w.y = 0; l.squash = 0.1;
+      g.effects.gore(V(l.x, 0.2), 1.2); g.effects.dust(V(l.x, 0.1), 70); g.effects.ring(l.x, fat.color || '#ff7ab8', 3.5);
+      g.effects.addShake(0.7); sfx.boom(); sfx.slap(); w.anim('senton_suelo');
+    }
+    if (t === 100) w.anim('victoria');
+    return t >= 170;
+  },
+});

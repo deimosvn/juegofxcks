@@ -31,7 +31,7 @@ export function spawnProjectile(g, f, kind, spec, extra = {}) {
   return p;
 }
 
-export const SOLID_PROJECTILES = new Set(['bola', 'hielo', 'puno']);
+export const SOLID_PROJECTILES = new Set(['bola', 'hielo', 'puno', 'cohete']);
 
 export function updateProjectile(p, g) {
   const owner = g.fighters[p.owner], opp = g.fighters[1 - p.owner];
@@ -57,6 +57,7 @@ export function impactProjectile(p, g) {
   p.alive = false;
   const pos = V(p.x, p.y, 0.2);
   if (p.kind === 'puno') { g.effects.explosion(pos, '#ffb347', 0.6); sfx.clank(); return; }
+  if (p.kind === 'cohete') { g.effects.explosion(pos, '#ff7a1a', 1.0); sfx.smallBoom(); return; }
   g.effects.burst(pos, p.color, 50, 6);
   if (p.kind === 'hielo') g.effects.shards(V(p.x, p.y), p.color, 6);
 }

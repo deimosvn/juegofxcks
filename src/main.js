@@ -4,9 +4,10 @@ import { FighterModel, loadAsset } from './model.js';
 import { Fighter, ARENA_HALF } from './fighter.js';
 import { PlayerInput, consumeKey, clearKeyEdges, decodeMask } from './input.js';
 import { Effects } from './effects.js';
-import { buildArena } from './arena.js';
+import { createStage, STAGES } from './stages.js';
 import { CPU } from './ai.js';
-import { FATALITIES, updateProjectile, impactProjectile, SOLID_PROJECTILES } from './specials.js';
+import { FATALITIES, impactProjectile, SOLID_PROJECTILES } from './specials.js';
+import { updateProjectileExtra as updateProjectile, BUTT_SPECIALS } from './specials-amigos.js';
 import { sfx, announce, unlockAudio, setVoice, audioState } from './audio.js';
 import { loadNetConfig, createBackend, Link, RollbackSession, fnv } from './net.js';
 
@@ -42,7 +43,8 @@ class Game {
     this.camLook = new THREE.Vector3(0, 1.2, 0);
     this.effects = new Effects(this.scene, this.camera);
     this.effects.blood = JUEGO.sangre;
-    this.arena = buildArena(this.scene, this.effects);
+    this.stage = createStage('six', this.scene, this.effects);
+    this.stageId = 'six';
     setVoice(JUEGO.voz);
     document.title = JUEGO.titulo;
 
@@ -277,7 +279,7 @@ class Game {
   // ================================================================== PANTALLAS
   show(screen) {
     this.screen = screen;
-    for (const id of ['menu', 'select', 'controls', 'lobby']) $(id).classList.toggle('hidden', id !== screen);
+    for (const id of ['menu', 'select', 'controls', 'lobby', 'stages']) $(id).classList.toggle('hidden', id !== screen);
     $('hud').classList.toggle('hidden', screen !== 'fight');
     clearKeyEdges();
   }
@@ -386,7 +388,10 @@ class Game {
       this.sel.locked[1] = true;
     }
     this.renderSelect();
-    if (this.sel.locked[0] && this.sel.locked[1]) setTimeout(() => this.startMatch(PELEADORES[this.sel.cur[0]], PELEADORES[this.sel.cur[1]]), 700);
+    if (this.sel.locked[0] && this.sel.locked[1]) {
+      const d1 = PELEADORES[this.sel.cur[0]], d2 = PELEADORES[this.sel.cur[1]];
+      setTimeout(() => this.openStageSelect(true, (id) => this.startMatch(d1, d2, null, id)), 600);
+    }
   }
 
   renderSelect() {
@@ -449,8 +454,17 @@ class Game {
     return models;
   }
 
-  async startMatch(def1, def2, preloaded = null) {
+  setStage(id) {
+    if (id === 'aleatorio') id = STAGES[Math.random() * STAGES.length | 0].id;
+    if (this.stage && this.stageId === id) return;
+    this.stage?.dispose();
+    this.stage = createStage(id, this.scene, this.effects);
+    this.stageId = id;
+  }
+
+  async startMatch(def1, def2, preloaded = null, stageId = null) {
     const models = preloaded || await this.loadModels(def1, def2);
+    if (stageId) this.setStage(stageId);
     this.models = models;
     this.scene.add(models[0].root, models[1].root);
     this.fighters = [new Fighter(def1, 0, this), new Fighter(def2, 1, this)];
@@ -520,7 +534,7 @@ class Game {
       $('lobby-main').classList.remove('hidden');
     } catch (err) {
       console.error(err);
-      $('netstatus').textContent = 'No se pudo conectar: ' + (err.code || err.message);
+      $('netstatus').textContent = 'No se pudo conectar: ' + (err.message || err.code);
     }
     $('connectBtn').disabled = false;
   }
@@ -637,6 +651,13 @@ class Game {
         this.checkOnlinePicks();
         break;
       }
+      case 'stageCursor': {
+        const i = this.stageList().findIndex((s) => s.id === m.id);
+        o.stageCursor = m.id;
+        if (i >= 0 && this.screen === 'stages' && this.stageSel && !this.stageSel.canPick) { this.stageSel.cur = i; this.renderStages(); }
+        break;
+      }
+      case 'stage': if (!o.isHost) this.prepareOnline(m.id); break;
       case 'ready': o.ready[peer] = true; this.maybeGo(); break;
       case 'go': if (!o.isHost) this.goOnline(); break;
       case 'rematch': o.rematch[peer] = true; this.toast(`${o.peerName} quiere la revancha`); this.maybeRematch(); break;
@@ -644,14 +665,25 @@ class Game {
     }
   }
 
-  async checkOnlinePicks() {
+  checkOnlinePicks() {
     const o = this.online;
     o.picks[o.side] = this.sel.locked[o.side] ? PELEADORES[this.sel.cur[o.side]].id : null;
     if (!o.picks[0] || !o.picks[1] || o.loading) return;
     o.loading = true;
-    const d1 = PELEADORES.find((d) => d.id === o.picks[0]), d2 = PELEADORES.find((d) => d.id === o.picks[1]);
-    o.defs = [d1, d2];
-    o.models = await this.loadModels(d1, d2);
+    o.defs = [PELEADORES.find((d) => d.id === o.picks[0]), PELEADORES.find((d) => d.id === o.picks[1])];
+    // el anfitrión elige el escenario; el invitado ve su selección en vivo
+    setTimeout(() => {
+      if (!this.online) return;
+      if (o.isHost) this.openStageSelect(true, (id) => { o.link.sendCtrl({ t: 'stage', id }); this.prepareOnline(id); });
+      else this.openStageSelect(false);
+    }, 600);
+  }
+
+  async prepareOnline(stageId) {
+    const o = this.online;
+    if (!o || o.stageId) return;
+    o.stageId = stageId;
+    o.models = await this.loadModels(o.defs[0], o.defs[1]);
     if (!this.online) return;
     o.ready[o.side] = true;
     o.link.sendCtrl({ t: 'ready' });
@@ -672,7 +704,7 @@ class Game {
     if (!o || this.session) return;
     $('loading').classList.add('hidden'); $('loading-text').textContent = 'Cargando peleadores…';
     o.ready = [false, false]; o.rematch = [false, false];
-    await this.startMatch(o.defs[0], o.defs[1], o.models);
+    await this.startMatch(o.defs[0], o.defs[1], o.models, o.stageId);
     this.session = new RollbackSession(this, o.link, o.side);
     window.session = this.session;
     this.acc = 0;
@@ -682,9 +714,103 @@ class Game {
   maybeRematch() {
     const o = this.online;
     if (!o || !o.rematch[0] || !o.rematch[1]) return;
-    o.rematch = [false, false]; o.picks = [null, null]; o.loading = false;
+    o.rematch = [false, false]; o.picks = [null, null]; o.loading = false; o.stageId = null;
     this.quitMatch();
     this.openSelect();
+  }
+
+  // ------------------------------------------------------------------ escenarios
+  stageList() { return [...STAGES, { id: 'aleatorio', nombre: 'ALEATORIO', lugar: 'sorpresa', color: '#333' }]; }
+
+  // canPick=false: el invitado en línea solo ve lo que elige el anfitrión
+  openStageSelect(canPick, onDone) {
+    const list = this.stageList();
+    const start = (!canPick && this.online?.stageCursor) || this.stageId;
+    this.stageSel = { cur: Math.max(0, list.findIndex((s) => s.id === start)), canPick, onDone, locked: false };
+    $('stage-hint').textContent = canPick
+      ? 'A D / ← → para elegir · F / K / ENTER para aceptar · ESC volver'
+      : `${this.online?.peerName || 'Tu rival'} está eligiendo el escenario…`;
+    this.show('stages');
+    this.renderStages();
+    this.stageThumbs().then(() => this.renderStages());
+  }
+
+  renderStages() {
+    const grid = $('stage-grid');
+    const list = this.stageList();
+    if (grid.children.length !== list.length) {
+      grid.innerHTML = '';
+      list.forEach((s, i) => {
+        const c = document.createElement('div');
+        c.className = 'stage-card';
+        c.innerHTML = `<div class="stage-label"><b>${esc(s.nombre)}</b><small>${esc(s.lugar)}</small></div>`;
+        c.addEventListener('click', () => { if (this.stageSel?.canPick) { this.stageSel.cur = i; this.lockStage(); } });
+        c.addEventListener('mouseenter', () => { if (this.stageSel?.canPick && !this.stageSel.locked) { this.stageSel.cur = i; this.stageMoved(); } });
+        grid.appendChild(c);
+      });
+    }
+    [...grid.children].forEach((c, i) => {
+      const s = list[i];
+      const img = this.thumbs?.[s.id];
+      c.style.backgroundImage = img ? `url(${img})` : `linear-gradient(135deg, ${s.color}, #111)`;
+      if (s.id === 'aleatorio') c.style.backgroundImage = 'linear-gradient(135deg, #c8171d, #1b2648 50%, #6b4a2e)';
+      c.classList.toggle('sel', this.stageSel?.cur === i);
+      c.classList.toggle('locked', !!this.stageSel?.locked && this.stageSel.cur === i);
+    });
+  }
+
+  stageMoved() {
+    sfx.select(); this.renderStages();
+    if (this.mode === 'online' && this.online?.isHost) this.online.link.sendCtrl({ t: 'stageCursor', id: this.stageList()[this.stageSel.cur].id });
+  }
+
+  lockStage() {
+    const st = this.stageSel;
+    if (!st || st.locked || !st.canPick) return;
+    st.locked = true; sfx.confirm();
+    let id = this.stageList()[st.cur].id;
+    if (id === 'aleatorio') id = STAGES[Math.random() * STAGES.length | 0].id;
+    announce(STAGES.find((s) => s.id === id).nombre.toLowerCase());
+    this.renderStages();
+    setTimeout(() => st.onDone(id), 500);
+  }
+
+  stageInput() {
+    const st = this.stageSel;
+    if (!st) return;
+    if (st.canPick && !st.locked) {
+      const n = this.stageList().length;
+      if (consumeKey('KeyA', 'ArrowLeft')) { st.cur = (st.cur - 1 + n) % n; this.stageMoved(); }
+      if (consumeKey('KeyD', 'ArrowRight')) { st.cur = (st.cur + 1) % n; this.stageMoved(); }
+      if (consumeKey('KeyF', 'KeyK', 'Enter', 'Space')) this.lockStage();
+    }
+    if (consumeKey('Escape')) {
+      if (this.mode === 'online') this.leaveRoom(true);
+      else { this.sel.locked = [false, false]; this.openSelect(); }
+    }
+  }
+
+  // Miniaturas de cada escenario (se dibujan una vez con un renderizador aparte)
+  async stageThumbs() {
+    if (this.thumbs || this.thumbsBusy) return this.thumbsBusy;
+    this.thumbsBusy = (async () => {
+      const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      r.setSize(384, 216); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.shadowMap.enabled = true;
+      const cam = new THREE.PerspectiveCamera(42, 384 / 216, 0.1, 200);
+      cam.position.set(0, 2.3, 9.5); cam.lookAt(0, 1.7, -4);
+      const thumbs = {};
+      for (const s of STAGES) {
+        const sc = new THREE.Scene();
+        const st = createStage(s.id, sc, { glow: { emit() {} } });
+        r.render(sc, cam);
+        thumbs[s.id] = r.domElement.toDataURL('image/jpeg', 0.85);
+        st.dispose();
+        await new Promise((res) => setTimeout(res, 0));
+      }
+      r.dispose(); r.forceContextLoss?.();
+      this.thumbs = thumbs;
+    })();
+    return this.thumbsBusy;
   }
 
   leaveRoom(notify) {
@@ -728,7 +854,7 @@ class Game {
       while (this.acc >= STEP && n < 5) { this.simStep(); this.acc -= STEP; n++; }
       if (n >= 5) this.acc = 0;
     }
-    this.arena.update(now / 1000);
+    this.stage.update(now / 1000);
     this.syncView(dt);
     this.effects.update(dt);
     this.updateCamera(dt);
@@ -741,6 +867,7 @@ class Game {
       if (consumeKey('ArrowDown', 'KeyS')) { this.setMenuIdx(this.menuIdx + 1); sfx.select(); }
       if (consumeKey('Enter', 'KeyF', 'Space', 'KeyK')) this.menuAccept(this.menuIdx);
     } else if (this.screen === 'select') this.selectInput();
+    else if (this.screen === 'stages') this.stageInput();
     else if (this.screen === 'lobby') {
       if (consumeKey('Escape')) { if (!$('modal').classList.contains('hidden')) this.modalAnswer(false); else this.leaveLobby(); }
       if (this.incoming && consumeKey('Enter')) this.modalAnswer(true);
@@ -805,6 +932,97 @@ class Game {
     this.scanner = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.42, 40), new THREE.MeshBasicMaterial({ color: '#4fd8ff', transparent: true, opacity: 0.8, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
     this.scanner.rotation.x = -Math.PI / 2; this.scanner.visible = false;
     this.scene.add(this.scanner);
+
+    // Alan: satélite con rayo orbital y turbina · Gera: resorte con guante · cohete de la fatalidad de Alan
+    const glowMat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
+    const metal = (c) => new THREE.MeshStandardMaterial({ color: c, metalness: 0.85, roughness: 0.3 });
+    this.gadgets = [0, 1].map(() => {
+      const sat = new THREE.Group();
+      sat.add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), metal('#d9b04a')));
+      for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 0.5), new THREE.MeshStandardMaterial({ color: '#1d3f8f', metalness: 0.5, roughness: 0.3, emissive: '#0a1a44' })); p.position.x = s * 1.0; sat.add(p); }
+      const dish = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.25, 16, 1, true), metal('#e0e0e0')); dish.position.y = -0.42; dish.rotation.x = Math.PI; sat.add(dish);
+      const aim = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1, 6, 1, true), glowMat('#ff2a3a', 0.8));
+      const ray = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1, 20, 1, true), glowMat('#7fe3ff', 0.5));
+      ray.add(new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 1, 12, 1, true), glowMat('#ffffff', 0.85)));
+      const turb = new THREE.Group();
+      const nac = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.7, 20, 1, true), new THREE.MeshStandardMaterial({ color: '#c9d1d9', metalness: 0.9, roughness: 0.25, side: THREE.DoubleSide }));
+      nac.rotation.z = Math.PI / 2; turb.add(nac);
+      const fan = new THREE.Group(); fan.position.x = 0.2; turb.add(fan);
+      for (let i = 0; i < 10; i++) {
+        const piv = new THREE.Group(); piv.rotation.x = i / 10 * Math.PI * 2; fan.add(piv);
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.28, 0.08), metal('#4f565d')); b.position.y = 0.15; b.rotation.y = 0.5; piv.add(b);
+      }
+      const hub = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.16, 12), metal('#999')); hub.rotation.z = -Math.PI / 2; hub.position.x = 0.3; turb.add(hub);
+      const exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.9, 16, 1, true), glowMat('#ffb347', 0.55)); exhaust.rotation.z = -Math.PI / 2; exhaust.position.x = -0.78; turb.add(exhaust);
+      const springGeo = new THREE.BufferGeometry(); springGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(121 * 3), 3));
+      const spring = new THREE.Line(springGeo, new THREE.LineBasicMaterial({ color: '#dfe3e6' }));
+      const sglove = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), new THREE.MeshStandardMaterial({ color: '#d1121b', roughness: 0.35 })); sglove.scale.set(1.25, 1, 1);
+      const rocket = new THREE.Group();
+      rocket.add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.3, 16), new THREE.MeshStandardMaterial({ color: '#f2f2f2', roughness: 0.3 })));
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 16), new THREE.MeshStandardMaterial({ color: '#d1121b' })); nose.position.y = 0.85; rocket.add(nose);
+      for (let i = 0; i < 3; i++) { const pv = new THREE.Group(); pv.rotation.y = i * Math.PI * 2 / 3; const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.32, 0.22), new THREE.MeshStandardMaterial({ color: '#d1121b' })); fin.position.set(0, -0.5, 0.2); pv.add(fin); rocket.add(pv); }
+      const rflame = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.7, 12), glowMat('#ffb347', 0.85)); rflame.rotation.x = Math.PI; rflame.position.y = -1.0; rocket.add(rflame);
+      for (const o of [sat, aim, ray, turb, spring, sglove, rocket]) { o.visible = false; o.frustumCulled = false; this.scene.add(o); }
+      return { sat, aim, ray, turb, fan, spring, sglove, rocket, rflame };
+    });
+  }
+
+  syncGadgets(dt) {
+    const now = performance.now() / 1000;
+    const n = Math.max(1, Math.round(dt * 60));
+    this.fighters.forEach((f, i) => {
+      const G = this.gadgets[i], d = f.specData, tipo = f.state === 'special' ? f.spec?.tipo : null;
+      // satélite y rayo orbital
+      const orb = tipo === 'orbital' && d && d.x != null && f.t >= 6 && f.t < 54;
+      G.sat.visible = orb; G.aim.visible = false; G.ray.visible = false;
+      if (orb) {
+        const sx = d.x + Math.sin(now * 0.8) * 0.3, sy = 8.2;
+        G.sat.position.set(sx, sy, -1.5); G.sat.rotation.y = now * 0.6;
+        const top = V(sx, sy - 0.55, -1.5), bottom = V(d.x, 0, 0);
+        if (f.t < 32) this.placeBeam(G.aim, top, bottom);
+        else if (f.t < 46) {
+          this.placeBeam(G.ray, top, bottom);
+          const k = 1 - (f.t - 32) / 14;
+          G.ray.scale.x = G.ray.scale.z = 0.3 + k;
+          G.ray.material.color.set(f.spec.color || '#7fe3ff');
+          this.effects.glow.emit({ pos: V(d.x, 0.2, 0.1), count: 4 * n, speed: 5, dir: [0, 1, 0], spread: 1.2, color: '#ffffff', colorEnd: f.spec.color || '#7fe3ff', life: 0.35, size: 0.25 });
+        }
+      }
+      // turbina
+      const tb = tipo === 'turbina' && f.t >= 6 && f.t < 58;
+      G.turb.visible = tb;
+      if (tb) {
+        G.turb.position.set(f.x + f.facing * 0.9, f.y + 1.3, 0.3);
+        G.turb.rotation.y = f.facing > 0 ? Math.PI : 0;
+        G.fan.rotation.x += dt * 45;
+        if (f.t >= 12 && f.t < 52) {
+          const p = V(f.x + f.facing * 1.4, f.y + 1.3, 0.3);
+          this.effects.glow.emit({ pos: p, count: 3 * n, speed: 9, dir: [f.facing, 0, 0], spread: 0.25, color: '#fff3c0', colorEnd: f.spec.color || '#ffd27a', life: 0.35, size: 0.22, drag: 1 });
+          this.effects.solid.emit({ pos: p, count: n, speed: 6, dir: [f.facing, 0.05, 0], spread: 0.3, color: '#d8d8d8', colorEnd: '#777', life: 0.6, size: 0.35, grow: 2, drag: 2 });
+        }
+      }
+      // resorte con guante (Gera)
+      const sp = tipo === 'resorte' && d && (d.phase === 'out' || d.phase === 'back');
+      G.spring.visible = sp; G.sglove.visible = sp;
+      if (sp) {
+        const hand = f.hand, len = Math.max(d.len, 0.01);
+        const arr = G.spring.geometry.attributes.position.array;
+        for (let k = 0; k <= 120; k++) {
+          const t = k / 120, ang = t * Math.PI * 2 * 14;
+          arr[k * 3] = hand.x + f.facing * len * t; arr[k * 3 + 1] = hand.y + Math.cos(ang) * 0.09; arr[k * 3 + 2] = 0.25 + Math.sin(ang) * 0.09;
+        }
+        G.spring.geometry.attributes.position.needsUpdate = true;
+        G.sglove.position.set(hand.x + f.facing * (len + 0.12), hand.y, 0.25);
+        G.sglove.material.color.set(f.def.colorGuantes || '#d1121b');
+      }
+      // cohete amarrado (fatalidad de Alan)
+      G.rocket.visible = f.rocket && !f.hidden;
+      if (G.rocket.visible) {
+        G.rocket.position.set(f.x, f.y + 1.1, -0.35);
+        G.rflame.visible = this.phase === 'fatality' && this.phaseT >= 45;
+        G.rflame.scale.y = 0.8 + Math.random() * 0.6;
+      }
+    });
   }
 
   clearViews() {
@@ -825,6 +1043,7 @@ class Game {
     this.syncProjectiles(dt);
     this.syncChains();
     this.syncLasers(dt);
+    this.syncGadgets(dt);
     this.updateAnnouncer();
     this.updateHUD();
     const exp = this.phase === 'fatality' ? 0.55 : 1;
@@ -859,6 +1078,13 @@ class Game {
     m.burn = f.burn; m.squash = f.squash;
     m.paused = f.iced; m.setIced(f.iced);
     m.detachArm = this.projectiles.some((p) => p.alive && p.owner === f.side && p.kind === 'puno');
+    // nalgas infladas (José) y fuego del jetpack (Alan)
+    let butt = 1;
+    if (f.state === 'special' && BUTT_SPECIALS.has(f.spec?.tipo)) butt = f.spec.tipo === 'twerk' ? 1.75 + Math.sin(f.t * 1.25) * 0.25 : 1.7;
+    if (this.phase === 'fatality' && this.fatal?.tipo === 'nalgon' && this.winner === f && this.phaseT < 100) butt = 1 + 2.3 * Math.min(1, Math.max(0, (this.phaseT - 6) / 30));
+    m.buttScale += (butt - m.buttScale) * Math.min(1, (animDt || 0) * 10);
+    m.jetOn = f.state === 'special' && f.spec?.tipo === 'jetpack' && ['up', 'dive'].includes(f.specData?.phase);
+    if (m.jetOn && animDt) this.effects.glow.emit({ pos: V(f.x - f.facing * 0.3, f.y + 0.75, -0.1), count: 3, speed: 4, dir: [0, -1, 0], spread: 0.25, color: '#fff3c0', colorEnd: '#ff6a00', life: 0.3, size: 0.28 });
     m.apply(f.animState(), animDt);
     let tint = null, amount = 0.6;
     if (f.iced) tint = '#3aa8ff';
@@ -885,12 +1111,21 @@ class Game {
       add(new THREE.ConeGeometry(0.045, 0.12, 10), new THREE.MeshStandardMaterial({ color: '#d22', roughness: 0.5 }), (m) => { m.rotation.z = -Math.PI / 2; m.position.x = 0.22; });
       for (const s of [1, -1]) add(new THREE.BoxGeometry(0.08, 0.1, 0.01), new THREE.MeshStandardMaterial({ color: '#555' }), (m) => { m.position.set(-0.13, 0.05 * s, 0); });
       add(new THREE.ConeGeometry(0.04, 0.22, 8), glow('#ffcf5a', 0.9), (m) => { m.rotation.z = Math.PI / 2; m.position.x = -0.27; });
+    } else if (p.kind === 'cohete') {
+      // cohete blanco con franja negra y aletas rojas
+      add(new THREE.CylinderGeometry(0.075, 0.075, 0.62, 14), new THREE.MeshStandardMaterial({ color: '#f4f4f4', roughness: 0.35 }), (m) => { m.rotation.z = -Math.PI / 2; });
+      add(new THREE.CylinderGeometry(0.078, 0.078, 0.07, 14), new THREE.MeshStandardMaterial({ color: '#111' }), (m) => { m.rotation.z = -Math.PI / 2; m.position.x = 0.12; });
+      add(new THREE.ConeGeometry(0.075, 0.24, 14), new THREE.MeshStandardMaterial({ color: '#d1121b' }), (m) => { m.rotation.z = -Math.PI / 2; m.position.x = 0.43; });
+      for (const s of [1, -1]) add(new THREE.BoxGeometry(0.16, 0.14, 0.012), new THREE.MeshStandardMaterial({ color: '#d1121b' }), (m) => { m.position.set(-0.25, 0.09 * s, 0); });
+      add(new THREE.ConeGeometry(0.065, 0.45, 10), glow('#ffcf5a', 0.9), (m) => { m.rotation.z = Math.PI / 2; m.position.x = -0.54; });
+    } else if (p.kind === 'gas') {
+      // la nube de gas son partículas (ver syncProjectiles)
     } else {
       const icy = p.kind === 'hielo';
       add(new THREE.SphereGeometry(0.13, 16, 12), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
       spin = add(icy ? new THREE.OctahedronGeometry(0.27) : new THREE.SphereGeometry(0.24, 16, 12), glow(p.color));
     }
-    const light = new THREE.PointLight(p.kind === 'puno' ? '#ffb347' : p.color, p.kind === 'misil' ? 8 : 22, 5);
+    const light = new THREE.PointLight(p.kind === 'puno' || p.kind === 'cohete' ? '#ffb347' : p.color, p.kind === 'misil' ? 8 : p.kind === 'gas' ? 3 : 22, 5);
     g.add(light);
     this.scene.add(g);
     return { obj: g, spin, t: 0 };
@@ -912,7 +1147,10 @@ class Game {
       else v.obj.rotation.y = dir > 0 ? 0 : Math.PI;
       if (v.spin) { v.spin.rotation.x += dt * 12; v.spin.rotation.y += dt * 9; v.spin.scale.setScalar(1 + Math.sin(v.t * 36) * 0.12); }
       const back = V(p.x - Math.cos(v.obj.rotation.z) * 0.3 * (p.kind === 'misil' ? 1 : dir), p.y - (p.kind === 'misil' ? Math.sin(v.obj.rotation.z) * 0.3 : 0), 0.1);
-      if (p.kind === 'puno' || p.kind === 'misil') {
+      if (p.kind === 'gas') {
+        solid.emit({ pos: V(p.x, p.y, 0.1), count: 3 * n, speed: 0.6, jitter: 1.0, color: '#a6e35a', colorEnd: '#4b6b25', life: 1.3, size: 0.7, grow: 1.6, drag: 1.5, gravity: -0.3 });
+        if (v.t % 0.2 < dt) glow.emit({ pos: V(p.x, p.y, 0.1), count: 1, speed: 0.3, jitter: 0.8, color: '#d4ff7a', colorEnd: '#000000', life: 0.8, size: 0.5 });
+      } else if (p.kind === 'puno' || p.kind === 'misil' || p.kind === 'cohete') {
         glow.emit({ pos: back, count: 2 * n, speed: 1.5, dir: [-dir, 0, 0], spread: 0.5, color: '#fff3c0', colorEnd: '#ff5a00', life: 0.25, size: 0.25 });
         solid.emit({ pos: back, count: n, speed: 0.6, jitter: 0.1, color: '#777', colorEnd: '#222', life: 0.9, size: 0.22, grow: 2, drag: 2 });
       } else {
@@ -979,7 +1217,7 @@ class Game {
 
   announcerState() {
     const t = this.phaseT, w = this.winner;
-    const final = this.fighters.every((f) => f.wins === JUEGO.rondasParaGanar - 1);
+    const final = this.fighters.length === 2 && this.fighters.every((f) => f.wins === JUEGO.rondasParaGanar - 1);
     switch (this.phase) {
       case 'intro': return t < 88 ? { text: final ? 'RONDA FINAL' : `RONDA ${this.round}`, say: final ? 'Ronda final' : `Ronda ${ORDINAL[this.round - 1] || this.round}` } : null;
       case 'fight': return t < 50 ? { text: '¡PELEA!', say: '¡Pelea!' } : null;
@@ -1037,6 +1275,11 @@ class Game {
       if (this.phase === 'fatality' || this.phase === 'finish') { z = THREE.MathUtils.clamp(3.6 + dist * 0.6, 4.8, 9) * narrow; focusX = this.loser ? mid * 0.6 + this.loser.x * 0.4 : mid; }
       target = new THREE.Vector3(focusX, 1.7 + maxY * 0.25, z);
       look = new THREE.Vector3(focusX, 1.15 + maxY * 0.25, 0);
+      // fatalidades que mandan al rival por los aires: la cámara lo sigue hacia arriba
+      if (this.phase === 'fatality' && ['despegue', 'nocaut'].includes(this.fatal?.tipo) && this.loser) {
+        const ly = Math.min(this.loser.y, 10);
+        target.y += ly * 0.7; target.z += ly * 0.35; look.y += ly * 0.9;
+      }
     } else {
       const t = performance.now() / 1000 * 0.12;
       target = new THREE.Vector3(Math.sin(t) * 6, 2.4, 9 + Math.cos(t) * 2);

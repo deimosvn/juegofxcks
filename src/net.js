@@ -25,10 +25,34 @@ export async function loadNetConfig() {
     if (r.ok) { const j = await r.json(); cfg = { ...cfg, ...j, iceServers: j.iceServers || cfg.iceServers }; }
   } catch { /* sin servidor de config */ }
   if (!cfg.firebase) {
-    try { const m = await import('./firebase-config.js'); if (m.FIREBASE_CONFIG?.databaseURL) cfg.firebase = m.FIREBASE_CONFIG; } catch { /* sin archivo */ }
+    try { const m = await import('./firebase-config.js'); if (m.FIREBASE_CONFIG?.projectId) cfg.firebase = { ...m.FIREBASE_CONFIG }; } catch { /* sin archivo */ }
   }
   if (qs.has('local')) cfg.firebase = null;
   return cfg;
+}
+
+// Error con un mensaje claro para mostrar en el lobby
+class NetError extends Error {
+  constructor(code, message) { super(message); this.code = code; }
+}
+
+// La URL de la Realtime Database depende de la región en que se creó: se busca sola.
+async function resolveDatabaseURL(cfg) {
+  if (cfg.databaseURL) return cfg.databaseURL;
+  const id = cfg.projectId;
+  const candidates = [
+    `https://${id}-default-rtdb.firebaseio.com`,
+    `https://${id}-default-rtdb.us-central1.firebasedatabase.app`,
+    `https://${id}-default-rtdb.europe-west1.firebasedatabase.app`,
+    `https://${id}-default-rtdb.asia-southeast1.firebasedatabase.app`,
+  ];
+  for (const url of candidates) {
+    try {
+      const r = await fetch(`${url}/.json?shallow=true`, { cache: 'no-store' });
+      if (r.status !== 404) return url;      // 200 o 401 (reglas) = la base existe
+    } catch { /* probar la siguiente */ }
+  }
+  throw new NetError('sin-base', 'Falta crear la Realtime Database en Firebase (Compilación → Realtime Database → Crear base de datos).');
 }
 
 const rankKey = (n) => n.toLowerCase().replace(/[.#$[\]/\s]+/g, '_').slice(0, 24) || 'jugador';
@@ -46,10 +70,21 @@ class FirebaseBackend {
       import(`https://www.gstatic.com/firebasejs/${FB}/firebase-database.js`),
     ]);
     this.f = db;
-    const fbApp = app.initializeApp(cfg);
+    const databaseURL = await resolveDatabaseURL(cfg);
+    const fbApp = app.initializeApp({ ...cfg, databaseURL });
     this.db = db.getDatabase(fbApp);
-    const cred = await auth.signInAnonymously(auth.getAuth(fbApp));
-    this.uid = cred.user.uid;
+    const a = auth.getAuth(fbApp);
+    // ?aislado: cada pestaña es un jugador distinto (para probar en una sola computadora)
+    if (qs.has('aislado')) await auth.setPersistence(a, auth.inMemoryPersistence);
+    try {
+      const cred = await auth.signInAnonymously(a);
+      this.uid = cred.user.uid;
+    } catch (err) {
+      if (/configuration-not-found|operation-not-allowed|admin-restricted/.test(err.code || '')) {
+        throw new NetError('sin-auth', 'Falta activar el acceso anónimo en Firebase (Authentication → Método de acceso → Anónimo).');
+      }
+      throw err;
+    }
   }
 
   ref(path) { return this.f.ref(this.db, 'kombate/' + path); }
@@ -58,6 +93,15 @@ class FirebaseBackend {
     const { onValue, onDisconnect, set, serverTimestamp, ref } = this.f;
     this.name = name; this.estado = 'libre';
     this.meRef = this.ref('conectados/' + this.uid);
+    // primera escritura: si las reglas no están publicadas, avisar claro
+    try {
+      await set(this.meRef, { nombre: name, estado: this.estado, t: serverTimestamp() });
+    } catch (err) {
+      if (/permission/i.test(err.code || err.message || '')) {
+        throw new NetError('sin-reglas', 'Firebase rechazó la escritura: publica las reglas de database.rules.json (Realtime Database → Reglas).');
+      }
+      throw err;
+    }
     this.subs.push(onValue(ref(this.db, '.info/connected'), (s) => {
       if (s.val() !== true) return;
       onDisconnect(this.meRef).remove();

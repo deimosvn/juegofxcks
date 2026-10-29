@@ -23,16 +23,22 @@
 //    proyectil, teletransporte, embestida, terremoto, gancho,
 //    congelar, uppercut_volador, poder, rayo
 //    robot: puno_cohete, laser, misiles, armadura
+//    aeroespacial: cohete, jetpack, orbital, turbina
+//    boxeo: rafaga, resorte, contra (y uppercut_volador)
+//    nalgas: culazo, senton, twerk, gas
 //
 //  Tipos de fatality disponibles:
-//    explosion, incinerar, congelar_romper, rayo, aplastar, desintegrar
+//    explosion, incinerar, congelar_romper, rayo, aplastar, desintegrar,
+//    despegue, nocaut, nalgon
+//
+//  accesorios: ['guantes'] (guantes de box, color con colorGuantes) y/o ['jetpack']
 //
 //  Modelos: pasa el .fbx/.glb de Meshy o Tripo por herramientas/convertir.html
 //  (lo reduce, le pone esqueleto automático y crea el retrato).
 // =====================================================================
 
 export const JUEGO = {
-  titulo: 'KOMBATE DE AMIGOS',
+  titulo: 'FXCKS KOMBAT',
   rondasParaGanar: 2,
   tiempoRonda: 99,
   sangre: true,
@@ -82,6 +88,59 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'DESINTEGRACIÓN', tipo: 'desintegrar', input: '→ → ↓ + P', color: '#4fd8ff' },
     frase: 'Sistema de combate: victoria confirmada.',
+  },
+  {
+    id: 'alan',
+    nombre: 'ALAN',
+    color: '#f28c28',
+    modelo: 'assets/peleadores/alan/modelo.glb',
+    retrato: 'assets/peleadores/alan/retrato.png',
+    escala: 1, rotacionY: 0,
+    accesorios: ['jetpack'],
+    stats: { velocidad: 1, fuerza: 1, vida: 105 },
+    especiales: [
+      { nombre: 'COHETE SATURNO', tipo: 'cohete', input: '← → + P', color: '#ff7a1a', danio: 12 },
+      { nombre: 'JETPACK', tipo: 'jetpack', input: '→ ↓ → + K', color: '#4fd8ff', danio: 13 },
+      { nombre: 'ATAQUE ORBITAL', tipo: 'orbital', input: '↓ ← + P', color: '#7fe3ff', danio: 14 },
+      { nombre: 'TURBINA', tipo: 'turbina', input: '← ← + K', color: '#ffd27a', danio: 12 },
+    ],
+    fatality: { nombre: 'DESPEGUE ESPACIAL', tipo: 'despegue', input: '↓ → ↓ + P', color: '#ff7a1a' },
+    frase: 'Houston, tenemos un ganador.',
+  },
+  {
+    id: 'gera',
+    nombre: 'GERA',
+    color: '#1f9d55',
+    modelo: 'assets/peleadores/gera/modelo.glb',
+    retrato: 'assets/peleadores/gera/retrato.png',
+    escala: 1, rotacionY: 0,
+    accesorios: ['guantes'], colorGuantes: '#d1121b',
+    stats: { velocidad: 1.1, fuerza: 1.05, vida: 100 },
+    especiales: [
+      { nombre: 'RÁFAGA DE JABS', tipo: 'rafaga', input: '→ → + P', color: '#ffd23a', danio: 14 },
+      { nombre: 'GANCHO DEMOLEDOR', tipo: 'uppercut_volador', input: '→ ↓ → + P', color: '#ff3b2f', danio: 14 },
+      { nombre: 'PUÑO RESORTE', tipo: 'resorte', input: '← → + P', color: '#d1121b', danio: 11 },
+      { nombre: 'CONTRAGOLPE', tipo: 'contra', input: '↓ ← + P', color: '#ffffff', danio: 16 },
+    ],
+    fatality: { nombre: 'NOCAUT', tipo: 'nocaut', input: '→ → → + P', color: '#ffd23a' },
+    frase: '¡Ding, ding! Se acabó la pelea.',
+  },
+  {
+    id: 'jose',
+    nombre: 'JOSÉ CORTEZ',
+    color: '#e84393',
+    modelo: 'assets/peleadores/jose/modelo.glb',
+    retrato: 'assets/peleadores/jose/retrato.png',
+    escala: 1, rotacionY: 0,
+    stats: { velocidad: 0.95, fuerza: 1.1, vida: 110 },
+    especiales: [
+      { nombre: 'NALGADA VOLADORA', tipo: 'culazo', input: '← → + K', color: '#ff7ab8', danio: 11 },
+      { nombre: 'SENTÓN', tipo: 'senton', input: '↓ ↓ + K', color: '#ffb3d1', danio: 13 },
+      { nombre: 'TWERK SÍSMICO', tipo: 'twerk', input: '↓ ← + K', color: '#ff4fa3', danio: 14 },
+      { nombre: 'GAS NUCLEAR', tipo: 'gas', input: '← ← + P', color: '#9be15d', danio: 12 },
+    ],
+    fatality: { nombre: 'APLASTE NALGÓN', tipo: 'nalgon', input: '↓ ↓ ↓ + K', color: '#ff7ab8' },
+    frase: 'Con estas nalgas no se juega.',
   },
   {
     id: 'fuego',

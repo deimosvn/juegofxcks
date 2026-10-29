@@ -29,7 +29,7 @@ for (const k in MOVES) { const m = MOVES[k]; m.name = k; m.total = m.startup + m
 // Campos que forman el estado del peleador
 const FIELDS = ['x', 'y', 'vx', 'vy', 'facing', 'health', 'state', 't', 'moveName', 'hasHit', 'specIdx', 'specData',
   'combo', 'comboTaken', 'buffTimer', 'buffKind', 'buffColor', 'invuln', 'stunDur', 'airAttackUsed', 'wasCrouchBlock',
-  'animKey', 'animTotal', 'animS', 'animA', 'animStart', 'animId', 'flip', 'wins', 'hidden', 'burn', 'squash', 'iced'];
+  'animKey', 'animTotal', 'animS', 'animA', 'animStart', 'animId', 'flip', 'wins', 'hidden', 'burn', 'squash', 'iced', 'rocket'];
 
 export class Fighter {
   constructor(def, side, game) {
@@ -56,7 +56,7 @@ export class Fighter {
     this.buffTimer = 0; this.buffKind = null; this.buffColor = null; this.invuln = 0;
     this.stunDur = 0; this.airAttackUsed = false; this.wasCrouchBlock = false;
     this.animKey = 'idle'; this.animTotal = 0; this.animS = 0; this.animA = 0; this.animStart = 0; this.animId = 0;
-    this.flip = false; this.hidden = false; this.burn = 0; this.squash = 1; this.iced = false;
+    this.flip = false; this.hidden = false; this.burn = 0; this.squash = 1; this.iced = false; this.rocket = false;
   }
 
   serialize() {
@@ -315,6 +315,11 @@ export class Fighter {
     pos = pos || this.chest;
     const dir = attacker.x < this.x ? 1 : -1;
     const armored = this.buffKind === 'armor' && this.buffTimer > 0;
+    // guardia de contragolpe (Gera)
+    if (this.state === 'special' && !hit.isCounter && SPECIALS[this.spec?.tipo]?.counter) {
+      const r = SPECIALS[this.spec.tipo].counter(this, attacker, hit, g);
+      if (r) return r;
+    }
 
     if (!hit.unblockable && this.isBlocking(hit.height) && this.grounded) {
       if (!armored) this.health = Math.max(1, this.health - hit.dmg * 0.12 * attacker.power);

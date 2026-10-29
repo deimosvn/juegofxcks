@@ -2,10 +2,11 @@
 // La config web de Firebase NO es secreta (la protegen las reglas de la base de datos).
 module.exports = (req, res) => {
   const e = process.env;
-  const firebase = e.FIREBASE_DATABASE_URL ? {
+  // Sin variables, el juego usa src/firebase-config.js. databaseURL es opcional (se detecta sola).
+  const firebase = e.FIREBASE_PROJECT_ID ? {
     apiKey: e.FIREBASE_API_KEY,
     authDomain: e.FIREBASE_AUTH_DOMAIN,
-    databaseURL: e.FIREBASE_DATABASE_URL,
+    databaseURL: e.FIREBASE_DATABASE_URL || null,
     projectId: e.FIREBASE_PROJECT_ID,
     appId: e.FIREBASE_APP_ID,
   } : null;

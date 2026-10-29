@@ -71,6 +71,12 @@ export const sfx = {
   armor: () => { tone(220, 0.5, 'square', 0.15, 880); setTimeout(() => { noise(0.08, 3500, 6, 0.4, 'bandpass'); tone(1200, 0.12, 'triangle', 0.2); }, 380); },
   clank: () => { noise(0.07, 4200, 8, 0.6, 'bandpass'); tone(1500, 0.09, 'triangle', 0.25, 1200); },
   voxel: () => { for (let i = 0; i < 10; i++) setTimeout(() => tone(600 + Math.random() * 1600, 0.06, 'square', 0.06), i * 45); },
+  // --- Gera y José ---
+  boing: () => { tone(160, 0.4, 'sine', 0.35, 640); tone(240, 0.35, 'triangle', 0.15, 900); },
+  ding: () => { tone(1320, 1.2, 'sine', 0.35); tone(1980, 0.9, 'sine', 0.12); },
+  slap: () => { noise(0.09, 2500, 1.2, 1.0, 'bandpass'); tone(120, 0.12, 'sine', 0.5, 70); },
+  thump: () => { tone(70, 0.18, 'sine', 0.8, 45); noise(0.06, 300, 1, 0.4); },
+  fart: () => { tone(95, 0.7, 'sawtooth', 0.22, 60); tone(110, 0.65, 'square', 0.08, 70); noise(0.7, 260, 3, 0.25, 'bandpass', 160); },
 };
 
 // Durante el rollback del modo en línea no deben sonar golpes repetidos (`gate` lo pone main.js)

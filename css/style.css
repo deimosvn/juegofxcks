@@ -143,3 +143,12 @@ button.link:hover { color: var(--gold); }
   .lobby-layout > .panel:last-child { width: 100%; }
   #netbadge { top: 74px; }
 }
+
+/* Selección de escenario */
+.stage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; width: min(1050px, 100%); }
+.stage-card { position: relative; aspect-ratio: 16 / 9; border: 3px solid #333; background: #111 center / cover no-repeat; cursor: pointer; transition: transform .15s, border-color .15s; }
+.stage-card.sel { border-color: var(--gold); transform: scale(1.04); box-shadow: 0 0 24px rgba(245, 197, 66, .55); }
+.stage-card.locked { border-color: #fff; }
+.stage-label { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 10px; background: linear-gradient(transparent, rgba(0, 0, 0, .9)); }
+.stage-label b { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 2px; color: #fff; line-height: 1; }
+.stage-label small { color: #bbb; font-size: 12px; }

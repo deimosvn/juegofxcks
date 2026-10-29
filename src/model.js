@@ -337,6 +337,19 @@ export function autoRig(obj, height) {
   const [hipN, knN, abdN] = leg(HN, KN, AN, 'N');
   const [hipF, knF, abdF] = leg(HF, KF, AF, 'F');
 
+  // Nalgas: hueso propio detrás de la cadera (para los ataques de José se pueden inflar)
+  const buttY = crotchY + 0.045 * H;
+  let backZ = Infinity, chestBack = Infinity;
+  for (let i = 0; i < pts.length; i += 3) {
+    const x = pts[i], y = pts[i + 1], z = pts[i + 2];
+    if (Math.abs(x) < 0.08 * H && Math.abs(y - buttY) < 0.02 * H && z < backZ) backZ = z;
+    if (Math.abs(x) < 0.06 * H && Math.abs(y - 0.68 * H) < 0.02 * H && z < chestBack) chestBack = z;
+  }
+  if (!isFinite(backZ)) backZ = zPelvis - 0.07 * H;
+  if (!isFinite(chestBack)) chestBack = zTorso - 0.07 * H;
+  const butt = bone('butt'); hips.add(butt);
+  butt.position.set(0, buttY - pelvisY, backZ + 0.05 * H - zPelvis);
+
   // 4) Pesos: cada vértice sigue a los huesos más cercanos (distancia / grosor del hueso)
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const segs = [
@@ -347,8 +360,9 @@ export function autoRig(obj, height) {
     { b: shF, a: SF, e: EF, r: 0.06 * H, side: 1, arm: true }, { b: elF, a: EF, e: tipF, r: 0.045 * H, side: 1, arm: true },
     { b: hipN, a: HN, e: KN, r: 0.055 * H, side: -1, leg: true }, { b: knN, a: KN, e: AN.clone().setY(0.02 * H), r: 0.045 * H, side: -1, leg: true },
     { b: hipF, a: HF, e: KF, r: 0.055 * H, side: 1, leg: true }, { b: knF, a: KF, e: AF.clone().setY(0.02 * H), r: 0.045 * H, side: 1, leg: true },
+    { b: butt, a: V(-0.065 * H, buttY, backZ + 0.035 * H), e: V(0.065 * H, buttY, backZ + 0.035 * H), r: 0.055 * H, butt: true },
   ];
-  const boneList = [hips, torso, head, shN, elN, shF, elF, hipN, knN, hipF, knF];
+  const boneList = [hips, torso, head, shN, elN, shF, elF, hipN, knN, hipF, knF, butt];
   segs.forEach((sg) => { sg.i = boneList.indexOf(sg.b); });
   const sideTol = 0.004 * H, legTop = crotchY + 0.08 * H;
   const sc = new Float32Array(segs.length);
@@ -362,6 +376,8 @@ export function autoRig(obj, height) {
       for (let k = 0; k < segs.length; k++) {
         const sg = segs[k];
         if ((sg.side && x * sg.side < -sideTol) || (sg.leg && y > legTop)) { sc[k] = Infinity; continue; }
+        // las nalgas: solo la parte de atrás, entre los muslos y la cintura
+        if (sg.butt && (z > zPelvis - 0.01 * H || y < crotchY - 0.05 * H || y > torsoY + 0.01 * H)) { sc[k] = Infinity; continue; }
         let d = distToSegment(x, y, z, sg.a, sg.e) / sg.r;
         if (sg.hips && y < crotchY) d *= 2;
         // fuera del ancho del torso (y por encima de la cadera) solo pueden estar los brazos
@@ -400,8 +416,13 @@ export function autoRig(obj, height) {
   const eyeLocal = new THREE.Vector3(0, 0.935 * H, zFace + 0.005 * H).sub(new THREE.Vector3(0, neckY, zNeck));
   return {
     group, skinned,
-    parts: { hips, torso, head, shN, elN, shF, elF, hipN, knN, hipF, knF },
-    rig: { pelvisY, spread: 0.13, abdN, abdF, H },
+    parts: { hips, torso, head, shN, elN, shF, elF, hipN, knN, hipF, knF, butt },
+    rig: {
+      pelvisY, spread: 0.13, abdN, abdF, H,
+      // dónde van los accesorios (guantes en las manos, jetpack en la espalda)
+      handN: new THREE.Vector3(0, -EN.distanceTo(tipN) * 0.8, 0), handF: new THREE.Vector3(0, -EF.distanceTo(tipF) * 0.8, 0),
+      back: new THREE.Vector3(0, (neckY - torsoY) * 0.55, chestBack - zTorso - 0.02 * H),
+    },
     eyes: { bone: head, local: eyeLocal },
     debug: { crotchY, armpitY, shoulderY, shoulderX, tipN, tipF, KN, KF },
   };
@@ -421,14 +442,55 @@ function ext(a) {
   return 1 - clamp01((p - a.a) / (1 - a.a)) ** 1.4;
 }
 
-const GUARD = { hipsY: 0.93, hipsX: 0, torsoX: 0.1, torsoY: 0.35, torsoZ: 0, headX: 0, spin: 0,
+const GUARD = { hipsY: 0.93, hipsX: 0, torsoX: 0.1, torsoY: 0.35, torsoZ: 0, headX: 0, spin: 0, tilt: 0,
   shNX: -1.0, shNZ: 0.1, elNX: -1.8, shFX: -0.8, shFZ: -0.1, elFX: -2.0,
   hipNX: -0.35, knNX: 0.55, hipFX: 0.25, knFX: 0.4 };
+
+// Poses extra de los especiales (Alan, Gera, José). spin = PI: de espaldas al rival.
+function extraPose(a, P, e, t) {
+  switch (a.key) {
+    case 'jet_sube':
+      Object.assign(P, { hipsY: 0.98, torsoX: -0.1, torsoY: 0, shNX: 0.25, shNZ: -0.35, elNX: -0.3, shFX: 0.25, shFZ: 0.35, elFX: -0.3, hipNX: 0.05, knNX: 0.15, hipFX: 0.1, knFX: 0.3 }); return true;
+    case 'jet_cae':
+      Object.assign(P, { tilt: 1.15, torsoX: 0, torsoY: 0, headX: -0.6, shNX: -2.9, shNZ: 0.15, elNX: 0, shFX: -2.9, shFZ: -0.15, elFX: 0, hipNX: 0.15, knNX: 0.1, hipFX: 0.15, knFX: 0.1 }); return true;
+    case 'turbina':
+      Object.assign(P, { torsoY: 0, torsoX: 0.15, shNX: -1.5, shNZ: 0.25, elNX: -0.5, shFX: -1.5, shFZ: -0.25, elFX: -0.5, hipNX: -0.75, knNX: 1.0, hipFX: 0.35, knFX: 0.3, hipsY: 0.88 });
+      P.torsoZ = Math.sin(t * 1.3) * 0.03; return true;
+    case 'orbital':
+      Object.assign(P, { torsoY: 0, torsoX: -0.15, headX: -0.5, shFX: lerp(-0.8, -3.0, e), shFZ: -0.15, elFX: lerp(-2.0, -0.1, e), shNX: -1.1, elNX: -1.7 }); return true;
+    case 'rafaga': {
+      const k = Math.floor(t / 5), s = Math.sin((t % 5) / 5 * Math.PI);
+      if (k % 2) { P.shNX = lerp(-1.0, -1.6, s); P.elNX = lerp(-1.8, -0.05, s); P.torsoY = lerp(0.35, -0.1, s); }
+      else { P.shFX = lerp(-0.8, -1.6, s); P.elFX = lerp(-2.0, -0.05, s); P.torsoY = lerp(0.35, -0.45, s); }
+      P.hipsY = 0.9 + Math.sin(t * 0.6) * 0.01; return true;
+    }
+    case 'resorte':
+      Object.assign(P, { shFX: lerp(-0.8, -1.6, e), elFX: lerp(-2.0, 0, e), torsoY: lerp(0.35, -0.7, e), torsoX: 0.2, hipNX: -0.7, knNX: 0.9, hipsY: 0.88 }); return true;
+    case 'contra':
+      Object.assign(P, { shNX: -1.3, shNZ: 0.3, elNX: -2.2, shFX: -1.25, shFZ: -0.3, elFX: -2.3, torsoX: 0.25, torsoY: 0.2, hipsY: 0.86, knNX: 0.8, knFX: 0.7 });
+      P.torsoZ = Math.sin(t * 0.35) * 0.12; return true;
+    case 'culazo':
+      Object.assign(P, { spin: Math.PI, torsoX: 0.95, torsoY: 0, headX: -0.5, shNX: 0.7, shNZ: -0.3, elNX: -0.4, shFX: 0.7, shFZ: 0.3, elFX: -0.4, hipNX: -0.35, knNX: 0.5, hipFX: -0.2, knFX: 0.4, hipsY: 0.9 }); return true;
+    case 'senton':
+      Object.assign(P, { torsoX: -0.25, torsoY: 0, headX: 0.2, shNX: -2.6, shNZ: 0.4, elNX: -0.3, shFX: -2.6, shFZ: -0.4, elFX: -0.3, hipNX: -1.55, knNX: 1.55, hipFX: -1.55, knFX: 1.55, hipsY: 0.9 }); return true;
+    case 'senton_suelo':
+      Object.assign(P, { torsoX: -0.2, torsoY: 0, shNX: -0.3, shNZ: 0.6, elNX: -0.2, shFX: -0.3, shFZ: -0.6, elFX: -0.2, hipNX: -1.55, knNX: 0.3, hipFX: -1.55, knFX: 0.3, hipsY: 0.24 }); return true;
+    case 'twerk': {
+      const w = Math.sin(t * 1.25);
+      Object.assign(P, { spin: Math.PI, torsoX: 0.75, torsoY: 0, headX: -0.4, shNX: -0.9, shNZ: 0.1, elNX: -0.15, shFX: -0.9, shFZ: -0.1, elFX: -0.15, hipNX: -0.95, knNX: 1.35, hipFX: -0.95, knFX: 1.35, hipsY: 0.78 });
+      P.hipsX = w * 0.22; P.torsoZ = w * 0.05; return true;
+    }
+    case 'gas':
+      Object.assign(P, { spin: Math.PI, torsoX: lerp(0.3, 1.15, e), torsoY: 0, headX: -0.6, shNX: -0.7, elNX: -0.2, shFX: -0.7, elFX: -0.2, hipNX: -0.4, knNX: 0.45, hipFX: -0.3, knFX: 0.4, hipsY: 0.92 }); return true;
+  }
+  return false;
+}
 
 export function proceduralPose(a) {
   const t = a.t, e = ext(a), p = a.total ? clamp01(a.t / a.total) : 0;
   const P = { ...GUARD };
   const crouch = () => Object.assign(P, { hipsY: 0.56, hipNX: -1.45, knNX: 2.2, hipFX: -0.95, knFX: 2.1, torsoX: 0.35 });
+  if (extraPose(a, P, e, t)) return P;
   switch (a.key) {
     case 'idle': P.hipsY += Math.sin(t * 0.08) * 0.015; P.elNX += Math.sin(t * 0.08) * 0.05; break;
     case 'caminar': case 'caminar_atras': {
@@ -511,6 +573,9 @@ const FALLBACK = {
   patada_aerea: ['patada'], gancho_arriba: ['puno_fuerte', 'puno'], barrida: ['patada'], muerto: ['caer'],
   lanzar: ['especial', 'puno'], embestida: ['especial'], carga: ['especial', 'victoria'], mareado: ['idle'],
   laser: ['especial'], misiles: ['especial'],
+  jet_sube: ['saltar'], jet_cae: ['saltar'], turbina: ['especial'], orbital: ['especial'], rafaga: ['puno'],
+  resorte: ['puno_fuerte', 'puno'], contra: ['bloqueo'], culazo: ['especial'], senton: ['saltar'],
+  senton_suelo: ['agacharse'], twerk: ['agacharse'], gas: ['agacharse'],
 };
 const LOOPING = new Set(['idle', 'caminar', 'caminar_atras', 'agacharse', 'bloqueo', 'bloqueo_bajo', 'mareado', 'victoria', 'carga']);
 const BURNT = new THREE.Color('#0d0806');
@@ -532,7 +597,53 @@ export class FighterModel {
     this.squash = 1;
     this.paused = false;
     this.detachArm = false;
+    this.buttScale = 1;      // nalgas infladas (José)
+    this.jetOn = false;      // fuego del jetpack (Alan)
+    this.acc = {};           // accesorios: guantes, jetpack
     this.pose = { ...GUARD };
+  }
+
+  // Accesorios que se pegan a los huesos: guantes de box y jetpack
+  addAccessories(def) {
+    const list = def.accesorios || [];
+    if (!this.parts || !list.length) return;
+    const P = this.parts, R = this.rig;
+    if (list.includes('guantes')) {
+      const red = new THREE.MeshStandardMaterial({ color: def.colorGuantes || '#d1121b', roughness: 0.35, metalness: 0.05 });
+      const white = new THREE.MeshStandardMaterial({ color: '#f2f2f2', roughness: 0.6 });
+      const glove = () => {
+        const g = new THREE.Group();
+        const fist = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), red); fist.scale.set(1, 1.15, 1.25); fist.position.y = -0.02;
+        const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), red); thumb.position.set(0.06, 0.02, 0.05);
+        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.075, 0.09, 14), white); cuff.position.y = 0.08;
+        for (const m of [fist, thumb, cuff]) { m.castShadow = true; g.add(m); }
+        return g;
+      };
+      for (const s of ['N', 'F']) {
+        const g = glove();
+        g.position.copy(R ? R['hand' + s] : new THREE.Vector3(0, -0.29, 0));
+        P['el' + s].add(g);
+        this.materials.push(red);
+      }
+    }
+    if (list.includes('jetpack')) {
+      const metal = new THREE.MeshStandardMaterial({ color: '#c9d1d9', metalness: 0.85, roughness: 0.3 });
+      const dark = new THREE.MeshStandardMaterial({ color: '#333a40', metalness: 0.6, roughness: 0.4 });
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.32, 0.1), dark); g.add(body);
+      for (const x of [-0.09, 0.09]) {
+        const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.4, 14), metal); tank.position.set(x, 0, -0.06); g.add(tank);
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8), metal); cap.position.set(x, 0.2, -0.06); g.add(cap);
+        const noz = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 12, 1, true), dark); noz.position.set(x, -0.25, -0.06); g.add(noz);
+        const flame = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.45, 10), new THREE.MeshBasicMaterial({ color: '#ffb347', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+        flame.rotation.x = Math.PI; flame.position.set(x, -0.5, -0.06); flame.visible = false;
+        g.add(flame); (this.acc.flames ||= []).push(flame);
+      }
+      g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      g.position.copy(R ? R.back : new THREE.Vector3(0, 0.32, -0.16));
+      P.torso.add(g);
+      this.acc.jetpack = g;
+    }
   }
 
   static async create(def, altTint = false) {
@@ -550,6 +661,7 @@ export class FighterModel {
       fm.parts = ph.parts; fm.eyes = ph.eyes;
       fm.pivot.add(ph.object);
       ph.object.traverse((o) => { if (o.material && !fm.materials.includes(o.material)) fm.materials.push(o.material); });
+      fm.addAccessories(def);
       return fm;
     }
     const obj = SkeletonUtils.clone(asset.scene);
@@ -564,6 +676,7 @@ export class FighterModel {
       fm.parts = r.parts; fm.rig = r.rig; fm.eyes = r.eyes; fm.rigDebug = r.debug;
       fm.pivot.add(r.group);
       fm.cloneMaterials(r.group, altTint);
+      fm.addAccessories(def);
     }
     return fm;
   }
@@ -690,7 +803,10 @@ export class FighterModel {
     P.elN.rotation.set(q.elNX, 0, 0);
     P.elF.rotation.set(q.elFX, 0, 0);
     P.elF.scale.setScalar(this.detachArm ? 0.001 : 1);   // ¡el antebrazo salió volando!
+    if (P.butt) P.butt.scale.setScalar(this.buttScale);
+    for (const fl of this.acc.flames || []) { fl.visible = this.jetOn; if (this.jetOn) fl.scale.y = 0.8 + Math.random() * 0.5; }
     this.pivot.rotation.y = q.spin;
+    this.pivot.rotation.x = q.tilt || 0;
     this.pivot.scale.y = this.squash;
   }
 

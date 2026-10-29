@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kombate de Amigos</title>
+  <title>FXCKS KOMBAT</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rubik:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
@@ -45,7 +45,7 @@
 
   <!-- Menú principal -->
   <div id="menu" class="screen">
-    <h1 class="logo">KOMBATE<span>DE AMIGOS</span></h1>
+    <h1 class="logo">FXCKS<span>KOMBAT</span></h1>
     <div class="menu-options">
       <button data-mode="cpu" class="sel">1 JUGADOR vs CPU</button>
       <button data-mode="vs">1 vs 1 LOCAL</button>
@@ -64,6 +64,13 @@
       <div class="preview p2"><div class="pname" id="pick2">—</div><div class="ptag" id="ptag2">P2</div><div class="pspecials" id="pspec2"></div></div>
     </div>
     <p class="hint">P1: A D W S + F &nbsp;·&nbsp; P2: flechas + K &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; ESC volver</p>
+  </div>
+
+  <!-- Selección de escenario -->
+  <div id="stages" class="screen hidden">
+    <h2>ELIGE ESCENARIO</h2>
+    <div class="stage-grid" id="stage-grid"></div>
+    <p class="hint" id="stage-hint"></p>
   </div>
 
   <!-- Lobby en línea -->
