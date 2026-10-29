@@ -93,7 +93,73 @@ export const sfx = {
   fizz: () => noise(0.9, 5200, 0.8, 0.35, 'highpass', 2600),
   splash: () => { noise(0.6, 900, 0.7, 0.8, 'lowpass', 300); noise(0.35, 3500, 1.5, 0.35, 'bandpass', 1800); },
   fart: () => { tone(95, 0.7, 'sawtooth', 0.22, 60); tone(110, 0.65, 'square', 0.08, 70); noise(0.7, 260, 3, 0.25, 'bandpass', 160); },
+  // Ramces (barbero): tijeras, máquina, navaja, talco, tos, la campanita y el pistón de la silla
+  snip: () => { noise(0.05, 6000, 6, 0.5, 'bandpass'); setTimeout(() => noise(0.05, 7200, 6, 0.45, 'bandpass'), 70); },
+  clippers: () => { tone(118, 0.55, 'sawtooth', 0.09); tone(236, 0.55, 'square', 0.035); noise(0.55, 2400, 3, 0.12, 'bandpass'); },
+  shink: () => { noise(0.3, 5200, 9, 0.35, 'bandpass', 8000); tone(2400, 0.25, 'triangle', 0.08, 3600); },
+  slash: () => { noise(0.18, 3000, 2, 0.6, 'bandpass', 9000); tone(900, 0.12, 'sawtooth', 0.1, 300); },
+  puff: () => noise(0.55, 900, 0.6, 0.5, 'lowpass', 300),
+  cough: () => { for (let i = 0; i < 3; i++) setTimeout(() => { noise(0.12, 700, 1.5, 0.5, 'bandpass'); tone(180, 0.1, 'sawtooth', 0.07, 120); }, i * 170); },
+  bell: () => { tone(1568, 0.9, 'sine', 0.2); tone(2093, 0.7, 'sine', 0.09); setTimeout(() => { tone(1568, 1.1, 'sine', 0.18); tone(2093, 0.9, 'sine', 0.07); }, 180); },
+  pump: () => { for (let i = 0; i < 3; i++) setTimeout(() => { tone(90, 0.12, 'sine', 0.4, 60); noise(0.1, 400, 2, 0.2, 'bandpass'); }, i * 130); },
+  // Para todo el juego
+  step: () => noise(0.06, 900, 1, 0.12, 'lowpass'),
+  clankStep: () => { noise(0.05, 3500, 5, 0.18, 'bandpass'); tone(160, 0.07, 'square', 0.07, 110); },
+  smack: () => noise(0.07, 1800, 1.2, 0.5, 'bandpass'),                        // capa extra para los puños
+  thud: () => { tone(70, 0.16, 'sine', 0.55, 45); noise(0.1, 350, 1, 0.35); },  // capa extra para las patadas
+  combo: (n) => tone(520 + Math.min(n, 10) * 70, 0.12, 'triangle', 0.12, 800 + Math.min(n, 10) * 90),
+  tick: () => tone(1250, 0.06, 'square', 0.09),
+  roundBell: () => { tone(988, 1.2, 'sine', 0.22); tone(1976, 0.8, 'sine', 0.07); },
+  crowd: () => { noise(1.6, 700, 0.5, 0.3, 'bandpass', 420); noise(1.6, 1400, 0.6, 0.15, 'bandpass', 900); },
+  cheer: () => { noise(2.2, 1200, 0.4, 0.28, 'bandpass', 2000); for (let i = 0; i < 6; i++) setTimeout(() => noise(0.12, 2500 + Math.random() * 2000, 4, 0.1, 'bandpass'), 150 + i * 220); },
+  heartbeat: () => { tone(58, 0.14, 'sine', 0.5, 40); setTimeout(() => tone(52, 0.18, 'sine', 0.42, 36), 170); },
+  tweet: () => { for (let i = 0; i < 3; i++) setTimeout(() => tone(2600 + Math.random() * 900, 0.07, 'sine', 0.07, 3400), i * 110); },
+  drum: () => { tone(48, 0.9, 'sine', 0.9, 30); noise(0.5, 160, 1, 0.5); setTimeout(() => tone(44, 1.0, 'sine', 0.8, 28), 420); },
+  fanfare: () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => { const d = i === 3 ? 0.7 : 0.18; tone(f, d, 'square', 0.09); tone(f / 2, d, 'triangle', 0.09); }, i * 150)); },
+  back: () => tone(520, 0.08, 'square', 0.09, 330),
+  getup: () => noise(0.25, 1200, 0.8, 0.16, 'bandpass', 600),
 };
+
+// Ambiente de cada escenario, muy bajito: un fondo continuo y detalles al azar (pájaros, grillos…)
+let amb = null;
+const chirp = () => { const f = 2200 + Math.random() * 1500; tone(f, 0.08, 'sine', 0.03, f * 1.4); setTimeout(() => tone(f * 1.1, 0.07, 'sine', 0.025, f * 0.9), 110); };
+const crickets = () => { const f = 4300 + Math.random() * 300; for (let i = 0; i < 4; i++) setTimeout(() => tone(f, 0.035, 'sine', 0.02), i * 55); };
+const chime = () => tone(880 * [1, 1.25, 1.5, 2][Math.random() * 4 | 0], 1.6, 'sine', 0.035);
+const carPass = () => noise(2.4, 260, 0.6, 0.05, 'lowpass', 900);
+const farHonk = () => { tone(330, 0.25, 'square', 0.012); tone(415, 0.25, 'square', 0.01); };
+export function setAmbience(id) {
+  if (amb) {
+    clearInterval(amb.timer);
+    for (const n of amb.nodes) { try { n.stop?.(); } catch { /* ya parado */ } n.disconnect(); }
+    amb = null;
+  }
+  if (!id || !ctx) return;
+  const nodes = [];
+  const bed = (freq, type, q, gain, lfo = 0) => {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.value = gain;
+    src.connect(f); f.connect(g); g.connect(master); src.start();
+    nodes.push(src, f, g);
+    if (lfo) {   // el viento sube y baja
+      const o = ctx.createOscillator(); o.frequency.value = lfo;
+      const og = ctx.createGain(); og.gain.value = gain * 0.6;
+      o.connect(og); og.connect(g.gain); o.start();
+      nodes.push(o, og);
+    }
+  };
+  const events = {
+    six: [[0.3, carPass], [0.25, chirp]],
+    cabana: [[0.45, chirp]],
+    casachuy: [[0.9, crickets], [0.04, farHonk]],
+    templo: [[0.18, chime]],
+  }[id] || [];
+  if (id === 'six') bed(170, 'lowpass', 0.7, 0.045);
+  if (id === 'cabana' || id === 'templo') bed(id === 'cabana' ? 420 : 300, 'bandpass', 0.45, 0.035, id === 'cabana' ? 0.12 : 0.08);
+  if (id === 'casachuy') bed(140, 'lowpass', 0.6, 0.02);
+  const timer = setInterval(() => { if (ctx.state === 'running') for (const [p, fn] of events) if (Math.random() < p * 0.5) fn(); }, 500);
+  amb = { nodes, timer };
+}
 
 // Durante el rollback del modo en línea no deben sonar golpes repetidos (`gate` lo pone main.js)
 export const audioState = { gate: null };

@@ -11,6 +11,8 @@ import { MeshoptSimplifier } from 'meshoptimizer';
 import { FighterModel, TARGET_HEIGHT } from '../src/model.js';
 
 const $ = (id) => document.getElementById(id);
+// ?colgando=0: el auto-rig no usa el modo de brazos pegados al cuerpo (ver rig.colgando en el roster)
+const RIG = new URLSearchParams(location.search).get('colgando') === '0' ? { colgando: false } : {};
 const PROP = (() => {
   const q = new URLSearchParams(location.search), name = (q.get('prop') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
   return name ? { name, largo: +q.get('largo') || 4.8 } : null;
@@ -235,7 +237,7 @@ async function show(obj) {
     $('save').disabled = false;
     return;
   }
-  preview = await FighterModel.fromAsset({ scene: processed, animations: [] }, { escala: 1, rotacionY: 0 });
+  preview = await FighterModel.fromAsset({ scene: processed, animations: [] }, { escala: 1, rotacionY: 0, rig: RIG });
   preview.setFacing(1);
   preview.root.rotation.y = 0;   // de frente a la cámara en la vista previa
   scene.add(preview.root);
@@ -262,7 +264,7 @@ async function portrait() {
   sc.add(new THREE.HemisphereLight('#cfd8ff', '#3a2a20', 1.5));
   const k = new THREE.DirectionalLight('#fff1e0', 2.4); k.position.set(1.5, 2.5, 3); sc.add(k);
   const r2 = new THREE.DirectionalLight('#ff7a3a', 1.6); r2.position.set(-2, 2, -1); sc.add(r2);
-  const m = await FighterModel.fromAsset({ scene: processed, animations: [] }, { escala: 1, rotacionY: 0 });
+  const m = await FighterModel.fromAsset({ scene: processed, animations: [] }, { escala: 1, rotacionY: 0, rig: RIG });
   m.root.rotation.y = 0.25;
   m.apply({ key: 'retrato', t: 0, total: 0 }, 1);
   // brazos pegados al cuerpo: en la foto se quedan tal como vienen (si se mueven se abre la costura)

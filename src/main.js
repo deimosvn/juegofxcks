@@ -8,9 +8,9 @@ import { createStage, STAGES, camaro as buildCamaro } from './stages.js';
 import { CPU } from './ai.js';
 import { FATALITIES, impactProjectile, SOLID_PROJECTILES } from './specials.js';
 import { updateProjectileExtra as updateProjectile, BUTT_SPECIALS } from './specials-amigos.js';
-import { sfx, announce, unlockAudio, setVoice, audioState } from './audio.js';
+import { sfx, announce, unlockAudio, setVoice, audioState, setAmbience } from './audio.js';
 import { loadNetConfig, createBackend, Link, RollbackSession, fnv } from './net.js';
-import { makeFish, makeKawama } from './props.js';
+import { makeFish, makeKawama, makeScissors, makeBarberChair, makeCape } from './props.js';
 import { initTouch, isTouch, registerServiceWorker } from './touch.js';
 import { Salas } from './salas.js';
 
@@ -208,7 +208,7 @@ class Game {
       this.phase = 'ko'; this.phaseT = 0; this.koKind = 'ko';
       this.winnerSide = attacker.side; this.loserSide = victim.side;
       if (!this.session) this.slowmo = 36;
-      sfx.boom();
+      sfx.boom(); sfx.crowd();
     } else if (this.phase === 'finish') {
       this.phase = 'finishBlow'; this.phaseT = 0;
       if (!this.session) this.slowmo = 30;
@@ -227,6 +227,7 @@ class Game {
     f.faceOpponent(this.loser);
     f.state = 'scripted'; this.loser.state = 'scripted';
     this.event('special', { side: f.side, nombre: fat.nombre, color: fat.color });
+    sfx.drum();
     return true;
   }
 
@@ -236,12 +237,14 @@ class Game {
       case 'intro':
         if (this.phaseT === 90) {
           for (const f of this.fighters) f.setState('idle');
+          sfx.roundBell();
           this.phase = 'fight'; this.phaseT = 0;
         }
         break;
       case 'fight':
         if (++this.timerFrames >= 60) {
           this.timerFrames = 0; this.timer--;
+          if (this.timer > 0 && this.timer <= 10) sfx.tick();   // ya se acaba el tiempo
           if (this.timer <= 0) {
             this.timer = 0;
             if (a.health === b.health) { this.phase = 'roundOver'; this.phaseT = 0; this.winnerSide = -1; }
@@ -286,6 +289,7 @@ class Game {
   endMatch() {
     this.phase = 'matchEnd'; this.phaseT = 0;
     this.winner.setState('victory', 'victoria');
+    sfx.fanfare(); sfx.cheer();
   }
 
   // ================================================================== PANTALLAS
@@ -463,13 +467,13 @@ class Game {
       if (consumeKey('ArrowRight')) s.cur[0] = (s.cur[0] + 1) % n;
       if (before !== s.cur[0]) this.selectMoved(0);
     }
-    if (consumeKey('Escape')) { if (s.locked[0] && !(this.mode === 'cpu' && s.locked[1])) { s.locked[0] = false; this.renderSelect(); } else this.show('menu'); }
+    if (consumeKey('Escape')) { if (s.locked[0] && !(this.mode === 'cpu' && s.locked[1])) { s.locked[0] = false; this.renderSelect(); } else { sfx.back(); this.show('menu'); } }
   }
 
   // ------------------------------------------------------------------ partida
   async loadModels(def1, def2) {
     $('loading').classList.remove('hidden');
-    for (const m of this.models) { m.suit?.dispose(); m.dispose(); }
+    this.disposeModels();
     this.models = [];
     // con `traje` también se carga el robot que se pone en el MODO TITÁN (model.suit)
     const make = async (def, alt) => {
@@ -483,12 +487,36 @@ class Game {
     };
     // y los objetos de sus especiales (el Camaro de Alan), para que salgan sin esperar
     const urls = [def1, def2].flatMap((d) => [...(d.especiales || []), ...(d.especialesTitan || [])]).map((s) => s.modelo).filter((u) => u && !this.props.has(u));
-    const [models] = await Promise.all([
+    // fatality de Ramces: una copia del rival en la que solo se ve la cabeza (la que sale volando)
+    const heads = [def1, def2].map((d, i) => ([def2, def1][i].fatality?.tipo === 'corte' ? FighterModel.create(d, i === 1 && def1 === def2) : null));
+    const [models, , hds] = await Promise.all([
       Promise.all([make(def1, false), make(def2, def1 === def2)]),
       Promise.all(urls.map((u) => loadAsset(u).then((a) => this.props.set(u, a), () => {}))),
+      Promise.all(heads),
     ]);
+    models.forEach((m, i) => { if (hds[i]) m.head = this.prepareHead(hds[i]); });
     $('loading').classList.add('hidden');
     return models;
+  }
+
+  // Copia del modelo encogida toda menos la cabeza, centrada en la cabeza
+  prepareHead(hm) {
+    const P = hm.parts;
+    if (!P?.hips || !P.head) return null;
+    P.hips.scale.setScalar(0.001); P.head.scale.setScalar(1000);
+    hm.setFacing(1);
+    hm.root.updateMatrixWorld(true);
+    const c = P.head.getWorldPosition(new THREE.Vector3()).add(V(0, 0.12, 0));
+    const holder = new THREE.Group();
+    holder.add(hm.root);
+    hm.root.position.sub(c);
+    holder.visible = false;
+    holder.userData.model = hm;
+    return holder;
+  }
+
+  disposeModels() {
+    for (const m of this.models) { m.suit?.dispose(); m.head?.removeFromParent(); m.dispose(); }
   }
 
   setStage(id) {
@@ -504,7 +532,11 @@ class Game {
     if (stageId) this.setStage(stageId);
     this.models = models;
     this.scene.add(models[0].root, models[1].root);
-    for (const m of models) { m.suitOn = false; if (m.suit) { m.suit.root.visible = false; this.scene.add(m.suit.root); } }
+    for (const m of models) {
+      m.suitOn = false;
+      if (m.suit) { m.suit.root.visible = false; this.scene.add(m.suit.root); }
+      if (m.head) { m.head.visible = false; this.scene.add(m.head); }
+    }
     this.fighters = [new Fighter(def1, 0, this), new Fighter(def2, 1, this)];
     this.inputs = [new PlayerInput(0), new PlayerInput(1)];
     this.cpu = this.mode === 'cpu' ? new CPU(this.fighters[1], this.inputs[1], this, 0.6) : null;
@@ -517,10 +549,12 @@ class Game {
     this.show('fight');
     this.startRound();
     this.reported = false;
+    setAmbience(this.stageId);   // pájaros, grillos, viento… según el escenario
   }
 
   quitMatch() {
-    for (const m of this.models) { m.suit?.dispose(); m.dispose(); }
+    this.disposeModels();
+    setAmbience(null);
     this.models = []; this.fighters = []; this.projectiles = [];
     this.clearViews();
     this.effects.clear();
@@ -598,6 +632,7 @@ class Game {
     if (this.pendingChallenge) this.cancelMyChallenge();
     this.salas?.stop(); this.salas = null;
     this.net?.disconnect();
+    sfx.back();
     this.net = null;
     this.show('menu');
   }
@@ -950,7 +985,7 @@ class Game {
       if (consumeKey('Escape')) { if (!$('modal').classList.contains('hidden')) this.modalAnswer(false); else this.leaveLobby(); }
       if (this.incoming && consumeKey('Enter')) this.modalAnswer(true);
     } else if (this.screen === 'controls') {
-      if (consumeKey('Escape', 'Enter')) { this.paused = false; this.show(this.prevScreen === 'fight' ? 'fight' : 'menu'); }
+      if (consumeKey('Escape', 'Enter')) { this.paused = false; if (this.prevScreen !== 'fight') sfx.back(); this.show(this.prevScreen === 'fight' ? 'fight' : 'menu'); }
       if (this.prevScreen === 'fight' && consumeKey('KeyQ')) { this.paused = false; this.quitMatch(); this.show('menu'); }
     } else if (this.screen === 'fight') {
       // espectador: solo puede salirse a la sala
@@ -1078,6 +1113,9 @@ class Game {
     // Emi: pescado gigante de la fatality
     this.bigFish = makeFish({ body: '#6f8fa6', belly: '#e6edf1', fin: '#45606f' });
     this.bigFish.scale.setScalar(7); this.bigFish.visible = false;
+    // Ramces: la silla de barbero y la capa de su fatality
+    this.chair = makeBarberChair(); this.chair.visible = false; this.scene.add(this.chair);
+    this.cape = makeCape(); this.cape.visible = false; this.scene.add(this.cape);
     this.scene.add(this.bigFish);
     // Luz de los proyectiles: siempre existe (con brillo 0 si no hay). Si se agregaran y quitaran
     // luces, Three.js recompilaría todos los materiales y el juego se trabaría un instante.
@@ -1204,9 +1242,55 @@ class Game {
     this.syncLasers(dt);
     this.syncGadgets(dt);
     this.updateAnnouncer();
+    this.syncBarber(dt);
     this.updateHUD();
+    // poca vida: se oye el corazón del que juega en esta pantalla
+    const me = this.mode === 'watch' ? null : this.fighters[this.online ? this.online.side : 0];
+    if (me && this.phase === 'fight' && !this.paused && me.health > 0 && me.health < me.maxHealth * 0.25) {
+      this.beat = (this.beat ?? 0) - dt;
+      if (this.beat <= 0) { this.beat = 0.85; sfx.heartbeat(); }
+    }
     const exp = this.phase === 'fatality' ? 0.55 : 1;
     this.renderer.toneMappingExposure += (exp - this.renderer.toneMappingExposure) * Math.min(1, dt * 6);
+  }
+
+  // Fatality de Ramces: la silla sube del piso, le pone la capa y, tras el navajazo, la cabeza sale volando
+  syncBarber(dt) {
+    const fat = this.fatal, d = fat?.data;
+    const on = fat?.tipo === 'corte' && ['fatality', 'postFatality', 'matchEnd'].includes(this.phase) && this.loser && d?.x != null;
+    this.chair.visible = !!on; this.cape.visible = false;
+    for (const m of this.models) { m.headless = false; if (m.suit) m.suit.headless = false; }
+    if (!on) { for (const m of this.models) if (m.head) m.head.visible = false; return; }
+    const t = this.phase === 'fatality' ? this.phaseT : 999;
+    this.chair.position.set(d.x, -1.3 * (1 - Math.min(1, t / 20)), 0);
+    const lm = this.viewModel(this.loserSide), hd = this.models[this.loserSide]?.head;
+    if (!lm?.parts) return;
+    lm.root.updateMatrixWorld(true);
+    if (t >= 30) {
+      lm.parts.head.getWorldPosition(this.cape.position);
+      this.cape.visible = true;
+      this.cape.scale.setScalar(Math.max(0.001, Math.min(1, (t - 30) / 6)));
+    }
+    if (!d.cut) return;
+    lm.headless = true;
+    if (!hd) return;
+    const u = hd.userData;
+    if (!hd.visible) {   // sale del cuello
+      hd.visible = true;
+      lm.parts.head.getWorldPosition(hd.position).add(V(0, 0.15, 0.05));
+      hd.rotation.set(0, -Math.PI / 2, 0);
+      u.v = V(this.winner.facing * 2.3, 5.8, 0.6); u.spin = 9 * this.winner.facing; u.done = false;
+    }
+    if (dt > 0 && !u.done) {
+      u.v.y -= 13 * dt;
+      hd.position.addScaledVector(u.v, dt);
+      hd.rotation.z += u.spin * dt;
+      if (hd.position.y < 0.13) {   // rebota y rueda hasta quedarse quieta
+        hd.position.y = 0.13;
+        if (u.v.y < -1.5) { u.v.y *= -0.38; u.v.x *= 0.6; u.v.z *= 0.5; u.spin *= 0.5; sfx.thump(); }
+        else { u.v.set(0, 0, 0); u.done = true; }
+      }
+    }
   }
 
   handleEvent(e) {
@@ -1269,7 +1353,11 @@ class Game {
     m.jetOn = f.state === 'special' && f.spec?.tipo === 'jetpack' && ['up', 'dive'].includes(f.specData?.phase);
     // Emi: el pescado o la caguama en la mano antes de aventarlos
     const tipo = f.state === 'special' ? f.spec?.tipo : null;
-    m.prop = tipo === 'pescado' && f.t < 12 ? 'pez' : (tipo === 'kawama' && f.t < 14) || tipo === 'chela' ? 'caguama' : null;
+    // Ramces: la herramienta que está usando (en su fatality, la máquina y luego la navaja)
+    const corte = this.phase === 'fatality' && this.fatal?.tipo === 'corte' && this.winner === f ? this.phaseT : -1;
+    m.prop = tipo === 'pescado' && f.t < 12 ? 'pez' : (tipo === 'kawama' && f.t < 14) || tipo === 'chela' ? 'caguama'
+      : tipo === 'tijeras' && f.t < 12 ? 'tijeras' : tipo === 'rapado' ? 'maquina' : tipo === 'navaja' ? 'navaja' : tipo === 'talco' ? 'brocha'
+        : corte >= 40 && corte < 104 ? 'maquina' : corte >= 104 && corte < 176 ? 'navaja' : null;
     if (m.jetOn && animDt) this.effects.glow.emit({ pos: V(f.x - f.facing * 0.3, f.y + 0.75, -0.1), count: 3, speed: 4, dir: [0, -1, 0], spread: 0.25, color: '#fff3c0', colorEnd: '#ff6a00', life: 0.3, size: 0.28 });
     // el robot corre con chispas de propulsor en los pies
     if (robot && f.state === 'walk' && animDt) this.effects.glow.emit({ pos: V(f.rx - f.facing * 0.2, f.y + 0.12, 0), count: 2, speed: 2.5, dir: [-f.facing, 0.3, 0], spread: 0.4, color: '#ffffff', colorEnd: f.buffColor || '#4fd8ff', life: 0.25, size: 0.18 });
@@ -1309,6 +1397,10 @@ class Game {
       add(new THREE.ConeGeometry(0.075, 0.24, 14), new THREE.MeshStandardMaterial({ color: '#d1121b' }), (m) => { m.rotation.z = -Math.PI / 2; m.position.x = 0.43; });
       for (const s of [1, -1]) add(new THREE.BoxGeometry(0.16, 0.14, 0.012), new THREE.MeshStandardMaterial({ color: '#d1121b' }), (m) => { m.position.set(-0.25, 0.09 * s, 0); });
       add(new THREE.ConeGeometry(0.065, 0.45, 10), glow('#ffcf5a', 0.9), (m) => { m.rotation.z = Math.PI / 2; m.position.x = -0.54; });
+    } else if (p.kind === 'tijeras') {
+      // tijeras de Ramces girando
+      const sc = makeScissors(); sc.scale.setScalar(1.8);
+      tumble = new THREE.Group(); tumble.add(sc); g.add(tumble);
     } else if (p.kind === 'pescado' || p.kind === 'kawama') {
       // Emi: pescado o caguama dando vueltas en el aire
       const prop = p.kind === 'pescado' ? makeFish() : makeKawama();
@@ -1341,7 +1433,7 @@ class Game {
       spin = add(icy ? new THREE.OctahedronGeometry(0.27) : new THREE.SphereGeometry(0.24, 16, 12), glow(p.color));
     }
     // brillo que ilumina alrededor (lo pone la luz fija de syncProjectiles, ver buildViews)
-    const light = p.kind === 'pescado' || p.kind === 'kawama' ? null
+    const light = p.kind === 'pescado' || p.kind === 'kawama' || p.kind === 'tijeras' ? null
       : { color: p.kind === 'puno' || p.kind === 'cohete' ? '#ffb347' : p.color, power: p.kind === 'misil' ? 8 : p.kind === 'gas' ? 3 : p.kind === 'plasma' ? 32 : p.kind === 'camaro' ? 14 : 22 };
     this.scene.add(g);
     return { obj: g, spin, tumble, light, t: 0 };
@@ -1373,6 +1465,8 @@ class Game {
       } else if (p.kind === 'puno' || p.kind === 'misil' || p.kind === 'cohete') {
         glow.emit({ pos: back, count: 2 * n, speed: 1.5, dir: [-dir, 0, 0], spread: 0.5, color: '#fff3c0', colorEnd: '#ff5a00', life: 0.25, size: 0.25 });
         solid.emit({ pos: back, count: n, speed: 0.6, jitter: 0.1, color: '#777', colorEnd: '#222', life: 0.9, size: 0.22, grow: 2, drag: 2 });
+      } else if (p.kind === 'tijeras') {
+        if (Math.random() < 0.5) glow.emit({ pos: v.obj.position, count: 1, speed: 0.3, jitter: 0.05, color: '#ffffff', colorEnd: '#9fb3c8', life: 0.2, size: 0.09 });
       } else if (p.kind === 'pescado' || p.kind === 'kawama') {
         // gotitas de agua (pescado) o de cerveza (caguama)
         if (Math.random() < 0.6) solid.emit({ pos: v.obj.position, count: 1, speed: 0.4, jitter: 0.08, color: p.kind === 'kawama' ? '#ffd27a' : '#cdeeff', colorEnd: '#ffffff', life: 0.35, size: 0.07, gravity: 3 });

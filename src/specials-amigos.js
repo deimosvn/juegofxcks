@@ -4,7 +4,7 @@ import { SPECIALS, FATALITIES, SOLID_PROJECTILES, spawnProjectile, updateProject
 
 // =====================================================================
 //  ALAN (ingeniería aeroespacial) · GERA (boxeo) · JOSÉ CORTEZ (nalgas) · CONDE (fuerza, gigante)
-//  EMI (pescadero: pescados y caguamas)
+//  EMI (pescadero: pescados y caguamas) · RAMCES (barbero: tijeras, máquina, navaja y talco)
 //  Mismas reglas que specials.js: estado con datos simples, lo visual
 //  (satélite, turbina, resorte, cohete en la espalda…) se dibuja en main.js.
 // =====================================================================
@@ -14,6 +14,7 @@ const ARENA = 9;
 const clampT = THREE.MathUtils.clamp;
 const KAWAMA_G = 20, FISH_G = 14;     // gravedad de la caguama y de la lluvia de pescados
 SOLID_PROJECTILES.add('pescado');     // un pescado choca contra otros proyectiles
+SOLID_PROJECTILES.add('tijeras');     // y las tijeras de Ramces también
 
 Object.assign(SPECIALS, {
   // ---------------- Alan ----------------
@@ -359,7 +360,96 @@ Object.assign(SPECIALS, {
       return t >= 60;
     },
   },
+
+  // ---------------- Ramces (barbero) ----------------
+  // Avienta las tijeras girando: van, se regresan a su mano y pegan de ida y de vuelta
+  tijeras: {
+    total: 34, anim: 'lanzar', s: 12 / 34, a: 20 / 34,
+    canStart: (f, o, s, g) => !g.projectiles.some((p) => p.alive && p.owner === f.side && p.kind === 'tijeras'),
+    update(f, o, s, g, t) {
+      if (t === 3) sfx.snip();
+      if (t === 12) {
+        spawnProjectile(g, f, 'tijeras', s, { y: f.y + 1.35, vx: 16 * f.facing, ax: -21 * f.facing });
+        sfx.whoosh();
+      }
+      return t >= 34;
+    },
+  },
+
+  // Se lanza con la máquina por delante y le rapa la cabeza: varios toques seguidos (agachado se esquiva)
+  rapado: {
+    total: 0, anim: 'rapar',
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 1) sfx.clippers();
+      if (!d.got) {
+        if (t < 18) {
+          f.vx = 8 * f.facing * f.speed;
+          if (f.reaches(o, 1.0, 1.6)) { d.got = true; d.gotT = t; f.vx = 0; }
+        } else f.vx *= 0.7;
+        return t >= 30;
+      }
+      f.vx *= 0.6;
+      const k = t - d.gotT;
+      if (k % 5 === 0 && k <= 25) {
+        if (k % 10 === 0) sfx.clippers();
+        if (f.reaches(o, 1.3, 1.6)) {
+          const last = k === 25;
+          o.receive({ dmg: (s.danio ?? 15) / 6, height: 'high', hitstun: last ? 24 : 12, push: last ? 4.5 : 0.4, color: '#2a2018' }, f, V(o.x - f.facing * 0.1, o.y + o.height - 0.15, 0.3));
+          // pelos volando
+          g.effects.emitSolid({ pos: V(o.x, o.y + o.height - 0.05, 0.25), count: 12, speed: 2.6, jitter: 0.2, color: '#2a2018', colorEnd: '#2a2018', life: 0.9, size: 0.055, gravity: 6, drag: 0.8 });
+        }
+      }
+      return k >= 40;
+    },
+  },
+
+  // Navajazo de abajo hacia arriba: brinca y lo manda por los aires
+  navaja: {
+    total: 0, anim: 'agacharse',
+    start(f) { f.invuln = 8; },
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 4) { f.vy = 12; f.vx = 2.6 * f.facing; f.anim('navaja', 30, 0.05, 0.55); sfx.shink(); }
+      if (t === 7) slashArc(g, f, s.color);
+      if (t >= 4 && t <= 20 && !d.hit && f.reaches(o, 1.15, 1.4)) {
+        d.hit = true;
+        o.receive({ dmg: s.danio ?? 13, height: 'mid', launch: 12, push: 2.5, color: '#ffffff' }, f);
+        sfx.slash();
+      }
+      return d.landed && f.t - d.landT > 12;
+    },
+    onLand(f) { const d = f.specData; if (d.landed || f.t < 6) return; d.landed = true; d.landT = f.t; f.vx = 0; f.anim('agacharse'); },
+  },
+
+  // Brochazo de talco en la cara: nube blanca; si lo agarra de cerca, se queda mareado tosiendo
+  talco: {
+    total: 44, anim: 'capa', s: 12 / 44, a: 22 / 44,
+    update(f, o, s, g, t) {
+      if (t === 5) sfx.whoosh();
+      if (t === 12) {
+        const c = V(f.x + f.facing * 1.2, f.y + 1.35, 0.25);
+        sfx.puff();
+        g.effects.emitSolid({ pos: c, count: 70, speed: 2.2, jitter: 0.5, color: '#fbf8f2', colorEnd: '#d8d2c8', life: 1.2, size: 0.55, grow: 1.8, drag: 2.2, gravity: -0.3 });
+        const dx = (o.x - f.x) * f.facing;
+        if (dx > -0.3 && dx < 2.4 && o.y < 1.5 && !o.invulnerable()) {
+          const r = o.receive({ dmg: s.danio ?? 6, height: 'mid', hitstun: 16, push: 1.5, color: '#ffffff' }, f, c);
+          if (r === 'hit' && !o.dead && o.state === 'hitstun') { o.setState('stunned', 'mareado'); o.stunDur = 55; sfx.cough(); }
+        }
+      }
+      return t >= 44;
+    },
+  },
 });
+
+// Ramces: la navaja deja un medio círculo de luz
+function slashArc(g, f, color = '#ffffff') {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.88, 28, 1, -1.1, 2.4),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.position.set(f.x + f.facing * 0.35, f.y + 1.25, 0.3);
+  m.scale.x = f.facing;
+  g.effects.addTemp(m, 0.25, (dt, k) => { m.material.opacity = 0.9 * (1 - k); m.rotation.z += dt * 7 * f.facing; });
+}
 
 // Pescado que pega o cae al suelo: salpica
 function splashFish(p, g) {
@@ -374,6 +464,20 @@ export const BUTT_SPECIALS = new Set(['culazo', 'senton', 'twerk', 'gas']);
 // Proyectiles nuevos: cohete (acelera y explota) y gas (nube que se queda)
 export function updateProjectileExtra(p, g) {
   const owner = g.fighters[p.owner], opp = g.fighters[1 - p.owner];
+  // Tijeras de Ramces: frenan, se regresan y él las cacha. Pegan una vez de ida y otra de regreso.
+  if (p.kind === 'tijeras') {
+    p.t++;
+    p.vx += p.ax / 60; p.x += p.vx / 60;
+    const back = Math.sign(p.vx) === Math.sign(p.ax);
+    if (!(back ? p.h2 : p.h1) && !opp.invulnerable() && Math.abs(opp.x - p.x) < 0.45 && p.y > opp.y - 0.1 && p.y < opp.y + opp.height + 0.1) {
+      if (back) p.h2 = true; else p.h1 = true;
+      opp.receive({ dmg: back ? p.dmg * 0.6 : p.dmg, height: 'mid', hitstun: 18, push: 2.5, color: '#ffffff' }, owner, V(p.x, p.y, 0.3));
+      sfx.snip();
+    }
+    if (back && Math.abs(owner.x - p.x) < 0.5) { p.alive = false; sfx.snip(); }   // la cacha
+    if (Math.abs(p.x) > ARENA + 3 || p.t > 240) p.alive = false;
+    return;
+  }
   // Camaro de Alan: llega, atropella, frena derrapando junto a Alan, se queda un momento y se va al fondo
   if (p.kind === 'camaro') {
     p.t++;
@@ -541,5 +645,34 @@ Object.assign(FATALITIES, {
     }
     if (t === 125) w.anim('victoria');
     return t >= 200;
+  },
+
+  // Ramces: lo sienta en su silla de barbero, le pone la capa, le pasa la máquina… y luego la navaja.
+  // Le quedó demasiado al ras. La silla, la capa y la cabeza que vuela las dibuja main.js con data.
+  corte(t, w, l, fat, g, data) {
+    if (t === 1) {
+      data.x = clampT(l.x, -ARENA + 1.2, ARENA - 1.2);
+      l.x = data.x; l.vx = 0; l.y = 0;
+      l.anim('sentado', 30); w.anim('idle');
+      sfx.bell(); sfx.pump();
+    }
+    if (t < 26) w.x += (data.x - w.facing * 0.95 - w.x) * 0.18;   // se pone junto a la silla
+    if (t === 30) sfx.whoosh();                                   // la capa
+    if (t === 40) { w.anim('rapar'); sfx.clippers(); }
+    if (t > 40 && t < 100) {
+      if (t % 14 === 0) sfx.clippers();
+      if (t % 3 === 0) g.effects.emitSolid({ pos: V(data.x, 1.6, 0.18), count: 6, speed: 2.2, jitter: 0.15, color: '#241a12', colorEnd: '#241a12', life: 0.9, size: 0.05, gravity: 5, drag: 0.8 });
+    }
+    if (t === 104) { w.anim('afilar'); sfx.shink(); }
+    if (t === 116) sfx.shink();
+    if (t === 128) {
+      data.cut = true; data.cutT = t;
+      w.anim('navaja', 26, 0.05, 0.45);
+      sfx.slash(); sfx.boom();
+      g.effects.gore(V(data.x, 1.45, 0.2), 0.5); g.effects.addShake(0.45);
+    }
+    if (data.cut && t < 200 && t % 3 === 0) g.effects.bloodSplash(V(data.x, 1.3, 0.2), (t >> 2) % 2 ? 0.4 : -0.4, 0.55);
+    if (t === 176) w.anim('victoria');
+    return t >= 230;
   },
 });

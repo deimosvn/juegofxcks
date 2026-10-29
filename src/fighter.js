@@ -216,6 +216,8 @@ export class Fighter {
           this.vx = (fwd ? walkSpd : -walkSpd * 0.82) * this.facing;
           this.setIfNew('walk', fwd ? 'caminar' : 'caminar_atras');
           if (this.animKey !== (fwd ? 'caminar' : 'caminar_atras')) this.anim(fwd ? 'caminar' : 'caminar_atras');
+          // pasos (el robot suena a metal; el gigante ya retumba)
+          if (!this.giant && this.t % (this.titan ? 9 : 15) === 7) { if (this.titan) sfx.clankStep(); else sfx.step(); }
           break;
         }
         this.setIfNew('idle');
@@ -254,6 +256,7 @@ export class Fighter {
 
       case 'stunned':
         this.vx *= 0.8;
+        if (this.t % 40 === 8) sfx.tweet();   // pajaritos
         if (this.t >= this.stunDur) { this.setState('idle'); opp.combo = 0; this.comboTaken = 0; }
         break;
 
@@ -267,7 +270,7 @@ export class Fighter {
       case 'knockdown':
         this.vx *= 0.85;
         if (this.dead) { this.state = 'dead'; break; }
-        if (this.t >= 38) { this.setState('getup', 'levantarse', 24); this.invuln = 30; }
+        if (this.t >= 38) { this.setState('getup', 'levantarse', 24); this.invuln = 30; sfx.getup(); }
         break;
       case 'getup':
         if (this.t >= 24) { this.setState('idle'); opp.combo = 0; this.comboTaken = 0; }
@@ -281,6 +284,7 @@ export class Fighter {
 
       case 'pulled': case 'dizzy': case 'dead': case 'victory': case 'intro': case 'vanished': case 'scripted':
         this.vx *= 0.85;
+        if (this.state === 'dizzy' && this.t % 50 === 12) sfx.tweet();
         break;
     }
 
@@ -388,6 +392,8 @@ export class Fighter {
     g.effects.addShake(strong ? 0.22 : 0.09);
     g.hitstop = strong ? 6 : 3;
     sfx.hit(strong);
+    if (hit.name) { if (hit.name.startsWith('patada') || hit.name === 'barrida') sfx.thud(); else sfx.smack(); }   // puño o patada
+    if (attacker.combo >= 3) sfx.combo(attacker.combo);                                                            // el combo sube de tono
 
     if (this.state === 'frozen') this.unfreeze();
     if (this.state === 'special') this.spec && SPECIALS[this.spec.tipo]?.interrupt?.(this, g);

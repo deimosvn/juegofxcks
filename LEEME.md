@@ -100,7 +100,23 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | BAÑO DE CHELA | `← ← + K` | Agita la caguama y lo baña: varios chorros que lo empujan |
 | ☠ PESCADO GIGANTE | `→ ↓ → + K` | Un pescado gigante sale del suelo y se lo traga |
 
+### Ramces (barbero) — trae sus tijeras, máquina, navaja y brocha
+| Especial | Entrada | Qué hace |
+|---|---|---|
+| TIJERAS BUMERÁN | `← → + P` (o Especial solo) | Avienta las tijeras girando: van, se regresan a su mano y pegan de ida (10) y de vuelta (6) |
+| RAPADO EXPRESS | `→ → + P` (o Especial + adelante) | Se lanza con la máquina y le rapa la cabeza: 6 toques con pelos volando (agachado se esquiva) |
+| NAVAJAZO | `↓ → + P` (o Especial + abajo) | Tajo de navaja de abajo hacia arriba que lo manda por los aires |
+| BROCHAZO DE TALCO | `↓ ← + K` (o Especial + atrás) | Nube de talco en la cara: si lo agarra de cerca se queda mareado tosiendo |
+| ☠ CORTE AL RAS | `↓ ← → + P` | Sale su silla de barbero, lo sienta, le pone la capa y le pasa la máquina… afila la navaja y le quedó demasiado al ras: la cabeza sale volando |
+
 Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo).
+
+## 🔊 Sonidos
+Todo es sonido sintetizado (no hay archivos de audio). Además de golpes, especiales y el narrador:
+pasos (de metal con el traje de robot), puños y patadas suenan distinto, el combo sube de tono, campana al empezar
+cada round, tic-tac en los últimos 10 segundos, el público en el K.O. y al final, tambores en la fatality, fanfarria
+de victoria, corazón cuando te queda poca vida, pajaritos cuando alguien está mareado y ambiente en cada escenario
+(carretera y pájaros en SIX, viento en La Cabaña y el Templo, grillos de noche en Casa Chuy).
 
 ## Escenarios
 **SIX** (Cruz de Piedra, de día) · **LA CABAÑA** (de la Progreso, de día) · **CASA CHUY** (de noche, con el
@@ -175,8 +191,8 @@ Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de
 Tipos de especial: `proyectil`, `congelar`, `teletransporte`, `embestida`, `terremoto`, `gancho`,
 `uppercut_volador`, `poder`, `rayo`; robot: `puno_cohete`, `laser`, `misiles`, `armadura`; aeroespacial:
 `cohete`, `jetpack`, `orbital`, `turbina`, `camaro` (con `modelo`: el carro); robot con traje: `titan`, `plasma`, `megalaser`, `propulsores`, `descarga`; boxeo: `rafaga`, `resorte`, `contra`; nalgas: `culazo`, `senton`,
-`twerk`, `gas`; fuerza: `gigante`, `agarre`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
-`aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`. Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
+`twerk`, `gas`; fuerza: `gigante`, `agarre`; barbero: `tijeras`, `rapado`, `navaja`, `talco`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
+`aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`, `pescadote`, `corte`. Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
 
 Traje que se pone con un especial `titan` (como Diego): pasa el modelo por el convertidor con otro id (ej. `diego-robot`)
 y en el roster agrega `traje: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 }` y la lista
@@ -187,6 +203,9 @@ Objetos que salen en un especial (como el Camaro de Alan): abre el convertidor c
 `convertir.html?src=/assets/props/raw_camaro/archivo.fbx&prop=camaro&largo=4.8&rot=180` (`largo` en metros; con
 `rot` gíralo hasta que el frente vea hacia la línea roja) y guarda: queda en `assets/props/camaro.glb`. Pon los
 originales en `assets/props/raw_<algo>/` (no se suben a GitHub).
+
+Si el esqueleto automático corta la ropa entre el brazo y el cuerpo (salen pedacitos flotando cerca de las manos),
+pon `rig: { colgando: false }` en el roster (como Ramces); en el convertidor se prueba con `&colgando=0`.
 
 Si el modelo sale de lado, usa "Girar" en el convertidor (o `rotacionY` en el roster). `escala` cambia la estatura
 (Conde usa `0.94`). Lo mejor es que el modelo venga en **pose de T o de A**; si viene con los brazos pegados al cuerpo

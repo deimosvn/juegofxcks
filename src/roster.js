@@ -32,13 +32,15 @@
 //    nalgas: culazo, senton, twerk, gas
 //    fuerza: gigante (se hace gigante y súper fuerte), agarre (lo levanta y lo avienta)
 //    pescadero: pescado, kawama (caguama en parábola), lluvia_pescados, chela (chorro de cerveza)
+//    barbero: tijeras (bumerán), rapado (máquina, varios toques), navaja (tajo hacia arriba), talco (lo marea)
 //
 //  Tipos de fatality disponibles:
 //    explosion, incinerar, congelar_romper, rayo, aplastar, desintegrar,
-//    despegue, nocaut, nalgon, pisoton, pescadote
+//    despegue, nocaut, nalgon, pisoton, pescadote, corte (silla de barbero)
 //
 //  accesorios: ['guantes'] (guantes de box, color con colorGuantes), ['jetpack'],
-//    ['pescadero'] (pescado y caguama en la mano)
+//    ['pescadero'] (pescado y caguama en la mano), ['barbero'] (tijeras, máquina, navaja y brocha)
+//  rig: { colgando: false }  si el esqueleto automático corta la ropa entre brazo y cuerpo
 //
 //  Modelos: pasa el .fbx/.glb de Meshy o Tripo por herramientas/convertir.html
 //  (lo reduce, le pone esqueleto automático y crea el retrato).
@@ -194,6 +196,25 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'PESCADO GIGANTE', tipo: 'pescadote', input: '→ ↓ → + K', color: '#4fb8ff' },
     frase: '¡Pásele, pásele, que hoy hay paliza fresca!',
+  },
+  {
+    id: 'ramces',
+    nombre: 'RAMCES',
+    color: '#d62828',
+    modelo: 'assets/peleadores/ramces/modelo.glb',
+    retrato: 'assets/peleadores/ramces/retrato.png',
+    escala: 1, rotacionY: 0,
+    rig: { colgando: false },      // brazos un poco separados del mandil
+    accesorios: ['barbero'],        // tijeras, máquina, navaja y brocha en la mano
+    stats: { velocidad: 1.05, fuerza: 1, vida: 100 },
+    especiales: [
+      { nombre: 'TIJERAS BUMERÁN', tipo: 'tijeras', input: '← → + P', color: '#d9dee3', danio: 10 },
+      { nombre: 'RAPADO EXPRESS', tipo: 'rapado', input: '→ → + P', color: '#9fe8ff', danio: 15 },
+      { nombre: 'NAVAJAZO', tipo: 'navaja', input: '↓ → + P', color: '#e8eef2', danio: 13 },
+      { nombre: 'BROCHAZO DE TALCO', tipo: 'talco', input: '↓ ← + K', color: '#ffffff', danio: 6 },
+    ],
+    fatality: { nombre: 'CORTE AL RAS', tipo: 'corte', input: '↓ ← → + P', color: '#d62828' },
+    frase: '¡Siguiente! ¿Degradado o rapado?',
   },
   {
     id: 'fuego',

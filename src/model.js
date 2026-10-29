@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ANIMACIONES } from './roster.js';
-import { makeFish, makeKawama } from './props.js';
+import { makeFish, makeKawama, makeScissors, makeClippers, makeRazor, makeBrush } from './props.js';
 
 export const TARGET_HEIGHT = 1.85;
 const gltfLoader = new GLTFLoader();
@@ -195,7 +195,9 @@ function clusterSlice(bin, gap) {
   return out;
 }
 
-export function autoRig(obj, height) {
+// opts.colgando = false: brazos un poco separados del cuerpo (pose en A cerrada) aunque las manos queden
+// cerca: no usar el modo "brazos pegados a una chamarra" (corta la ropa entre brazo y cuerpo)
+export function autoRig(obj, height, opts = {}) {
   obj.updateMatrixWorld(true);
   const meshes = [];
   obj.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) meshes.push(o); });
@@ -290,7 +292,7 @@ export function autoRig(obj, height) {
   // para separar sin mezcla brazo y cuerpo en el paso 4: si se mezclan, se estiran como una sábana.
   const hangs = {};
   const followHand = (tip, side) => {
-    if (tip.x * side > 0.24 * H) return;   // pose en A o en T: la punta ya es la mano
+    if (opts.colgando === false || tip.x * side > 0.24 * H) return;   // pose en A o en T: la punta ya es la mano
     let legOuter = 0;
     const lb = binAt(crotchY - 0.1 * H);
     for (let k = 0; k < lb.length; k += 2) legOuter = Math.max(legOuter, lb[k] * side);
@@ -583,6 +585,22 @@ function extraPose(a, P, e, t) {
       P.torsoZ += Math.sin(t * 0.12) * 0.015;
       return true;
     }
+    // Ramces (barbero)
+    case 'rapar':      // la máquina por delante, a la altura de la cabeza del otro (zumba)
+      Object.assign(P, { torsoX: 0.18, torsoY: -0.3, shFX: -1.65, shFZ: -0.1, elFX: -0.35, shNX: -1.3, shNZ: 0.2, elNX: -0.9, hipNX: -0.5, knNX: 0.6, hipFX: 0.3, knFX: 0.4, hipsY: 0.9 });
+      P.elFX += Math.sin(t * 2.6) * 0.05; P.shFX += Math.sin(t * 1.9) * 0.04; return true;
+    case 'navaja':     // tajo de abajo hacia arriba
+      Object.assign(P, { torsoY: -0.4, shNX: -0.6, elNX: -1.4, hipNX: -0.5, knNX: 0.6, hipFX: 0.3, knFX: 0.3 });
+      P.shFX = lerp(-0.3, -3.0, e); P.elFX = lerp(-1.5, -0.15, e); P.torsoX = lerp(0.35, -0.3, e); P.hipsY = lerp(0.82, 0.98, e); return true;
+    case 'afilar':     // afila la navaja: la mano va y viene
+      Object.assign(P, { torsoX: 0.1, torsoY: -0.2, shNX: -1.2, shNZ: 0.15, elNX: -0.7, shFX: -1.25 + Math.sin(t * 0.55) * 0.3, elFX: -1.1, hipsY: 0.93 }); return true;
+    case 'capa':       // brochazo de lado a lado
+      Object.assign(P, { torsoX: 0.12, shNX: -0.7, elNX: -1.2, hipNX: -0.45, knNX: 0.55, hipFX: 0.3, knFX: 0.4, hipsY: 0.9 });
+      P.torsoY = lerp(0.6, -0.65, e); P.shFX = lerp(-0.7, -1.6, e); P.shFZ = lerp(-0.7, 0.25, e); P.elFX = lerp(-1.2, -0.25, e); return true;
+    case 'sentado':    // en la silla del barbero, de frente a la cámara
+      Object.assign(P, { spin: -Math.PI / 2, hipsY: 0.66, torsoX: -0.1, torsoY: 0, torsoZ: 0, headX: 0.05, hipNX: -1.5, knNX: 1.5, hipFX: -1.5, knFX: 1.5,
+        shNX: -0.3, shNZ: 0.28, elNX: -0.95, shFX: -0.3, shFZ: -0.28, elFX: -0.95 });
+      return true;
     // Diego con el traje de robot
     case 'canon':      // apunta el brazo como cañón; al disparar el retroceso lo echa un poco atrás
       Object.assign(P, { torsoY: -0.5, torsoX: lerp(0.08, -0.12, e), headX: -0.05, shFX: -1.55, shFZ: -0.05, elFX: -0.05, shNX: -1.2, shNZ: 0.25, elNX: -1.5,
@@ -721,7 +739,8 @@ const FALLBACK = {
   senton_suelo: ['agacharse'], twerk: ['agacharse'], gas: ['agacharse'],
   flexion: ['carga', 'especial'], agarrar: ['puno'], levantar: ['victoria'], pisar_arriba: ['patada'], pisar: ['patada'],
   silbido: ['victoria', 'especial'], chela: ['lanzar', 'especial'],
-  canon: ['puno_fuerte', 'especial'], jojo: ['victoria', 'especial'], propulsor: ['embestida', 'especial'], descarga: ['carga', 'especial'],
+  canon: ['puno_fuerte', 'especial'], jojo: ['victoria', 'especial'],
+  rapar: ['puno', 'especial'], navaja: ['gancho_arriba', 'puno'], afilar: ['especial'], capa: ['lanzar', 'especial'], sentado: ['idle'], propulsor: ['embestida', 'especial'], descarga: ['carga', 'especial'],
 };
 const LOOPING = new Set(['idle', 'caminar', 'caminar_atras', 'agacharse', 'bloqueo', 'bloqueo_bajo', 'mareado', 'victoria', 'carga']);
 const BURNT = new THREE.Color('#0d0806');
@@ -745,7 +764,8 @@ export class FighterModel {
     this.detachArm = false;
     this.buttScale = 1;      // nalgas infladas (José)
     this.jetOn = false;      // fuego del jetpack (Alan)
-    this.prop = null;        // lo que trae en la mano: 'pez' | 'caguama' (Emi)
+    this.prop = null;        // lo que trae en la mano: 'pez' | 'caguama' (Emi) · 'tijeras' | 'maquina' | 'navaja' | 'brocha' (Ramces)
+    this.headless = false;   // fatality de Ramces: ya no tiene cabeza
     this.acc = {};           // accesorios: guantes, jetpack, pescado, caguama
     this.pose = { ...GUARD };
   }
@@ -780,6 +800,15 @@ export class FighterModel {
       const bottle = makeKawama(); bottle.rotation.x = Math.PI; bottle.position.copy(hand).add(new THREE.Vector3(0, 0.04, 0));
       for (const o of [fish, bottle]) { o.visible = false; P.elF.add(o); }
       this.acc.pez = fish; this.acc.caguama = bottle;
+    }
+    // Ramces: tijeras, máquina, navaja y brocha en la mano; solo se ve la que está usando
+    if (list.includes('barbero')) {
+      const hand = R ? R.handF : new THREE.Vector3(0, -0.29, 0);
+      const tools = { tijeras: makeScissors(), maquina: makeClippers(), navaja: makeRazor(), brocha: makeBrush() };
+      for (const [k, o] of Object.entries(tools)) {
+        o.rotation.z = -Math.PI / 2; o.position.copy(hand).add(new THREE.Vector3(0, -0.06, 0));
+        o.visible = false; P.elF.add(o); this.acc[k] = o;
+      }
     }
     if (list.includes('jetpack')) {
       const metal = new THREE.MeshStandardMaterial({ color: '#c9d1d9', metalness: 0.85, roughness: 0.3 });
@@ -827,7 +856,7 @@ export class FighterModel {
       fm.setupLoaded(obj, def, altTint);
       await fm.setupClips(obj, asset.animations, def);
     } else {
-      const r = autoRig(obj, TARGET_HEIGHT * (def.escala || 1));
+      const r = autoRig(obj, TARGET_HEIGHT * (def.escala || 1), def.rig);
       fm.parts = r.parts; fm.rig = r.rig; fm.eyes = r.eyes; fm.rigDebug = r.debug;
       fm.pivot.add(r.group);
       fm.cloneMaterials(r.group, altTint);
@@ -960,7 +989,8 @@ export class FighterModel {
     P.elF.scale.setScalar(this.detachArm ? 0.001 : 1);   // ¡el antebrazo salió volando!
     if (P.butt) P.butt.scale.setScalar(this.buttScale);
     for (const fl of this.acc.flames || []) { fl.visible = this.jetOn; if (this.jetOn) fl.scale.y = 0.8 + Math.random() * 0.5; }
-    for (const k of ['pez', 'caguama']) if (this.acc[k]) this.acc[k].visible = this.prop === k;
+    for (const k of ['pez', 'caguama', 'tijeras', 'maquina', 'navaja', 'brocha']) if (this.acc[k]) this.acc[k].visible = this.prop === k;
+    P.head.scale.setScalar(this.headless ? 0.001 : 1);
     this.pivot.rotation.y = q.spin;
     this.pivot.rotation.x = q.tilt || 0;
     this.pivot.scale.y = this.squash;
