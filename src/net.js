@@ -48,8 +48,9 @@ async function resolveDatabaseURL(cfg) {
   ];
   for (const url of candidates) {
     try {
-      const r = await fetch(`${url}/.json?shallow=true`, { cache: 'no-store' });
-      if (r.status !== 404) return url;      // 200 o 401 (reglas) = la base existe
+      // el ranking se puede leer sin sesión: si la base existe responde 200 (o 401 si faltan las reglas)
+      const r = await fetch(`${url}/kombate/ranking.json?shallow=true`, { cache: 'no-store' });
+      if (r.status !== 404) return url;
     } catch { /* probar la siguiente */ }
   }
   throw new NetError('sin-base', 'Falta crear la Realtime Database en Firebase (Compilación → Realtime Database → Crear base de datos).');

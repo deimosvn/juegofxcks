@@ -94,6 +94,7 @@ export class CPU {
         () => this.plan({ keys: { down: true }, frames: 2 }, this.tap({ down: true, punch: true })),
         () => this.plan({ keys: { [back]: true }, frames: 12 }),
         () => { const i = findSpec('uppercut_volador', 'gancho', 'poder', 'terremoto', 'armadura'); if (i >= 0 && Math.random() < L) useSpec(i); else this.plan(this.tap({ punch: true })); },
+        () => { const i = findSpec('agarre', 'gigante', 'rafaga', 'contra'); if (i >= 0 && Math.random() < L) useSpec(i); else this.plan(this.tap({ kick: true })); },
       ];
       combos[Math.random() * combos.length | 0]();
     }

@@ -158,6 +158,24 @@ function distToSegment(px, py, pz, a, b) {
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
+// ¿Es piel el color de la textura en (u, v)? Sirve para separar la mano del pantalón cuando se tocan.
+function skinSampler(map) {
+  const img = map?.image;
+  if (!img || !img.width || typeof document === 'undefined') return null;
+  const S = 256, c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  try { ctx.drawImage(img, 0, 0, S, S); } catch { return null; }
+  const px = ctx.getImageData(0, 0, S, S).data;
+  return (u, v) => {
+    const x = Math.min(S - 1, Math.max(0, Math.floor((u - Math.floor(u)) * S)));
+    const vv = v - Math.floor(v);
+    const y = Math.min(S - 1, Math.max(0, Math.floor((map.flipY ? 1 - vv : vv) * S)));
+    const i = (y * S + x) * 4, r = px[i], g = px[i + 1], b = px[i + 2];
+    return r > 95 && g > 40 && b > 20 && r > g && r > b && r - Math.min(g, b) > 15;
+  };
+}
+
 // Agrupa los puntos (x,z intercalados) de una rebanada por cercanía en x
 function clusterSlice(bin, gap) {
   const n = bin.length / 2;
@@ -264,6 +282,37 @@ export function autoRig(obj, height) {
     if (x < minX) { minX = x; tipN.set(x, y, z); }
     if (x > maxX) { maxX = x; tipF.set(x, y, z); }
   }
+  // Brazos pegados al cuerpo (chamarras abultadas): lo más ancho puede ser la manga y no la mano.
+  // Se sigue el brazo hacia abajo mientras siga por fuera de la pierna. Como el brazo toca el
+  // cuerpo, en cada rebanada se guarda dónde empieza el brazo (su borde exterior menos su grueso)
+  // para separar sin mezcla brazo y cuerpo en el paso 4: si se mezclan, se estiran como una sábana.
+  const hangs = {};
+  const followHand = (tip, side) => {
+    if (tip.x * side > 0.24 * H) return;   // pose en A o en T: la punta ya es la mano
+    let legOuter = 0;
+    const lb = binAt(crotchY - 0.1 * H);
+    for (let k = 0; k < lb.length; k += 2) legOuter = Math.max(legOuter, lb[k] * side);
+    const outer = new Float32Array(NB);
+    for (let b = 0; b < NB; b++) for (let k = 0; k < bins[b].length; k += 2) outer[b] = Math.max(outer[b], bins[b][k] * side);
+    const handTop = tip.y;
+    let cx = tip.x * side;
+    for (let b = Math.floor(tip.y / H * NB) - 1; b > 0.25 * NB; b--) {
+      const bin = bins[b];
+      let sx = 0, sz = 0, n = 0;
+      for (let k = 0; k < bin.length; k += 2) {
+        const ax = bin[k] * side;
+        if (ax > legOuter + 0.01 * H && Math.abs(ax - cx) < 0.05 * H) { sx += ax; sz += bin[k + 1]; n++; }
+      }
+      if (n < 3) break;
+      cx = sx / n;
+      tip.set(side * cx, (b + 0.5) / NB * H, sz / n);
+    }
+    // grueso: el de la mano abajo (se mide en la punta, y nunca entra en la pierna) y el de la manga arriba
+    const handDiam = clamp(2.2 * (outer[Math.min(NB - 1, Math.floor(tip.y / H * NB))] - tip.x * side), 0.03 * H, 0.06 * H);
+    const inner = outer.map((o, b) => ((b + 0.5) / NB * H < handTop ? Math.max(o - handDiam, legOuter + 0.005 * H) : o - 0.075 * H));
+    hangs[side] = { inner, tipY: tip.y, handTop, legOuter };
+  };
+  followHand(tipN, -1); followHand(tipF, 1);
   // Hombros: la articulación queda un poco por debajo de lo más alto del hombro,
   // justo encima del costado del torso.
   const armAxis = (tip, side) => {
@@ -366,16 +415,31 @@ export function autoRig(obj, height) {
   segs.forEach((sg) => { sg.i = boneList.indexOf(sg.b); });
   const sideTol = 0.004 * H, legTop = crotchY + 0.08 * H;
   const sc = new Float32Array(segs.length);
-  for (const g of geos) {
+  geos.forEach((g, gi) => {
     const a = g.attributes.position.array, n = a.length / 3;
     const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+    const zones = new Int8Array(n);
+    const isSkin = (hangs[-1] || hangs[1]) && g.attributes.uv ? skinSampler([].concat(meshes[gi].material)[0]?.map) : null;
     for (let v = 0; v < n; v++) {
       const x = a[v * 3], y = a[v * 3 + 1], z = a[v * 3 + 2];
       const lateral = Math.abs(x) > torsoHalf + 0.012 * H && y > crotchY + 0.05 * H;
+      // brazo colgando: 1 = es brazo, -1 = es cuerpo (sin mezcla)
+      const hs = x < 0 ? -1 : 1, hg = hangs[hs];
+      let zone = 0;
+      if (hg && y < (hs < 0 ? SN : SF).y - 0.04 * H) {
+        // debajo de la mano ya nada es brazo
+        zone = y > hg.tipY - 0.02 * H && x * hs >= hg.inner[Math.min(NB - 1, Math.max(0, Math.floor(y / H * NB)))] ? 1 : -1;
+        // donde la mano toca el muslo decide el color: la piel es de la mano
+        if (zone === -1 && isSkin && y > hg.tipY - 0.02 * H && y < hg.handTop && x * hs > hg.legOuter - 0.02 * H &&
+          isSkin(g.attributes.uv.getX(v), g.attributes.uv.getY(v))) zone = 1;
+      }
+      zones[v] = zone;
       let best = Infinity;
       for (let k = 0; k < segs.length; k++) {
         const sg = segs[k];
         if ((sg.side && x * sg.side < -sideTol) || (sg.leg && y > legTop)) { sc[k] = Infinity; continue; }
+        const ownArm = sg.arm && sg.side === hs;
+        if ((zone === 1 && !ownArm) || (zone === -1 && ownArm)) { sc[k] = Infinity; continue; }
         // las nalgas: solo la parte de atrás, entre los muslos y la cintura
         if (sg.butt && (z > zPelvis - 0.01 * H || y < crotchY - 0.05 * H || y > torsoY + 0.01 * H)) { sc[k] = Infinity; continue; }
         let d = distToSegment(x, y, z, sg.a, sg.e) / sg.r;
@@ -399,7 +463,32 @@ export function autoRig(obj, height) {
     }
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
-  }
+    // brazo colgando: los triángulos que unen brazo y cuerpo se estirarían como una sábana al mover
+    // el brazo. Cada uno se queda entero del lado que tiene más vértices (con vértices duplicados):
+    // quieto se ve igual y al moverse se abre un hueco limpio (por eso se pintan las dos caras).
+    if (g.index && (hangs[-1] || hangs[1])) {
+      const ix = Array.from(g.index.array), dup = [];   // pares [vértice, donador de pesos]
+      for (let t = 0; t < ix.length; t += 3) {
+        const zs = [zones[ix[t]], zones[ix[t + 1]], zones[ix[t + 2]]];
+        if (Math.max(...zs) !== 1 || Math.min(...zs) !== -1) continue;
+        const keepZone = zs.filter((z) => z === 1).length >= 2 ? 1 : -1;
+        const donor = ix[t + zs.indexOf(keepZone)];
+        for (let j = 0; j < 3; j++) if (zs[j] !== keepZone) { dup.push(ix[t + j], donor); ix[t + j] = n + dup.length / 2 - 1; }
+      }
+      for (const [name, attr] of Object.entries(g.attributes)) {
+        const k = attr.itemSize, arr = new attr.array.constructor((n + dup.length / 2) * k);
+        arr.set(attr.array);
+        const skin = name === 'skinIndex' || name === 'skinWeight';
+        for (let d = 0; d < dup.length; d += 2) {
+          const src = skin ? dup[d + 1] : dup[d];
+          for (let c = 0; c < k; c++) arr[(n + d / 2) * k + c] = attr.array[src * k + c];
+        }
+        g.setAttribute(name, new THREE.BufferAttribute(arr, k, attr.normalized));
+      }
+      g.setIndex(ix);
+    }
+  });
+  if (hangs[-1] || hangs[1]) for (const m of meshes) for (const mat of [].concat(m.material)) mat.side = THREE.DoubleSide;
 
   // 5) Mallas con piel
   const group = new THREE.Group();
@@ -418,7 +507,7 @@ export function autoRig(obj, height) {
     group, skinned,
     parts: { hips, torso, head, shN, elN, shF, elF, hipN, knN, hipF, knF, butt },
     rig: {
-      pelvisY, spread: 0.13, abdN, abdF, H,
+      pelvisY, spread: 0.13, abdN, abdF, H, hang: !!(hangs[-1] || hangs[1]),
       // dónde van los accesorios (guantes en las manos, jetpack en la espalda)
       handN: new THREE.Vector3(0, -EN.distanceTo(tipN) * 0.8, 0), handF: new THREE.Vector3(0, -EF.distanceTo(tipF) * 0.8, 0),
       back: new THREE.Vector3(0, (neckY - torsoY) * 0.55, chestBack - zTorso - 0.02 * H),
@@ -482,6 +571,18 @@ function extraPose(a, P, e, t) {
     }
     case 'gas':
       Object.assign(P, { spin: Math.PI, torsoX: lerp(0.3, 1.15, e), torsoY: 0, headX: -0.6, shNX: -0.7, elNX: -0.2, shFX: -0.7, elFX: -0.2, hipNX: -0.4, knNX: 0.45, hipFX: -0.3, knFX: 0.4, hipsY: 0.92 }); return true;
+    // Conde
+    case 'flexion':   // pose de fisicoculturista temblando de fuerza mientras crece
+      Object.assign(P, { torsoX: 0.3, torsoY: 0, headX: -0.15, shNX: -0.5, shNZ: 0.55, elNX: -1.7, shFX: -0.5, shFZ: -0.55, elFX: -1.7, hipNX: -0.45, knNX: 0.7, hipFX: 0.25, knFX: 0.55, hipsY: 0.86 });
+      P.torsoZ = Math.sin(t * 1.7) * 0.025; return true;
+    case 'agarrar':
+      Object.assign(P, { torsoX: 0.25, torsoY: 0, shNX: -1.45, shNZ: 0.25, elNX: -0.35, shFX: -1.45, shFZ: -0.25, elFX: -0.35, hipNX: -0.6, knNX: 0.8, hipsY: 0.88 }); return true;
+    case 'levantar':
+      Object.assign(P, { torsoX: -0.2, torsoY: 0, headX: -0.3, shNX: -2.9, shNZ: 0.2, elNX: -0.5, shFX: -2.9, shFZ: -0.2, elFX: -0.5, hipNX: -0.35, knNX: 0.45, hipFX: 0.3, knFX: 0.4, hipsY: 0.92 }); return true;
+    case 'pisar_arriba':
+      Object.assign(P, { torsoX: -0.25, torsoY: 0, shNX: -0.4, shNZ: -0.6, elNX: -0.6, shFX: -0.4, shFZ: 0.6, elFX: -0.6, hipNX: -1.7, knNX: 1.5, hipFX: 0.1, knFX: 0.15, hipsY: 0.97 }); return true;
+    case 'pisar':
+      Object.assign(P, { torsoX: 0.3, torsoY: 0, shNX: -0.6, shNZ: -0.3, elNX: -1.2, shFX: -0.6, shFZ: 0.3, elFX: -1.2, hipNX: -0.75, knNX: 0.15, hipFX: 0.45, knFX: 0.5, hipsY: 0.84 }); return true;
   }
   return false;
 }
@@ -492,12 +593,24 @@ export function proceduralPose(a) {
   const crouch = () => Object.assign(P, { hipsY: 0.56, hipNX: -1.45, knNX: 2.2, hipFX: -0.95, knFX: 2.1, torsoX: 0.35 });
   if (extraPose(a, P, e, t)) return P;
   switch (a.key) {
-    case 'idle': P.hipsY += Math.sin(t * 0.08) * 0.015; P.elNX += Math.sin(t * 0.08) * 0.05; break;
+    case 'idle': {
+      // guardia de peleador: rebota suave sobre las puntas, respira y mueve un poco los puños
+      const b = Math.sin(t * 0.123), b2 = Math.sin(t * 0.123 - 0.6);
+      P.hipsY += b * 0.016;
+      P.knNX -= b * 0.09; P.knFX -= b * 0.08; P.hipNX += b * 0.05; P.hipFX += b * 0.04;
+      P.torsoX += b2 * 0.025; P.torsoY += Math.sin(t * 0.045) * 0.05; P.headX -= b2 * 0.03;
+      P.shNX += b2 * 0.05; P.elNX += Math.sin(t * 0.123 + 1.2) * 0.07;
+      P.shFX += b2 * 0.04; P.elFX += Math.sin(t * 0.123 + 2.0) * 0.06;
+      break;
+    }
     case 'caminar': case 'caminar_atras': {
-      const s = Math.sin(t * 0.22 * (a.key === 'caminar' ? 1 : -1));
+      const ph = t * 0.22 * (a.key === 'caminar' ? 1 : -1), s = Math.sin(ph), c = Math.cos(ph);
       P.hipNX = -0.3 + s * 0.45; P.knNX = 0.4 + Math.max(0, -s) * 0.8;
       P.hipFX = -0.1 - s * 0.45; P.knFX = 0.4 + Math.max(0, s) * 0.8;
-      P.hipsY = 0.94 + Math.abs(s) * 0.02; break;
+      P.hipsY = 0.93 + Math.abs(c) * 0.025;      // arriba al cruzar las piernas, abajo al apoyar
+      P.torsoY += s * 0.07; P.torsoZ = c * 0.025;  // los hombros giran y el cuerpo se balancea
+      P.shNX -= s * 0.08; P.shFX += s * 0.08;      // los puños acompañan el paso
+      break;
     }
     case 'agacharse': crouch(); break;
     case 'saltar': Object.assign(P, { hipNX: -1.3, knNX: 2.1, hipFX: -0.9, knFX: 1.9, shNX: -1.4, shFX: -1.2 }); P.spin = a.flip ? -p * Math.PI * 2 : 0; break;
@@ -576,6 +689,7 @@ const FALLBACK = {
   jet_sube: ['saltar'], jet_cae: ['saltar'], turbina: ['especial'], orbital: ['especial'], rafaga: ['puno'],
   resorte: ['puno_fuerte', 'puno'], contra: ['bloqueo'], culazo: ['especial'], senton: ['saltar'],
   senton_suelo: ['agacharse'], twerk: ['agacharse'], gas: ['agacharse'],
+  flexion: ['carga', 'especial'], agarrar: ['puno'], levantar: ['victoria'], pisar_arriba: ['patada'], pisar: ['patada'],
 };
 const LOOPING = new Set(['idle', 'caminar', 'caminar_atras', 'agacharse', 'bloqueo', 'bloqueo_bajo', 'mareado', 'victoria', 'carga']);
 const BURNT = new THREE.Color('#0d0806');
@@ -841,7 +955,8 @@ export class FighterModel {
 
   setFacing(facing) {
     this.root.rotation.y = Math.PI / 2;
-    this.root.scale.z = facing;   // espejo, como en los juegos 2D
+    const k = this.size ?? 1;   // tamaño (Conde gigante)
+    this.root.scale.set(k, k, facing * k);   // z: espejo, como en los juegos 2D
   }
 
   setIced(on) {

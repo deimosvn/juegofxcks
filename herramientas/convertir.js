@@ -186,6 +186,8 @@ async function portrait() {
   const m = await FighterModel.fromAsset({ scene: processed, animations: [] }, { escala: 1, rotacionY: 0 });
   m.root.rotation.y = 0.25;
   m.apply({ key: 'retrato', t: 0, total: 0 }, 1);
+  // brazos pegados al cuerpo: en la foto se quedan tal como vienen (si se mueven se abre la costura)
+  if (m.rig?.hang) for (const b of ['shN', 'shF', 'elN', 'elF']) m.parts[b].rotation.set(0, 0, 0);
   sc.add(m.root);
   const top = TARGET_HEIGHT * 1.02, h = 0.95;
   const cam = new THREE.OrthographicCamera(-h * 0.375, h * 0.375, top, top - h, 0.1, 20);
@@ -222,7 +224,7 @@ if (qs.get('id')) $('fid').value = qs.get('id');
 if (qs.get('src')) { log('Cargando ' + qs.get('src') + '…'); loadUrl(qs.get('src')).then(show).catch((err) => log('ERROR: ' + err.message)); }
 // Colorea cada vértice según el hueso que lo mueve (para revisar el auto-rig)
 function showWeights() {
-  const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ff8800', '#8800ff', '#0088ff', '#88ff00', '#ff0088'].map((c) => new THREE.Color(c));
+  const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ff8800', '#8800ff', '#0088ff', '#88ff00', '#ff0088', '#ffffff'].map((c) => new THREE.Color(c));
   preview.pivot.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     const g = o.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;

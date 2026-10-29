@@ -12,6 +12,10 @@ import { sfx } from './audio.js';
 export const GRAVITY = 32;
 export const ARENA_HALF = 9;
 const BODY_H = 1.85, CROUCH_H = 1.1;
+// Conde gigante: +35% de tamaño. En su fatality crece hasta 3.2 veces y luego regresa.
+export const GIANT = 0.35;
+const ramp = (x) => Math.min(1, Math.max(0, x));
+export const stompScale = (t) => 1 + 2.2 * ramp((t - 8) / 36) * (1 - ramp((t - 150) / 30));
 
 // Golpes normales. Tiempos en frames (60 por segundo).
 //  hy = altura del golpe; height: high (falla si te agachas), mid, low (hay que bloquear abajo), overhead (desde el aire)
@@ -74,9 +78,21 @@ export class Fighter {
   get spec() { return this.specIdx >= 0 ? this.specials[this.specIdx] : null; }
   get grounded() { return this.y <= 0.0001 && this.vy <= 0; }
   get dead() { return this.health <= 0; }
-  get height() { return (this.state === 'crouch' || this.state === 'crouchBlock' || (this.state === 'attack' && this.move?.crouching)) ? CROUCH_H : (this.state === 'knockdown' || this.state === 'dead') ? 0.45 : BODY_H; }
+  get giant() { return this.buffKind === 'giant' && this.buffTimer > 0; }
+  // Tamaño: sale del estado (buff, especial, fatality), así que es igual en las dos computadoras
+  get sizeScale() {
+    const g = this.game;
+    if (g.phase === 'fatality' && g.fatal?.tipo === 'pisoton' && g.winner === this) return stompScale(g.phaseT);
+    if (this.giant) return 1 + GIANT * ramp(this.buffTimer / 24);   // al final se encoge
+    if (this.state === 'special' && this.spec?.tipo === 'gigante') return 1 + GIANT * ramp((this.t - 12) / 26);
+    return 1;
+  }
+  get height() {
+    const h = (this.state === 'crouch' || this.state === 'crouchBlock' || (this.state === 'attack' && this.move?.crouching)) ? CROUCH_H : (this.state === 'knockdown' || this.state === 'dead') ? 0.45 : BODY_H;
+    return h * this.sizeScale;
+  }
   get chest() { return new THREE.Vector3(this.x, this.y + this.height * 0.72, 0.15); }
-  get hand() { return new THREE.Vector3(this.x + this.facing * 0.75, this.y + 1.4, 0.2); }
+  get hand() { const k = this.sizeScale; return new THREE.Vector3(this.x + this.facing * 0.75 * k, this.y + 1.4 * k, 0.2); }
 
   setState(state, animKey = null, total = 0, s = 0, a = 0) {
     this.state = state; this.t = 0;
@@ -139,12 +155,16 @@ export class Fighter {
     if (this.invuln > 0) this.invuln--;
     if (this.buffTimer > 0) {
       this.buffTimer--;
-      if (this.t % 3 === 0) g.effects.aura(new THREE.Vector3(this.x, this.y + 0.9, 0), this.buffColor || '#ff2a2a', 2);
+      if (this.t % 3 === 0) g.effects.aura(new THREE.Vector3(this.x, this.y + 0.9 * this.sizeScale, 0), this.buffColor || '#ff2a2a', 2);
+      // gigante: cada paso retumba
+      if (this.giant && this.state === 'walk' && this.t % 16 === 8) {
+        g.effects.dust(new THREE.Vector3(this.x, 0.05, 0), 10); g.effects.addShake(0.05); sfx.thump();
+      }
       if (this.buffTimer === 0) this.buffKind = null;
     }
     const wasAir = this.y > 0 || this.vy > 0;
     const fwd = inp.forward(this.facing), back = inp.back(this.facing);
-    const walkSpd = 3.3 * this.speed;
+    const walkSpd = 3.3 * this.speed * (this.giant ? 0.85 : 1);
 
     switch (this.state) {
       case 'idle': case 'walk': case 'crouch': case 'block': case 'crouchBlock': {
@@ -288,11 +308,12 @@ export class Fighter {
     }
   }
 
-  // ¿El golpe alcanza al rival?
+  // ¿El golpe alcanza al rival? (un gigante llega más lejos)
   reaches(opp, range, hy) {
+    const k = this.sizeScale;
     const dx = (opp.x - this.x) * this.facing;
-    if (dx < -0.25 || dx > range + 0.35) return false;
-    const top = opp.y + opp.height, hitY = this.y + hy;
+    if (dx < -0.25 || dx > range * k + 0.35) return false;
+    const top = opp.y + opp.height, hitY = this.y + hy * Math.min(k, 1.15);
     return hitY >= opp.y - 0.2 && hitY <= top + 0.15;
   }
 
@@ -315,6 +336,7 @@ export class Fighter {
     pos = pos || this.chest;
     const dir = attacker.x < this.x ? 1 : -1;
     const armored = this.buffKind === 'armor' && this.buffTimer > 0;
+    const giant = this.giant;
     // guardia de contragolpe (Gera)
     if (this.state === 'special' && !hit.isCounter && SPECIALS[this.spec?.tipo]?.counter) {
       const r = SPECIALS[this.spec.tipo].counter(this, attacker, hit, g);
@@ -322,19 +344,19 @@ export class Fighter {
     }
 
     if (!hit.unblockable && this.isBlocking(hit.height) && this.grounded) {
-      if (!armored) this.health = Math.max(1, this.health - hit.dmg * 0.12 * attacker.power);
+      if (!armored && !giant) this.health = Math.max(1, this.health - hit.dmg * 0.12 * attacker.power);
       this.wasCrouchBlock = this.state === 'crouchBlock' || (this.state === 'blockstun' && this.wasCrouchBlock);
       this.setState('blockstun', this.wasCrouchBlock ? 'bloqueo_bajo' : 'bloqueo');
       this.stunDur = 10;
       this.vx = dir * (hit.push ?? 3) * 0.9;
       g.effects.blockSpark(pos); sfx.block();
-      g.hitstop = 3;
+      g.hitstop = 2;
       return 'blocked';
     }
 
     const scale = Math.max(0.35, 1 - this.comboTaken * 0.09);
-    const buff = attacker.buffKind === 'dmg' && attacker.buffTimer > 0 ? 1.5 : 1;
-    const dmg = hit.dmg * attacker.power * buff * scale * (armored ? 0.5 : 1);
+    const buff = attacker.buffTimer > 0 ? (attacker.buffKind === 'dmg' ? 1.5 : attacker.buffKind === 'giant' ? 1.6 : 1) : 1;
+    const dmg = hit.dmg * attacker.power * buff * scale * (armored ? 0.5 : giant ? 0.6 : 1);
     this.health = Math.max(0, this.health - dmg);
     this.comboTaken++;
     attacker.combo++;
@@ -347,12 +369,19 @@ export class Fighter {
       g.effects.bloodSplash(pos, dir, strong ? 1.3 : 0.7);
     }
     g.effects.addShake(strong ? 0.22 : 0.09);
-    g.hitstop = strong ? 7 : 4;
+    g.hitstop = strong ? 6 : 3;
     sfx.hit(strong);
 
     if (this.state === 'frozen') this.unfreeze();
     if (this.state === 'special') this.spec && SPECIALS[this.spec.tipo]?.interrupt?.(this, g);
 
+    // gigante: nada lo tumba, lo congela ni lo jala; apenas se tambalea
+    if (giant && this.health > 0) {
+      this.setState('hitstun', 'golpeado');
+      this.stunDur = Math.round((hit.hitstun ?? 16) * 0.4);
+      this.vx = dir * (hit.push ?? 3) * 0.3;
+      return 'hit';
+    }
     if (this.health > 0 && hit.freeze) { this.freeze(hit.freeze); return 'hit'; }
     if (this.health > 0 && hit.pull) { this.setState('pulled', 'golpeado'); return 'hit'; }
 

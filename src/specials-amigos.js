@@ -3,7 +3,7 @@ import { sfx } from './audio.js';
 import { SPECIALS, FATALITIES, spawnProjectile, updateProjectile } from './specials.js';
 
 // =====================================================================
-//  ALAN (ingeniería aeroespacial) · GERA (boxeo) · JOSÉ CORTEZ (nalgas)
+//  ALAN (ingeniería aeroespacial) · GERA (boxeo) · JOSÉ CORTEZ (nalgas) · CONDE (fuerza, gigante)
 //  Mismas reglas que specials.js: estado con datos simples, lo visual
 //  (satélite, turbina, resorte, cohete en la espalda…) se dibuja en main.js.
 // =====================================================================
@@ -229,6 +229,57 @@ Object.assign(SPECIALS, {
       return t >= 50;
     },
   },
+
+  // ---------------- Conde ----------------
+  // Se pone súper fuerte y se hace gigante (fighter.js: +60% de daño, recibe 40% menos,
+  // nada lo tumba y llega más lejos). Crece mientras hace fuerza y al final se encoge.
+  gigante: {
+    total: 56, anim: 'flexion',
+    canStart: (f) => f.buffTimer <= 0,
+    update(f, o, s, g, t) {
+      if (t === 4) sfx.grow();
+      if (t % 2 === 0) g.effects.aura(V(f.x, f.y + 0.9 * f.sizeScale), s.color, 5);
+      if (t >= 12 && t < 38 && t % 6 === 0) { g.effects.addShake(0.06); g.effects.dust(V(f.x, 0.05), 6); }
+      if (t === 38) {
+        g.effects.burst(f.chest, s.color, 120, 8); g.effects.ring(f.x, s.color, 4); g.effects.ring(f.x, '#ffffff', 2.6, 0.3);
+        g.effects.dust(V(f.x, 0.1), 40); g.effects.addShake(0.45); sfx.boom();
+        f.buffTimer = 60 * (s.duracion ?? 7); f.buffKind = 'giant'; f.buffColor = s.color;
+      }
+      return t >= 56;
+    },
+  },
+
+  // Lo agarra, lo levanta sobre la cabeza y lo avienta. Un agarre: no se puede bloquear.
+  agarre: {
+    total: 0, anim: 'agarrar',
+    start(f) { f.anim('agarrar', 12, 0.5, 1); sfx.whoosh(); },
+    update(f, o, s, g, t) {
+      const d = f.specData;
+      if (t === 6) {
+        if (!o.invulnerable() && o.y < 0.3 && o.state !== 'scripted' && f.reaches(o, 0.75, 1.1)) {
+          d.grab = true; o.setState('scripted', 'golpeado'); o.vx = 0; o.vy = 0;
+          f.anim('levantar'); sfx.slap(); g.effects.addShake(0.1);
+        } else d.miss = true;
+      }
+      if (d.miss) { f.vx *= 0.7; return t >= 30; }
+      if (d.grab && !d.thrown) {
+        const k = Math.min(1, Math.max(0, (t - 6) / 22)), sz = f.sizeScale;
+        o.x = f.x + f.facing * (0.55 - 0.45 * k) * sz; o.y = (0.15 + 1.9 * k) * sz; o.vx = 0; o.vy = 0;
+        if (t === 34) {
+          d.thrown = true; f.anim('lanzar', 20, 0.1, 0.5);
+          o.x = f.x + f.facing * 0.4 * sz;
+          o.receive({ dmg: s.danio ?? 15, height: 'mid', unblockable: true, launch: 6, push: 9, color: s.color }, f, V(o.x, o.y + 0.5, 0.3));
+          g.effects.addShake(0.3); sfx.whoosh();
+        }
+      }
+      return !!d.thrown && t >= 52;
+    },
+    // si a Conde le pegan mientras lo carga, lo suelta
+    interrupt(f, g) {
+      const o = g.other(f);
+      if (f.specData?.grab && !f.specData.thrown && o.state === 'scripted') { o.setState('airHit', 'caer'); o.vy = 2; }
+    },
+  },
 });
 
 // Especiales en los que José saca las nalgas (la vista las infla)
@@ -314,5 +365,20 @@ Object.assign(FATALITIES, {
     }
     if (t === 100) w.anim('victoria');
     return t >= 170;
+  },
+
+  // Conde: se hace gigantesco (fighter.js stompScale) y aplasta al rival de un pisotón
+  pisoton(t, w, l, fat, g, data) {
+    if (t === 1) { w.x = l.x - w.facing * 1.6; w.anim('flexion', 44); l.anim('mareado'); sfx.grow(); }
+    if (t > 8 && t < 44 && t % 5 === 0) { g.effects.addShake(0.12); g.effects.dust(V(w.x, 0.05), 10); }
+    if (t === 44) { g.effects.ring(w.x, fat.color || '#ff7a1a', 5); g.effects.addShake(0.4); sfx.boom(); }
+    if (t === 60) w.anim('pisar_arriba');
+    if (t === 92) {
+      w.anim('pisar'); l.squash = 0.08;
+      g.effects.gore(V(l.x, 0.2), 1.4); g.effects.dust(V(l.x, 0.1), 90); g.effects.ring(l.x, '#ffffff', 5, 0.4);
+      g.effects.addShake(0.9); sfx.boom(); sfx.thump();
+    }
+    if (t === 186) w.anim('victoria');
+    return t >= 230;
   },
 });

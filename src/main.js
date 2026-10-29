@@ -147,6 +147,9 @@ class Game {
   }
 
   simStep() {
+    // dónde estaba todo antes de este paso: la vista interpola entre los dos (movimiento fluido)
+    for (const f of this.fighters) { f.px = f.x; f.py = f.y; }
+    this.projPrev = new Map(this.projectiles.map((p) => [p.id, [p.x, p.y]]));
     this.frame++;
     this.phaseT++;
     this.fxCount.clear();
@@ -183,7 +186,7 @@ class Game {
 
   separate(a, b, mid) {
     const dx = b.x - a.x;
-    if (Math.abs(a.y - b.y) < 1.3 && Math.abs(dx) < 0.7 && !a.hidden && !b.hidden && a.state !== 'scripted') {
+    if (Math.abs(a.y - b.y) < 1.3 && Math.abs(dx) < 0.7 && !a.hidden && !b.hidden && a.state !== 'scripted' && b.state !== 'scripted') {
       const push = (0.7 - Math.abs(dx)) / 2 * (dx >= 0 ? 1 : -1) || 0.35;
       a.x -= push; b.x += push;
       for (const f of [a, b]) if (Math.abs(f.x) > ARENA_HALF) { const o = Math.sign(f.x) * (Math.abs(f.x) - ARENA_HALF); f.x -= o; this.other(f).x -= o; }
@@ -195,11 +198,11 @@ class Game {
     if (this.phase === 'fight') {
       this.phase = 'ko'; this.phaseT = 0; this.koKind = 'ko';
       this.winnerSide = attacker.side; this.loserSide = victim.side;
-      if (!this.session) this.slowmo = 50;
+      if (!this.session) this.slowmo = 36;
       sfx.boom();
     } else if (this.phase === 'finish') {
       this.phase = 'finishBlow'; this.phaseT = 0;
-      if (!this.session) this.slowmo = 40;
+      if (!this.session) this.slowmo = 30;
     }
   }
 
@@ -242,7 +245,7 @@ class Game {
         }
         break;
       case 'ko':
-        if (this.phaseT > 80 && ['dead', 'knockdown'].includes(this.loser.state)) {
+        if (this.phaseT > 70 && ['dead', 'knockdown'].includes(this.loser.state)) {
           this.winner.wins++;
           if (this.winner.wins >= need) {
             this.loser.setState('dizzy', 'mareado');
@@ -257,7 +260,7 @@ class Game {
         }
         break;
       case 'roundOver':
-        if (this.phaseT > 150) this.startRound();
+        if (this.phaseT > 120) this.startRound();
         break;
       case 'finish':
         if (this.phaseT > 60 * 6) { this.loser.setState('airHit', 'caer'); this.loser.vy = 3; this.phase = 'finishBlow'; this.phaseT = 0; }
@@ -855,6 +858,8 @@ class Game {
       while (this.acc >= STEP && n < 5) { this.simStep(); this.acc -= STEP; n++; }
       if (n >= 5) this.acc = 0;
     }
+    // cuánto falta para el siguiente paso de la simulación (0..1): la vista dibuja entre pasos
+    this.alpha = Math.min(1, Math.max(0, this.acc / STEP));
     this.stage.update(now / 1000);
     this.syncView(dt);
     this.effects.update(dt);
@@ -1039,8 +1044,9 @@ class Game {
     for (const e of this.events) this.handleEvent(e);
     this.events.length = 0;
     if (!this.fighters.length) return;
-    const animDt = Math.min(0.25, (this.animFrames - this.viewAnimFrames) * STEP);
-    this.viewAnimFrames = this.animFrames;
+    // las poses avanzan con el tiempo real (no a saltos de 60 fps); se congelan en el impacto y en pausa
+    const frozen = this.hitstop > 0 || this.paused || this.screen !== 'fight';
+    const animDt = frozen ? 0 : Math.min(0.1, dt) * (!this.session && this.slowmo > 0 ? 0.35 : 1);
     if (this.round !== this.viewRound) { this.viewRound = this.round; this.effects.clear(); }
     this.fighters.forEach((f, i) => this.syncFighter(f, this.models[i], animDt));
     this.syncProjectiles(dt);
@@ -1075,7 +1081,18 @@ class Game {
   }
 
   syncFighter(f, m, animDt) {
-    m.root.position.set(f.x, f.y, 0);
+    // posición entre el paso anterior y el actual (sin saltos aunque la pantalla vaya a 120/144 Hz)
+    const a = this.alpha ?? 1;
+    const jump = f.px === undefined || Math.abs(f.x - f.px) > 1.5 || Math.abs(f.y - f.py) > 1.5;
+    f.rx = jump ? f.x : f.px + (f.x - f.px) * a;
+    const ry = jump ? f.y : f.py + (f.y - f.py) * a;
+    // congelado del impacto: el que recibe el golpe vibra (se siente el golpe, no una pausa)
+    let shake = 0;
+    if (this.hitstop > 0 && f.t === 0 && ['hitstun', 'blockstun', 'airHit', 'pulled'].includes(f.state)) {
+      shake = Math.sin(performance.now() * 0.12) * 0.012 * (this.hitstop + 1);
+    }
+    m.root.position.set(f.rx + shake, ry, 0);
+    m.size = f.sizeScale;
     m.setFacing(f.facing);
     m.root.visible = !f.hidden;
     m.burn = f.burn; m.squash = f.squash;
@@ -1088,7 +1105,9 @@ class Game {
     m.buttScale += (butt - m.buttScale) * Math.min(1, (animDt || 0) * 10);
     m.jetOn = f.state === 'special' && f.spec?.tipo === 'jetpack' && ['up', 'dive'].includes(f.specData?.phase);
     if (m.jetOn && animDt) this.effects.glow.emit({ pos: V(f.x - f.facing * 0.3, f.y + 0.75, -0.1), count: 3, speed: 4, dir: [0, -1, 0], spread: 0.25, color: '#fff3c0', colorEnd: '#ff6a00', life: 0.3, size: 0.28 });
-    m.apply(f.animState(), animDt);
+    const st = f.animState();
+    if (this.hitstop <= 0 && !this.paused) st.t += a;   // tiempo de animación continuo entre pasos
+    m.apply(st, animDt);
     let tint = null, amount = 0.6;
     if (f.iced) tint = '#3aa8ff';
     else if (f.buffTimer > 0 && f.buffKind === 'armor') { tint = f.buffColor; amount = 0.28 + 0.16 * Math.sin(performance.now() / 90); }
@@ -1144,7 +1163,8 @@ class Game {
       let v = this.projViews.get(p.id);
       if (!v) { v = this.makeProjectileView(p); this.projViews.set(p.id, v); }
       v.t += dt;
-      v.obj.position.set(p.x, p.y, 0.1);
+      const pv = this.projPrev?.get(p.id), a = this.alpha ?? 1;
+      v.obj.position.set(pv ? pv[0] + (p.x - pv[0]) * a : p.x, pv ? pv[1] + (p.y - pv[1]) * a : p.y, 0.1);
       const dir = Math.sign(p.vx) || 1;
       if (p.kind === 'misil') v.obj.rotation.z = Math.atan2(p.vy, p.vx);
       else v.obj.rotation.y = dir > 0 ? 0 : Math.PI;
@@ -1270,14 +1290,18 @@ class Game {
     let target, look;
     if (this.screen === 'fight' && this.fighters.length) {
       const [a, b] = this.fighters;
-      const mid = (a.x + b.x) / 2, dist = Math.abs(a.x - b.x);
+      const ax = a.rx ?? a.x, bx = b.rx ?? b.x;
+      const mid = (ax + bx) / 2, dist = Math.abs(ax - bx);
       const maxY = Math.max(a.y, b.y);
       const narrow = THREE.MathUtils.clamp(1.75 / cam.aspect, 1, 2.2);
       let z = THREE.MathUtils.clamp(4.6 + dist * 0.62, 6.2, 11.5) * narrow;
       let focusX = mid;
       if (this.phase === 'fatality' || this.phase === 'finish') { z = THREE.MathUtils.clamp(3.6 + dist * 0.6, 4.8, 9) * narrow; focusX = this.loser ? mid * 0.6 + this.loser.x * 0.4 : mid; }
-      target = new THREE.Vector3(focusX, 1.7 + maxY * 0.25, z);
-      look = new THREE.Vector3(focusX, 1.15 + maxY * 0.25, 0);
+      // un gigante (Conde) no debe salirse del cuadro
+      const big = Math.max(a.sizeScale, b.sizeScale) - 1;
+      z += big * 3.0 * narrow;
+      target = new THREE.Vector3(focusX, 1.7 + maxY * 0.25 + big * 0.9, z);
+      look = new THREE.Vector3(focusX, 1.15 + maxY * 0.25 + big * 0.8, 0);
       // fatalidades que mandan al rival por los aires: la cámara lo sigue hacia arriba
       if (this.phase === 'fatality' && ['despegue', 'nocaut'].includes(this.fatal?.tipo) && this.loser) {
         const ly = Math.min(this.loser.y, 10);

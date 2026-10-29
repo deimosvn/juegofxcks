@@ -76,6 +76,7 @@ export const sfx = {
   ding: () => { tone(1320, 1.2, 'sine', 0.35); tone(1980, 0.9, 'sine', 0.12); },
   slap: () => { noise(0.09, 2500, 1.2, 1.0, 'bandpass'); tone(120, 0.12, 'sine', 0.5, 70); },
   thump: () => { tone(70, 0.18, 'sine', 0.8, 45); noise(0.06, 300, 1, 0.4); },
+  grow: () => { tone(55, 1.1, 'sawtooth', 0.3, 190); tone(82, 1.1, 'square', 0.1, 260); noise(1.0, 180, 1, 0.45, 'lowpass', 700); },
   fart: () => { tone(95, 0.7, 'sawtooth', 0.22, 60); tone(110, 0.65, 'square', 0.08, 70); noise(0.7, 260, 3, 0.25, 'bandpass', 160); },
 };
 

@@ -26,10 +26,11 @@
 //    aeroespacial: cohete, jetpack, orbital, turbina
 //    boxeo: rafaga, resorte, contra (y uppercut_volador)
 //    nalgas: culazo, senton, twerk, gas
+//    fuerza: gigante (se hace gigante y súper fuerte), agarre (lo levanta y lo avienta)
 //
 //  Tipos de fatality disponibles:
 //    explosion, incinerar, congelar_romper, rayo, aplastar, desintegrar,
-//    despegue, nocaut, nalgon
+//    despegue, nocaut, nalgon, pisoton
 //
 //  accesorios: ['guantes'] (guantes de box, color con colorGuantes) y/o ['jetpack']
 //
@@ -141,6 +142,23 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'APLASTE NALGÓN', tipo: 'nalgon', input: '↓ ↓ ↓ + K', color: '#ff7ab8' },
     frase: 'Con estas nalgas no se juega.',
+  },
+  {
+    id: 'conde',
+    nombre: 'CONDE',
+    color: '#b3261e',
+    modelo: 'assets/peleadores/conde/modelo.glb',
+    retrato: 'assets/peleadores/conde/retrato.png',
+    escala: 0.94, rotacionY: 0,   // un poco más chaparro que los demás
+    stats: { velocidad: 0.95, fuerza: 1.1, vida: 105 },
+    especiales: [
+      { nombre: 'SÚPER GIGANTE', tipo: 'gigante', input: '↓ ↓ + P', color: '#ff7a1a', duracion: 7 },
+      { nombre: 'EMBESTIDA DE TORO', tipo: 'embestida', input: '← → + K', color: '#ff3b2f', danio: 12 },
+      { nombre: 'PISOTÓN SÍSMICO', tipo: 'terremoto', input: '↓ ↓ + K', color: '#c98b4a', danio: 13 },
+      { nombre: 'LANZAMIENTO TITÁNICO', tipo: 'agarre', input: '← → + P', color: '#ffd23a', danio: 15 },
+    ],
+    fatality: { nombre: 'PISOTÓN GIGANTE', tipo: 'pisoton', input: '↓ → ↓ + K', color: '#ff7a1a' },
+    frase: 'Ahora sí, ¿quién es el chaparro?',
   },
   {
     id: 'fuego',

@@ -61,6 +61,15 @@ ESC = pausa con la lista de movimientos y fatalidades. En línea se puede usar c
 | GAS NUCLEAR | `← ← + P` | Nube verde que avanza y lastima mientras estés dentro (no se bloquea) |
 | ☠ APLASTE NALGÓN | `↓ ↓ ↓ + K` | Las nalgas le crecen y aplasta al rival desde el cielo |
 
+### Conde (fuerza) — un poco más chaparro que los demás… hasta que se hace gigante
+| Especial | Entrada | Qué hace |
+|---|---|---|
+| SÚPER GIGANTE | `↓ ↓ + P` (o el botón Especial solo) | Hace fuerza y crece 35% durante 7 s: pega 60% más, recibe 40% menos, nada lo tumba y llega más lejos. Cada paso retumba |
+| EMBESTIDA DE TORO | `← → + K` | Se lanza con el hombro y tumba al rival |
+| PISOTÓN SÍSMICO | `↓ ↓ + K` | Brinca y cae con todo: onda en el suelo (bloquear agachado) |
+| LANZAMIENTO TITÁNICO | `← → + P` | Agarre de cerca: lo levanta sobre la cabeza y lo avienta. No se puede bloquear |
+| ☠ PISOTÓN GIGANTE | `↓ → ↓ + K` | Se hace gigantesco y lo aplasta de un pisotón |
+
 Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo).
 
 ## Escenarios
@@ -116,7 +125,9 @@ Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de
 Tipos de especial: `proyectil`, `congelar`, `teletransporte`, `embestida`, `terremoto`, `gancho`,
 `uppercut_volador`, `poder`, `rayo`; robot: `puno_cohete`, `laser`, `misiles`, `armadura`; aeroespacial:
 `cohete`, `jetpack`, `orbital`, `turbina`; boxeo: `rafaga`, `resorte`, `contra`; nalgas: `culazo`, `senton`,
-`twerk`, `gas`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`, `aplastar`, `desintegrar`,
-`despegue`, `nocaut`, `nalgon`. Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
+`twerk`, `gas`; fuerza: `gigante`, `agarre`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
+`aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`. Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
 
-Si el modelo sale de lado, usa "Girar" en el convertidor (o `rotacionY` en el roster).
+Si el modelo sale de lado, usa "Girar" en el convertidor (o `rotacionY` en el roster). `escala` cambia la estatura
+(Conde usa `0.94`). Lo mejor es que el modelo venga en **pose de T o de A**; si viene con los brazos pegados al cuerpo
+(como Conde) también funciona: el esqueleto automático separa brazo y cuerpo sin estirar la ropa.
