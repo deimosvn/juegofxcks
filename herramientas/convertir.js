@@ -1,5 +1,5 @@
 // Herramienta local: optimiza un modelo de Meshy/Tripo y lo guarda en assets/peleadores/<id>/
-// Solo funciona con `node server.js` (usa la ruta /__guardar del servidor local).
+// Solo funciona con `node servidor.js` (usa la ruta /__guardar del servidor local).
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';

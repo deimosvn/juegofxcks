@@ -6,7 +6,7 @@ Juego de pelea 3D para el navegador (Three.js) con los compas: contra la CPU, 1 
 ## Jugar en tu computadora
 
 ```
-node server.js
+node servidor.js
 ```
 
 Abre http://localhost:8080 (no funciona abriendo el `.html` con doble clic; necesita el servidor).
@@ -107,7 +107,7 @@ Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de
 ## ➕ Agregar a otro compa
 
 1. **Modelo** de Meshy o Tripo: cuerpo completo, de pie, de frente, en **pose de T o de A**; exporta **FBX** o **GLB** con texturas.
-2. Con `node server.js` corriendo abre **http://localhost:8080/herramientas/convertir.html**, sube el archivo,
+2. Con `node servidor.js` corriendo abre **http://localhost:8080/herramientas/convertir.html**, sube el archivo,
    escribe el **id** (ej. `juan`), revisa las animaciones y dale **GUARDAR EN EL JUEGO** → crea
    `assets/peleadores/<id>/modelo.glb` (~3 MB, con esqueleto automático) y `retrato.png`.
 3. En [`src/roster.js`](src/roster.js) copia el bloque de otro peleador y cambia `id`, `nombre`, `color`,

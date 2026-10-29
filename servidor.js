@@ -1,4 +1,4 @@
-// Servidor local sin dependencias: node server.js  ->  http://localhost:8080
+// Servidor local sin dependencias: node servidor.js  ->  http://localhost:8080
 // - Sirve el juego
 // - /api/config igual que en Vercel (lee las variables de .env)
 // - /__guardar: solo local, lo usa herramientas/convertir.html para guardar modelos

@@ -3,7 +3,7 @@
   "private": true,
   "description": "Juego de pelea 3D con tus amigos, en línea con rollback",
   "scripts": {
-    "start": "node server.js"
+    "start": "node servidor.js"
   },
   "engines": {
     "node": ">=18"
