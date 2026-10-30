@@ -37,9 +37,39 @@ cualquiera de las dos teclas o un mando.
 - Imagen “de cine”: brillo (bloom) en focos, rayos y chispas, viñeta, grano fino, estelas en los golpes fuertes,
   onda de choque en cada impacto, polvo al saltar y caer, y orillas rojas cuando te queda poca vida.
 
+## 🤖 Dificultad de la CPU
+Al elegir peleador contra la CPU, en el panel de la CPU: **◀ NORMAL ▶** (con el mouse, tocándolo o con **Q / E**).
+También está en OPCIONES. Sale en el VS y arriba de la barra de vida de la CPU.
+
+| | Reacciona en | Se cubre | Castiga tus golpes fallados | Combos |
+|---|---|---|---|---|
+| **FÁCIL** | ~0.4 s | casi nunca | casi nunca | golpes sueltos |
+| **NORMAL** | ~0.27 s | a veces | a veces | a veces |
+| **DIFÍCIL** | ~0.17 s | seguido, y adivina arriba/abajo | casi siempre | sí, y te remata en el aire |
+| **PESADILLA** | ~0.1 s | casi siempre | siempre | siempre; te recibe cuando saltas |
+
+La CPU ve lo que haces unos cuadros tarde (como una persona): en fácil le da tiempo de pegarte aunque la veas venir,
+en pesadilla reacciona casi al instante. Está en [`src/ai.js`](src/ai.js) (`DIFICULTADES`).
+
+## 🥋 Cómo se mueven
+Las animaciones las calcula el juego en [`src/anim.js`](src/anim.js) con cinemática inversa: cada golpe dice a dónde
+va la mano o el pie y el esqueleto se acomoda solo.
+- **Guardia de pelea** con el pecho hacia la cámara (se ven las caras): mano y pie de adelante del lado lejano, la mano
+  y la pierna de poder del lado de la cámara. Cada quien rebota a su ritmo (el boxeador más, los pesados menos).
+- **Los pies se quedan plantados**: no resbalan al caminar (el paso sigue a lo que avanzas), se mantienen planos en el
+  piso, y si te empujan das un paso para no caerte.
+- **Golpes con peso**: preparan, giran la cadera y se estiran hasta donde está el rival (no lo atraviesan). El recto
+  entra con un paso, la patada recoge la rodilla y suelta la pierna con el pie estirado, la giratoria da la vuelta
+  completa, la barrida apoya la mano en el piso.
+- **Reacciones según dónde te pegan**: en la cara la cabeza se va para atrás, en el cuerpo te doblas, abajo se te
+  dobla la pierna. Al salir volando das vueltas en el aire, rebotas en el piso y te levantas sentándote y parándote.
+- Saltos con **marometa** sobre su centro, aterrizaje que se hunde y rebota, y cuatro poses de victoria
+  (`victoria` en el roster: 0 puño arriba, 1 brazos en V, 2 bíceps, 3 brazos cruzados).
+
 ## ⚙️ Opciones
-Volumen de **música** y de **efectos**, **narrador** sí/no, **gráficos** (ALTA, MEDIA para celulares, BAJA para
-celulares viejos: sin efectos ni sombras), **sangre** sí/no y **vibración** (celular). Se guardan en el navegador.
+**Dificultad de la CPU**, volumen de **música** y de **efectos**, **narrador** sí/no, **gráficos** (ALTA, MEDIA para
+celulares, BAJA para celulares viejos: sin efectos ni sombras), **sangre** sí/no y **vibración** (celular). Se guardan
+en el navegador.
 
 ## 📱 En el celular (y como app)
 - **Joystick** en la mitad izquierda (aparece donde pones el dedo): moverse, saltar (arriba) y agacharse (abajo).
@@ -214,7 +244,8 @@ Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de
    `assets/peleadores/<id>/modelo.glb` (~3 MB, con esqueleto automático) y `retrato.png`.
 3. En [`src/roster.js`](src/roster.js) copia el bloque de otro peleador y cambia `id`, `nombre`, `color`,
    `modelo`, `retrato`, `especiales`, `fatality`, `frase` e `intro` (su pose en la presentación de la
-   ronda 1: una animación de especial como `jojo`, `flexion`, `carga`, `rafaga`…).
+   ronda 1: una animación de especial como `jojo`, `flexion`, `carga`, `rafaga`…). Opcional: `victoria` (0–3, su
+   pose al ganar; si no, sale una según su estilo).
 
 Tipos de especial: `proyectil`, `congelar`, `teletransporte`, `embestida`, `terremoto`, `gancho`,
 `uppercut_volador`, `poder`, `rayo`; robot: `puno_cohete`, `laser`, `misiles`, `armadura`; aeroespacial:
@@ -231,6 +262,9 @@ Objetos que salen en un especial (como el Camaro de Alan): abre el convertidor c
 `convertir.html?src=/assets/props/raw_camaro/archivo.fbx&prop=camaro&largo=4.8&rot=180` (`largo` en metros; con
 `rot` gíralo hasta que el frente vea hacia la línea roja) y guarda: queda en `assets/props/camaro.glb`. Pon los
 originales en `assets/props/raw_<algo>/` (no se suben a GitHub).
+
+El esqueleto automático también pone huesos en los pies (para que queden planos en el piso) y la ropa suelta —faldas,
+mandiles— sigue a la cadera y no al muslo, así no se estira como sábana cuando patea.
 
 Si el esqueleto automático corta la ropa entre el brazo y el cuerpo (salen pedacitos flotando cerca de las manos),
 pon `rig: { colgando: false }` en el roster (como Ramces); en el convertidor se prueba con `&colgando=0`.

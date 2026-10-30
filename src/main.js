@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { JUEGO, PELEADORES } from './roster.js';
 import { FighterModel, loadAsset } from './model.js';
+import { styleOf } from './anim.js';
 import { Fighter, ARENA_HALF } from './fighter.js';
 import { PlayerInput, consumeKey, clearKeyEdges, decodeMask } from './input.js';
 import { Effects } from './effects.js';
 import { createStage, STAGES, camaro as buildCamaro } from './stages.js';
-import { CPU } from './ai.js';
+import { CPU, DIFICULTADES, NIVELES } from './ai.js';
 import { FATALITIES, impactProjectile, SOLID_PROJECTILES } from './specials.js';
 import { updateProjectileExtra as updateProjectile, BUTT_SPECIALS } from './specials-amigos.js';
 import { sfx, announce, unlockAudio, setVoice, setVolumes, audioState, setAmbience } from './audio.js';
@@ -30,8 +31,8 @@ const STAGE_MUSIC = { six: 'six', cabana: 'cabana', casachuy: 'casachuy', templo
 // Pose de presentación en la ronda 1 (solo se ve: la pelea no cambia). Con `intro` en roster.js cada quien
 // tiene la suya; si la pose usa una herramienta, la saca.
 const INTRO_PROP = { chela: 'caguama', afilar: 'navaja', rapar: 'maquina' };
-// Golpes fuertes que dejan estela: hueso del brazo o de la pierna que pega
-const TRAILS = { puno_fuerte: 'elF', gancho_arriba: 'elF', patada: 'knN', patada_giratoria: 'knF', patada_aerea: 'knN', barrida: 'knN' };
+// Golpes fuertes que dejan estela: hueso del brazo o de la pierna que pega (N = mano/pierna de atrás, F = la de adelante)
+const TRAILS = { puno_fuerte: 'elN', gancho_arriba: 'elN', patada: 'knN', patada_giratoria: 'knN', patada_aerea: 'knN', barrida: 'knN' };
 // Firma aproximada de un efecto (tipo + posición redondeada) para no repetirlo en el rollback
 const r4 = (v) => Math.round(v * 4);
 const fxSig = (args) => args.slice(0, 2).map((a) => {
@@ -395,7 +396,7 @@ class Game {
       const v = ajustes[o.id];
       row.querySelector('.oview').innerHTML = o.tipo === 'vol'
         ? `<span class="obar">${Array.from({ length: 10 }, (_, k) => `<i class="${k < Math.round(v * 10) ? 'on' : ''}"></i>`).join('')}</span>`
-        : `<b class="otext">${o.tipo === 'si' ? (v ? 'SÍ' : 'NO') : esc(String(v).toUpperCase())}</b>`;
+        : `<b class="otext">${o.tipo === 'si' ? (v ? 'SÍ' : 'NO') : esc(o.etiquetas?.[v] ?? String(v).toUpperCase())}</b>`;
     });
   }
 
@@ -456,6 +457,23 @@ class Game {
       grid.appendChild(c);
       return c;
     });
+    for (const b of $('diff').querySelectorAll('.darrow')) b.addEventListener('click', () => this.changeDiff(+b.dataset.d));
+  }
+
+  // Dificultad de la CPU (en el panel de la CPU; también en OPCIONES)
+  get cpuLevel() { return DIFICULTADES[ajustes.dificultad] || DIFICULTADES.normal; }
+  renderDiff(pop = true) {
+    const D = this.cpuLevel, el = $('diff-val');
+    el.textContent = D.nombre;
+    $('diff').style.setProperty('--dc', D.color);
+    if (pop) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  }
+  changeDiff(d) {
+    const k = Math.max(0, NIVELES.indexOf(ajustes.dificultad));
+    ajustes.dificultad = NIVELES[(k + d + NIVELES.length) % NIVELES.length];
+    guardarAjustes();
+    sfx.select();
+    this.renderDiff();
   }
 
   localSelectSide() { return this.mode === 'online' ? this.online.side : 0; }
@@ -470,6 +488,8 @@ class Game {
       $('ptag1').textContent = 'P1';
       $('ptag2').textContent = this.mode === 'cpu' ? 'CPU' : 'P2';
     }
+    $('diff').classList.toggle('hidden', this.mode !== 'cpu');
+    this.renderDiff(false);
     this.show('select');
     this.renderSelect();
   }
@@ -514,7 +534,7 @@ class Game {
 
   // Presentación (VS) mientras cargan los modelos; la pelea empieza cuando ya se vio completa
   async versusThenFight(d1, d2, stageId) {
-    const shown = this.versus(d1, d2, stageId, ['JUGADOR 1', this.mode === 'cpu' ? 'CPU' : 'JUGADOR 2']);
+    const shown = this.versus(d1, d2, stageId, ['JUGADOR 1', this.mode === 'cpu' ? `CPU · ${this.cpuLevel.nombre}` : 'JUGADOR 2']);
     const models = this.loadModels(d1, d2, true);
     await shown;
     $('vs-status').textContent = 'Cargando peleadores…';   // solo se ve si todavía no terminan
@@ -607,6 +627,7 @@ class Game {
       if (consumeKey('ArrowRight')) s.cur[0] = (s.cur[0] + 1) % n;
       if (before !== s.cur[0]) this.selectMoved(0);
     }
+    if (this.mode === 'cpu') { if (consumeKey('KeyQ')) this.changeDiff(-1); if (consumeKey('KeyE')) this.changeDiff(1); }
     if (consumeKey('Escape')) { if (s.locked[0] && !(this.mode === 'cpu' && s.locked[1])) { s.locked[0] = false; this.renderSelect(); } else { sfx.back(); this.show('menu'); } }
   }
 
@@ -681,12 +702,13 @@ class Game {
     }
     this.fighters = [new Fighter(def1, 0, this), new Fighter(def2, 1, this)];
     this.inputs = [new PlayerInput(0), new PlayerInput(1)];
-    this.cpu = this.mode === 'cpu' ? new CPU(this.fighters[1], this.inputs[1], this, 0.6) : null;
+    this.cpu = this.mode === 'cpu' ? new CPU(this.fighters[1], this.inputs[1], this, ajustes.dificultad) : null;
     this.frame = 0; this.round = 0; this.projSeq = 0; this.slowmo = 0;
     this.fxSeen.clear();
     this.clearViews();
     const o = this.online;
-    this.hud.start([def1, def2], this.mode === 'online' && o ? (o.side === 0 ? [o.myName, o.peerName] : [o.peerName, o.myName]) : []);
+    this.hud.start([def1, def2], this.mode === 'online' && o ? (o.side === 0 ? [o.myName, o.peerName] : [o.peerName, o.myName])
+      : this.mode === 'cpu' ? ['', `CPU · ${this.cpuLevel.nombre}`] : []);
     this.stats = { hits: [0, 0], combo: [0, 0], specials: [0, 0] };
     this.firstHitRound = 0; this.viewPhase = null; this.introCue = 0;
     this.hideVersus();
@@ -1572,6 +1594,9 @@ class Game {
         this.hud.banner(a, '¡PRIMER GOLPE!'); sfx.firstHit();
       }
       if (e.strong) { this.fovKick = Math.max(this.fovKick, 1.6); this.aberr = Math.max(this.aberr || 0, 0.6); }
+      // cómo reacciona el que recibe: según a qué altura le pegaron (cabeza, cuerpo o piernas)
+      const mv = this.fighters[a]?.move, vm = this.models[e.side];
+      if (vm) vm.hitInfo = { h: !mv ? 'mid' : mv.height === 'low' || mv.height === 'mid' ? mv.height : 'high', strong: e.strong };
       // en el celular se siente cuando te pegan
       if (this.localFighter()?.side === e.side) this.vibrate(e.strong ? 45 : 18);
     }
@@ -1630,6 +1655,14 @@ class Game {
     if (robot && f.state === 'walk' && animDt) this.effects.glow.emit({ pos: V(f.rx - f.facing * 0.2, f.y + 0.12, 0), count: 2, speed: 2.5, dir: [-f.facing, 0.3, 0], spread: 0.4, color: '#ffffff', colorEnd: f.buffColor || '#4fd8ff', life: 0.25, size: 0.18 });
     const st = intro ? { key: intro, t: this.phaseT, total: 74, s: 0.25, a: 0.8, id: 'intro', flip: false, rate: 1 } : f.animState();
     if (this.hitstop <= 0 && !this.paused) st.t += a * st.rate;   // tiempo de animación continuo entre pasos
+    // lo que la animación necesita saber de la pelea (anim.js): solo se usa para verse, no cambia nada
+    const opp = this.other(f);
+    base.animStyle ||= styleOf(f.def);
+    const sty = robot ? { ...base.animStyle, bounce: 0.45, tempo: 0.85 } : f.giant ? { ...base.animStyle, bounce: 0.6, tempo: 0.7 } : base.animStyle;
+    st.ctx = {
+      rx: f.rx, facing: f.facing, size: m.size, vx: f.vx * f.facing, vy: f.vy, air: ry > 0.001 || f.vy > 0,
+      dist: opp ? Math.abs((opp.rx ?? opp.x) - f.rx) : null, state: f.state, stun: f.stunDur, hit: base.hitInfo, style: sty,
+    };
     m.apply(st, animDt);
     this.swingTrail(f, m, st, animDt);
     let tint = null, amount = 0.6;
@@ -1646,7 +1679,7 @@ class Game {
     const p = st.total ? st.t / st.total : 0;
     if (!bone || !dt || f.hidden || p < st.s * 0.6 || p > st.a + 0.1) { m.trail = null; return; }
     m.root.updateMatrixWorld(true);
-    const off = boneName[0] === 'e' ? m.rig?.handF ?? V(0, -0.29, 0) : V(0, -(m.rig?.H ?? 1.85) * 0.24, 0);
+    const off = boneName[0] === 'e' ? m.rig?.['hand' + boneName[2]] ?? V(0, -0.29, 0) : V(0, -(m.rig?.H ?? 1.85) * 0.24, 0);
     const pos = bone.localToWorld(off.clone());
     if (m.trail && m.trail.distanceTo(pos) < 1.5) {
       for (let i = 1; i <= 5; i++) this.effects.glow.emit({ pos: m.trail.clone().lerp(pos, i / 5), count: 1, speed: 0.02, color: '#fff6dc', colorEnd: f.def.color || '#ffb347', life: 0.15, size: 0.2, drag: 0 });

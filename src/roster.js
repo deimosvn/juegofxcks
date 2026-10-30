@@ -16,6 +16,7 @@
 //    traje      (opcional) modelo que se pone con un especial tipo 'titan': { modelo, escala }
 //    especialesTitan  (opcional) lo que sacan los mismos botones mientras trae el traje puesto
 //    intro      (opcional) pose de presentación en la ronda 1 (una animación de especial: jojo, flexion, carga…)
+//    victoria   (opcional) pose al ganar: 0 puño arriba, 1 brazos en V, 2 bíceps, 3 brazos cruzados (si no, según su estilo)
 //
 //  Entradas (input) — relativas a hacia dónde mira el peleador:
 //    →  adelante    ←  atrás    ↓  abajo    ↑  arriba

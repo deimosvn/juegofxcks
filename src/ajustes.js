@@ -11,6 +11,7 @@ export const ajustes = {
   calidad: phone ? 'media' : 'alta',   // 'alta' | 'media' | 'baja'
   sangre: JUEGO.sangre !== false,
   vibracion: true,
+  dificultad: 'normal',               // la CPU: 'facil' | 'normal' | 'dificil' | 'pesadilla' (ai.js)
 };
 try { Object.assign(ajustes, JSON.parse(localStorage.getItem(KEY)) || {}); } catch { /* sin almacenamiento */ }
 
@@ -18,8 +19,10 @@ export function guardarAjustes() {
   try { localStorage.setItem(KEY, JSON.stringify(ajustes)); } catch { /* sin almacenamiento */ }
 }
 
-// Filas de la pantalla de opciones
+// Filas de la pantalla de opciones (etiquetas: cómo se muestra cada valor)
 export const OPCIONES = [
+  { id: 'dificultad', nombre: 'DIFICULTAD CPU', tipo: 'lista', valores: ['facil', 'normal', 'dificil', 'pesadilla'],
+    etiquetas: { facil: 'FÁCIL', normal: 'NORMAL', dificil: 'DIFÍCIL', pesadilla: 'PESADILLA' } },
   { id: 'musica', nombre: 'MÚSICA', tipo: 'vol' },
   { id: 'efectos', nombre: 'EFECTOS', tipo: 'vol' },
   { id: 'narrador', nombre: 'NARRADOR', tipo: 'si' },
