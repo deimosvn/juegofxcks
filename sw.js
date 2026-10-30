@@ -6,7 +6,7 @@
 //  - Modelos e imágenes: se usan de la copia y se actualizan en segundo plano.
 //  - Firebase (tiempo real) y /api/ nunca pasan por aquí.
 // =====================================================================
-const VERSION = 'fxcks-v8';
+const VERSION = 'fxcks-v9';
 const SHELL = [
   './', 'css/style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
   'src/main.js', 'src/model.js', 'src/fighter.js', 'src/specials.js', 'src/specials-amigos.js', 'src/stages.js',

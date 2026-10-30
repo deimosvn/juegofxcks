@@ -504,17 +504,12 @@ export const FATALITIES = {
     return t >= 160;
   },
 
-  // Robot: escaneo láser y el rival se deshace en cubos de luz (los rayos se dibujan en main.js)
+  // Robot (Diego): se pone el traje, bajan cuatro robots y cada uno lo ataca a su manera hasta deshacerlo
+  // (los robots, los rayos y la desintegración los dibuja fatal.js: aquí solo los tiempos)
   desintegrar(t, w, l, fat, g) {
-    if (t === 1) { w.anim('laser', 80, 0.1, 0.95); l.anim('mareado'); sfx.charge(); }
-    if (t === 12 || t === 36) sfx.laser();
-    if (t > 12 && t < 70 && t % 4 === 0) g.effects.emitGlow({ pos: V(l.x, 0.2 + Math.random() * 1.7, 0.2), count: 3, speed: 1.5, color: '#ffffff', colorEnd: fat.color || '#4fd8ff', life: 0.3, size: 0.12 });
-    if (t === 70) {
-      l.hidden = true;
-      g.effects.voxels(V(l.x, 0, 0), fat.color || '#4fd8ff', 300);
-      g.effects.flash(l.chest, fat.color || '#4fd8ff', 10); g.effects.addShake(0.25); sfx.voxel();
-    }
-    if (t === 110) w.anim('victoria');
-    return t >= 190;
+    if (t === 1) { w.anim('carga'); l.anim('mareado'); sfx.charge(); }
+    if (t === 215) l.hidden = true;
+    if (t === 262) w.anim('victoria');
+    return t >= 300;
   },
 };

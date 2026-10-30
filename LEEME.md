@@ -38,23 +38,27 @@ cualquiera de las dos teclas o un mando.
   onda de choque en cada impacto, polvo al saltar y caer, y orillas rojas cuando te queda poca vida.
 
 ## ☠ Fatalities de cine
-Cada fatality se ve como escena de película ([`src/fatal.js`](src/fatal.js); la fatality en sí no cambió, así que en
-línea sigue igual en las dos computadoras):
+Cada fatality se ve como escena de película ([`src/fatal.js`](src/fatal.js)). Lo que pasa y cuándo sigue en
+`specials.js` (en línea las dos computadoras lo calculan igual); la de Diego ahora dura más (5 s), así que para hacerla
+en línea los dos tienen que tener la versión nueva del juego.
 - **Franjas negras** arriba y abajo, se esconde el HUD (y los botones del celular) y abajo a la izquierda sale el
   **título**: “FATALITY · CORTE AL RAS · RAMCES”.
 - **Cámara propia de cada una**, con cortes y movimientos: primeros planos, contrapicados, vueltas alrededor del que va a
   morir y persecuciones (al que sale volando de un gancho, al cohete de Alan, a la cabeza que vuela con Ramces).
 - **Luz de escenario** sobre los dos, el resto se oscurece y la imagen toma el color de la fatality (rojo sangre, azul
-  hielo, naranja fuego…). La de Diego hace que la imagen “se descomponga” como señal digital mientras escanea.
+  hielo, naranja fuego…). En la de Diego la imagen “se descompone” como señal digital cuando disparan todos juntos.
 - **El remate**: destello, colores corridos, zoom de golpe, temblor, cámara lenta (contra la CPU; en línea no) y un
   trancazo grave. Al empezar suena un golpe de tráiler y con “¡FATALIDAD!” un acorde oscuro; las letras escurren sangre.
 - **Poses**: el que va a morir ve venir lo que le cae y se cubre temblando; Alan saluda a su cohete; Voltio alza los
   brazos para llamar a los rayos.
+- **Sin trabones**: al empezar la pelea se prepara, sin que se vea, todo lo que solo sale en las fatalities (la luz, el
+  traje y los robots de Diego, los rayos…), dibujándolo una vez en la imagen intermedia del post-proceso. Antes la
+  primera fatality se detenía ~½ s mientras la tarjeta de video armaba sus sombreados.
 
 | Quién | Cómo se ve |
 |---|---|
 | Ramces | la silla sube, vuelta lenta alrededor de la cabeza con la máquina, primer plano de la navaja con destello, tajo en cámara lenta y la cámara sigue a la cabeza |
-| Diego | primer plano de los ojos que se encienden, sigue el láser, vuelta alrededor mientras lo escanea y se deshace en cubos de luz |
+| Diego | se pone el traje de robot y bajan del cielo cuatro robots como el suyo (rojo, azul, amarillo y morado); cada uno lo ataca a su manera: láser de los ojos que lo escanea, balas de plasma, descargas eléctricas y lluvia de misiles. Al final disparan todos juntos con el rayo del pecho de Diego, el otro flota entre los rayos y se deshace en cubos de luz; los robots celebran y se van volando |
 | Alan | el cohete amarrado, despegue desde el piso entre humo, lo persigue hasta el cielo y fuegos artificiales de colores |
 | Gera | ráfaga con tres ángulos, gancho en cámara lenta y lo sigue volando hasta que brilla como estrella |
 | José | lo sigue en el brinco, desde los ojos del otro ve caer las nalgas gigantes y el aplastón sale con destello rosa |
@@ -114,7 +118,7 @@ en el navegador.
 | LÁSER OCULAR | `↓ → + P` | Rayos de los ojos, 5 impactos (18 en total). Pasa por encima si el rival se agacha |
 | LLUVIA DE MISILES | `↓ ← + K` | 4 misiles desde la espalda que caen alrededor del rival (20 en total) |
 | MODO TITÁN | `↓ ↓ + P` (o Especial + atrás) | Se pone el traje de robot 7 s: camina y salta mucho más rápido, recibe 35% menos daño, no le hace daño bloquear y el botón de especial saca las armas del robot |
-| ☠ DESINTEGRACIÓN | `→ → ↓ + P` | Escaneo láser y el rival se deshace en cubos de luz |
+| ☠ DESINTEGRACIÓN | `→ → ↓ + P` | Se pone el traje, llama a cuatro robots y entre todos (láser, plasma, rayos, misiles y su rayo del pecho) deshacen al rival en cubos de luz |
 
 Con el traje puesto (al final parpadea y se le cae en pedazos):
 

@@ -852,6 +852,26 @@ export class FighterModel {
     return fm;
   }
 
+  // Copia de un modelo ya armado con el esqueleto automático (los robots de la fatality de Diego): mismos
+  // huesos y pesos sin volver a calcularlos. tint: color con el que se pinta (cada robot de un color).
+  cloneRigged(tint = null) {
+    const src = this.pivot.children[0];
+    if (!this.rig || !src) return null;
+    const fm = new FighterModel();
+    const g = SkeletonUtils.clone(src);
+    fm.pivot.add(g);
+    const parts = {};
+    g.traverse((o) => { if (o.isBone && o.name.startsWith('ar_')) parts[o.name.slice(3)] = o; });
+    fm.parts = parts; fm.rig = this.rig;
+    if (this.eyes) fm.eyes = { bone: parts.head, local: this.eyes.local.clone() };
+    fm.cloneMaterials(g, false);
+    if (tint) {
+      const c = new THREE.Color(tint);
+      for (const m of fm.materials) if (m.color) { m.color.lerp(c, 0.45); m.userData.baseColor = m.color.clone(); }
+    }
+    return fm;
+  }
+
   cloneMaterials(root, altTint) {
     root.traverse((o) => {
       if (!o.isMesh) return;

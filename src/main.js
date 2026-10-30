@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { JUEGO, PELEADORES } from './roster.js';
 import { FighterModel, loadAsset } from './model.js';
 import { styleOf } from './anim.js';
-import { FatalDirector } from './fatal.js';
+import { FatalDirector, ROBOTS } from './fatal.js';
 import { Fighter, ARENA_HALF } from './fighter.js';
 import { PlayerInput, consumeKey, clearKeyEdges, decodeMask } from './input.js';
 import { Effects } from './effects.js';
@@ -646,6 +646,8 @@ class Game {
       if (suit) {
         for (const mt of suit.materials) if (mt.isMeshStandardMaterial) { mt.metalness = 0.3; mt.roughness = 0.45; }   // un poco de brillo metálico
         m.suit = suit;
+        // su fatality: cuatro robots como su traje, cada uno de un color (fatal.js los anima)
+        if (def.fatality?.tipo === 'desintegrar') m.robots = ROBOTS.map((r) => suit.cloneRigged(r.color)).filter(Boolean);
       }
       return m;
     };
@@ -680,7 +682,7 @@ class Game {
   }
 
   disposeModels() {
-    for (const m of this.models) { m.suit?.dispose(); m.head?.removeFromParent(); m.dispose(); }
+    for (const m of this.models) { m.suit?.dispose(); m.robots?.forEach((r) => r.dispose()); m.head?.removeFromParent(); m.dispose(); }
   }
 
   setStage(id) {
@@ -700,6 +702,7 @@ class Game {
     for (const m of models) {
       m.suitOn = false;
       if (m.suit) { m.suit.root.visible = false; this.scene.add(m.suit.root); }
+      for (const r of m.robots || []) { r.root.visible = false; this.scene.add(r.root); }
       if (m.head) { m.head.visible = false; this.scene.add(m.head); }
     }
     this.fighters = [new Fighter(def1, 0, this), new Fighter(def2, 1, this)];
@@ -1620,8 +1623,8 @@ class Game {
   viewModel(i) { const m = this.models[i]; return m?.suitOn && m.suit ? m.suit : m; }
 
   syncFighter(f, base, animDt) {
-    // MODO TITÁN: se ve el traje de robot en lugar del modelo; al ponérselo "se arma" en un instante
-    const robot = !!base.suit && f.titan;
+    // MODO TITÁN (y la fatality de Diego): se ve el traje de robot en lugar del modelo; al ponérselo "se arma" en un instante
+    const robot = !!base.suit && (f.titan || this.cine.suitOn(f));
     if (robot !== !!base.suitOn) {
       base.suitOn = robot; base.suitT = 0;
       base.suit?.flash(1.3); base.flash(1.3);
@@ -1674,7 +1677,8 @@ class Game {
     base.animStyle ||= styleOf(f.def);
     const sty = robot ? { ...base.animStyle, bounce: 0.45, tempo: 0.85 } : f.giant ? { ...base.animStyle, bounce: 0.6, tempo: 0.7 } : base.animStyle;
     st.ctx = {
-      rx: f.rx, facing: f.facing, size: m.size, vx: f.vx * f.facing, vy: f.vy, air: ry > 0.001 || f.vy > 0,
+      // (air también cuando flota en los rayos de la fatality de Diego: las piernas cuelgan)
+      rx: f.rx, facing: f.facing, size: m.size, vx: f.vx * f.facing, vy: f.vy, air: ry > 0.001 || f.vy > 0 || (f === this.loser && this.cine.lift > 0.05),
       dist: opp ? Math.abs((opp.rx ?? opp.x) - f.rx) : null, state: f.state, stun: f.stunDur, hit: base.hitInfo, style: sty,
     };
     m.apply(st, animDt);
@@ -1854,8 +1858,7 @@ class Game {
   }
 
   syncLasers(dt) {
-    const fat = this.phase === 'fatality' && this.fatal?.tipo === 'desintegrar' ? this.winner : null;
-    this.scanner.visible = false;
+    this.scanner.visible = false;   // (lo usa la fatality de Diego: fatal.js)
     this.fighters.forEach((f, i) => {
       const L = this.lasers[i];
       for (const m of [...L.beams, ...L.cores]) m.visible = false;
@@ -1877,27 +1880,24 @@ class Game {
         return;
       }
       const laserSpecial = f.state === 'special' && f.spec?.tipo === 'laser';
-      const charging = (laserSpecial && f.t < 14) || (fat === f && this.phaseT < 12);
-      const firing = (laserSpecial && f.t >= 14 && f.t < 36) || (fat === f && this.phaseT >= 12 && this.phaseT < 70);
+      const charging = laserSpecial && f.t < 14;
+      const firing = laserSpecial && f.t >= 14 && f.t < 36;
       if (!charging && !firing) return;
       m.root.updateMatrixWorld(true);
       const eye = m.eyeWorld();
-      const color = laserSpecial ? (f.spec.color || '#ff2a3a') : (f.fatality?.color || '#4fd8ff');
+      const color = f.spec.color || '#ff2a3a';
       if (charging) { this.effects.glow.emit({ pos: eye, count: 2, speed: 0.6, jitter: 0.08, color: '#ffffff', colorEnd: color, life: 0.2, size: 0.12 }); return; }
       const o = this.other(f);
       let endX = f.facing * (ARENA_HALF + 2);
-      if (fat === f) endX = o.x;
-      else if ((o.x - f.x) * f.facing > 0 && eye.y >= o.y && eye.y <= o.y + o.height + 0.05 && !o.hidden) endX = o.x - f.facing * 0.22;
-      const targetY = fat === f ? 0.25 + (Math.sin(this.phaseT * 0.16) * 0.5 + 0.5) * 1.6 : eye.y;
+      if ((o.x - f.x) * f.facing > 0 && eye.y >= o.y && eye.y <= o.y + o.height + 0.05 && !o.hidden) endX = o.x - f.facing * 0.22;
       for (let k = 0; k < 2; k++) {
         const a = eye.clone().add(V(0, 0, k ? 0.035 : -0.035));
-        const b = V(endX, targetY, a.z);
+        const b = V(endX, eye.y, a.z);
         L.beams[k].material.color.set(color);
         this.placeBeam(L.beams[k], a, b); this.placeBeam(L.cores[k], a, b);
         L.beams[k].scale.x = L.beams[k].scale.z = 1 + Math.random() * 0.4;
       }
-      this.effects.glow.emit({ pos: V(endX, targetY, 0.1), count: Math.max(1, Math.round(dt * 240)), speed: 3, color: '#ffffff', colorEnd: color, life: 0.2, size: 0.14, gravity: 4 });
-      if (fat === f) { this.scanner.visible = true; this.scanner.position.set(o.x, targetY, 0); this.scanner.material.color.set(color); }
+      this.effects.glow.emit({ pos: V(endX, eye.y, 0.1), count: Math.max(1, Math.round(dt * 240)), speed: 3, color: '#ffffff', colorEnd: color, life: 0.2, size: 0.14, gravity: 4 });
     });
   }
 
