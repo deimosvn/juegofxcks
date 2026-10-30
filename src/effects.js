@@ -13,13 +13,15 @@ void main() {
   gl_PointSize = aSize * (420.0 / -mv.z);
   gl_Position = projectionMatrix * mv;
 }`;
+// uBoost: las partículas que brillan pasan de 1 para que el bloom (post.js) las haga resplandecer
 const FRAG = `
+uniform float uBoost;
 varying vec4 vColor;
 void main() {
   float d = length(gl_PointCoord - 0.5);
   float a = smoothstep(0.5, 0.05, d) * vColor.a;
   if (a < 0.01) discard;
-  gl_FragColor = vec4(vColor.rgb, a);
+  gl_FragColor = vec4(vColor.rgb * uBoost, a);
 }`;
 
 class ParticleSystem {
@@ -43,7 +45,7 @@ class ParticleSystem {
     g.setAttribute('aColor', new THREE.BufferAttribute(this.col, 4).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('aSize', new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
     const m = new THREE.ShaderMaterial({
-      vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false,
+      vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, uniforms: { uBoost: { value: additive ? 1.6 : 1 } },
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
     this.points = new THREE.Points(g, m);
@@ -175,7 +177,18 @@ export class Effects {
   hitSpark(pos, color = '#ffe08a', strong = false) {
     this.glow.emit({ pos, count: strong ? 40 : 20, speed: strong ? 9 : 6, color: '#ffffff', colorEnd: color, life: 0.25, size: 0.16, drag: 4 });
     this.glow.emit({ pos, count: 1, speed: 0, color, life: 0.12, size: strong ? 2.2 : 1.4 });
+    // rayitas que salen disparadas (más largas en los golpes fuertes)
+    this.glow.emit({ pos, count: strong ? 10 : 5, speed: strong ? 16 : 11, color: '#ffffff', colorEnd: color, life: 0.1, size: 0.1, drag: 1 });
+    this.impactRing(pos, color, strong ? 1.25 : 0.7);
     this.flash(pos, color, strong ? 6 : 3);
+  }
+
+  // onda de choque que mira a la cámara
+  impactRing(pos, color, size = 1) {
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.72, 32), mat);
+    m.position.copy(pos);
+    this.addTemp(m, 0.2, (dt, t) => { m.quaternion.copy(this.camera.quaternion); m.scale.setScalar(size * (0.25 + t * 1.5)); mat.opacity = (1 - t) * 0.9; });
   }
 
   bloodSplash(pos, dirX, amount = 1) {
@@ -185,6 +198,7 @@ export class Effects {
 
   blockSpark(pos) {
     this.glow.emit({ pos, count: 14, speed: 4, color: '#bfe7ff', colorEnd: '#3a7bff', life: 0.2, size: 0.12, drag: 5 });
+    this.impactRing(pos, '#7fb8ff', 0.55);
   }
 
   dust(pos, count = 16) {

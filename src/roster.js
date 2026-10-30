@@ -15,6 +15,7 @@
 //    fatality   remate final cuando sale "¡ACÁBALO!"
 //    traje      (opcional) modelo que se pone con un especial tipo 'titan': { modelo, escala }
 //    especialesTitan  (opcional) lo que sacan los mismos botones mientras trae el traje puesto
+//    intro      (opcional) pose de presentación en la ronda 1 (una animación de especial: jojo, flexion, carga…)
 //
 //  Entradas (input) — relativas a hacia dónde mira el peleador:
 //    →  adelante    ←  atrás    ↓  abajo    ↑  arriba
@@ -106,6 +107,7 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'DESINTEGRACIÓN', tipo: 'desintegrar', input: '→ → ↓ + P', color: '#4fd8ff' },
     frase: 'Sistema de combate: victoria confirmada.',
+    intro: 'carga',
   },
   {
     id: 'alan',
@@ -126,6 +128,7 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'DESPEGUE ESPACIAL', tipo: 'despegue', input: '↓ → ↓ + P', color: '#ff7a1a' },
     frase: 'Houston, tenemos un ganador.',
+    intro: 'jojo',
   },
   {
     id: 'gera',
@@ -144,6 +147,7 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'NOCAUT', tipo: 'nocaut', input: '→ → → + P', color: '#ffd23a' },
     frase: '¡Ding, ding! Se acabó la pelea.',
+    intro: 'rafaga',
   },
   {
     id: 'jose',
@@ -161,6 +165,7 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'APLASTE NALGÓN', tipo: 'nalgon', input: '↓ ↓ ↓ + K', color: '#ff7ab8' },
     frase: 'Con estas nalgas no se juega.',
+    intro: 'twerk',
   },
   {
     id: 'conde',
@@ -178,6 +183,7 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'PISOTÓN GIGANTE', tipo: 'pisoton', input: '↓ → ↓ + K', color: '#ff7a1a' },
     frase: 'Ahora sí, ¿quién es el chaparro?',
+    intro: 'flexion',
   },
   {
     id: 'emi',
@@ -196,6 +202,7 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'PESCADO GIGANTE', tipo: 'pescadote', input: '→ ↓ → + K', color: '#4fb8ff' },
     frase: '¡Pásele, pásele, que hoy hay paliza fresca!',
+    intro: 'chela',
   },
   {
     id: 'ramces',
@@ -215,6 +222,7 @@ export const PELEADORES = [
     ],
     fatality: { nombre: 'CORTE AL RAS', tipo: 'corte', input: '↓ ← → + P', color: '#d62828' },
     frase: '¡Siguiente! ¿Degradado o rapado?',
+    intro: 'afilar',
   },
   {
     id: 'fuego',

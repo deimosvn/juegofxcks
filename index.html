@@ -32,23 +32,30 @@
   <div id="hud" class="hidden">
     <div class="bar-row">
       <div class="player p1">
-        <div class="name"><span id="name1">P1</span> <small id="player1"></small></div>
-        <div class="health"><div class="lag" id="lag1"></div><div class="fill" id="hp1"></div></div>
-        <div class="wins" id="wins1"></div>
+        <div class="medal"><div class="face" id="face1"></div></div>
+        <div class="pbox">
+          <div class="health"><div class="lag" id="lag1"></div><div class="fill" id="hp1"></div></div>
+          <div class="pmeta"><div class="name"><span id="name1">P1</span> <small id="player1"></small></div><div class="wins" id="wins1"></div></div>
+        </div>
       </div>
       <div class="timer" id="timer">99</div>
       <div class="player p2">
-        <div class="name"><small id="player2"></small> <span id="name2">P2</span></div>
-        <div class="health"><div class="lag" id="lag2"></div><div class="fill" id="hp2"></div></div>
-        <div class="wins" id="wins2"></div>
+        <div class="medal"><div class="face" id="face2"></div></div>
+        <div class="pbox">
+          <div class="health"><div class="lag" id="lag2"></div><div class="fill" id="hp2"></div></div>
+          <div class="pmeta"><div class="name"><small id="player2"></small> <span id="name2">P2</span></div><div class="wins" id="wins2"></div></div>
+        </div>
       </div>
     </div>
     <div class="combo left" id="combo1"></div>
     <div class="combo right" id="combo2"></div>
     <div class="special-name left" id="spec1"></div>
     <div class="special-name right" id="spec2"></div>
+    <div class="banner left" id="banner1"></div>
+    <div class="banner right" id="banner2"></div>
     <div id="netbadge" class="hidden"></div>
   </div>
+  <div id="results" class="hidden"></div>
 
   <!-- Controles táctiles (celular): joystick a la izquierda, botones a la derecha -->
   <div id="touch" class="hidden">
@@ -71,14 +78,18 @@
   <div id="rotate-hint" class="hidden">↻ Gira el celular para jugar mejor</div>
 
   <div id="announcer"></div>
+  <div id="flash"></div>
+  <div id="fade"></div>
 
-  <!-- Menú principal -->
-  <div id="menu" class="screen">
-    <h1 class="logo">FXCKS<span>KOMBAT</span></h1>
+  <!-- Menú principal (primero la pantalla de título: "presiona cualquier tecla") -->
+  <div id="menu" class="screen splash">
+    <h1 class="logo"><span class="l1">FXCKS</span><span class="l2">KOMBAT</span></h1>
+    <p class="press"><span class="kb-only">PRESIONA CUALQUIER TECLA</span><span class="touch-only">TOCA PARA EMPEZAR</span></p>
     <div class="menu-options">
       <button data-mode="cpu" class="sel">1 JUGADOR vs CPU</button>
       <button data-mode="vs" class="kb-only">1 vs 1 LOCAL</button>
       <button data-mode="online">EN LÍNEA</button>
+      <button data-mode="options">OPCIONES</button>
       <button data-mode="controls">CONTROLES</button>
     </div>
     <p class="hint"><span class="kb-only">↑ ↓ / W S para elegir · ENTER o F para aceptar</span><span class="touch-only">Toca una opción</span></p>
@@ -90,9 +101,9 @@
   <div id="select" class="screen hidden">
     <h2>ELIGE TU PELEADOR</h2>
     <div class="select-layout">
-      <div class="preview p1"><div class="pname" id="pick1">—</div><div class="ptag" id="ptag1">P1</div><div class="pspecials" id="pspec1"></div></div>
+      <div class="preview p1"><div class="pface" id="pface1"></div><div class="pname" id="pick1">—</div><div class="ptag" id="ptag1">P1</div><div class="pspecials" id="pspec1"></div></div>
       <div class="grid" id="grid"></div>
-      <div class="preview p2"><div class="pname" id="pick2">—</div><div class="ptag" id="ptag2">P2</div><div class="pspecials" id="pspec2"></div></div>
+      <div class="preview p2"><div class="pface" id="pface2"></div><div class="pname" id="pick2">—</div><div class="ptag" id="ptag2">P2</div><div class="pspecials" id="pspec2"></div></div>
     </div>
     <p class="hint"><span class="kb-only">P1: A D W S + F &nbsp;·&nbsp; P2: flechas + K &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; ESC volver</span><span class="touch-only">Toca un peleador para verlo · tócalo otra vez para elegirlo</span></p>
     <button class="link back" data-key="Escape">← VOLVER</button>
@@ -158,6 +169,23 @@
     <p class="hint kb-only">ENTER ver la pelea · ESC salir de la sala</p>
   </div>
 
+  <!-- Opciones -->
+  <div id="options" class="screen hidden">
+    <h2>OPCIONES</h2>
+    <div id="opts" class="opts"></div>
+    <p class="hint kb-only">↑ ↓ elegir · ← → cambiar · ESC volver</p>
+    <button class="link back" data-key="Escape">← VOLVER</button>
+  </div>
+
+  <!-- Presentación antes de pelear -->
+  <div id="versus" class="hidden">
+    <div class="vs-side l"><div class="vs-img" id="vs-img1"></div><div class="vs-name"><b id="vs-n1"></b><small id="vs-p1"></small></div></div>
+    <div class="vs-side r"><div class="vs-img" id="vs-img2"></div><div class="vs-name"><b id="vs-n2"></b><small id="vs-p2"></small></div></div>
+    <div class="vs-mid"><span>VS</span></div>
+    <div class="vs-stage"><small>ESCENARIO</small><b id="vs-stage"></b></div>
+    <div class="vs-status" id="vs-status"></div>
+  </div>
+
   <!-- Controles / pausa -->
   <div id="controls" class="screen hidden">
     <h2 id="controls-title">CONTROLES</h2>
@@ -208,6 +236,7 @@
     <p class="hint kb-only" id="controls-hint">ESC para volver</p>
     <div class="screen-actions">
       <button class="link back" data-key="Escape" id="controls-back">← VOLVER</button>
+      <button class="link back hidden" id="controls-opts">OPCIONES</button>
       <button class="link back hidden" data-key="KeyQ" id="controls-quit">SALIR AL MENÚ</button>
     </div>
   </div>

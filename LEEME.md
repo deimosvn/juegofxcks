@@ -22,7 +22,24 @@ Abre http://localhost:8080 (no funciona abriendo el `.html` con doble clic; nece
 
 Abajo+Puño = gancho al aire · Abajo+Patada = barrida · Adelante+Puño = puño fuerte · Atrás+Patada = patada giratoria.
 Especiales: su combinación (ej. `← → + P`) o el botón Especial (solo / adelante / abajo / atrás).
-ESC = pausa con la lista de movimientos y fatalidades. En línea se puede usar cualquiera de las dos teclas o un mando.
+ESC = pausa con la lista de movimientos y fatalidades (ahí mismo **O** abre las opciones). En línea se puede usar
+cualquiera de las dos teclas o un mando.
+
+## 🎬 Presentación
+- **Pantalla de título**: “PRESIONA CUALQUIER TECLA” (o “TOCA PARA EMPEZAR”); con eso arranca el sonido.
+- **VS** antes de cada pelea: los retratos entran de lado, “VS” de metal y el escenario (también en línea y al ver
+  una sala; mientras tanto cargan los modelos).
+- **Ronda 1**: la cámara pasa de cerca por cada peleador mientras hace su pose (`intro` en el roster) y sale su nombre.
+- **K.O.**: destello, cámara lenta, la imagen se pone gris y la cámara se acerca ladeada al que cae. Al ganar la ronda se
+  acerca al ganador; al final da vueltas alrededor de él con la tabla de resultados (golpes, combo máximo, especiales).
+- Letreros: “¡PRIMER GOLPE!”, contador de combos que rebota (¡BIEN!, ¡BRUTAL!, ¡IMPARABLE!…) y “¡VICTORIA PERFECTA!”
+  si ganas sin que te peguen. Entre rondas la pantalla se va a negro.
+- Imagen “de cine”: brillo (bloom) en focos, rayos y chispas, viñeta, grano fino, estelas en los golpes fuertes,
+  onda de choque en cada impacto, polvo al saltar y caer, y orillas rojas cuando te queda poca vida.
+
+## ⚙️ Opciones
+Volumen de **música** y de **efectos**, **narrador** sí/no, **gráficos** (ALTA, MEDIA para celulares, BAJA para
+celulares viejos: sin efectos ni sombras), **sangre** sí/no y **vibración** (celular). Se guardan en el navegador.
 
 ## 📱 En el celular (y como app)
 - **Joystick** en la mitad izquierda (aparece donde pones el dedo): moverse, saltar (arriba) y agacharse (abajo).
@@ -111,11 +128,21 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 
 Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo).
 
-## 🔊 Sonidos
-Todo es sonido sintetizado (no hay archivos de audio). Además de golpes, especiales y el narrador:
+## 🔊 Sonidos y música
+Todo es sintetizado (no hay archivos de audio) y pasa por un compresor y un poco de eco de cuarto.
+
+**Música** ([`src/music.js`](src/music.js), toda original): tema épico en el menú (le entran tambores al elegir
+peleador), una pista por escenario — electrónica rápida en SIX, **cumbia** con güiro y acordeón en La Cabaña,
+synthwave nocturno en Casa Chuy y taikos con flauta en el Templo —, tensión con latido en “¡ACÁBALO!” y la fatality, y
+fanfarria del ganador. En la presentación de cada ronda la pista baja, y en “¡PELEA!” vuelve a entrar con platillo; en
+la ronda final (o con poco tiempo) suena con todo. En pausa y en la cámara lenta se oye apagada, y se hace a un lado
+cuando habla el narrador.
+
+**Efectos**: además de golpes (en capas: chasquido, cuerpo y retumbo; cada uno suena un poco distinto), especiales y
+el narrador:
 pasos (de metal con el traje de robot), puños y patadas suenan distinto, el combo sube de tono, campana al empezar
-cada round, tic-tac en los últimos 10 segundos, el público en el K.O. y al final, tambores en la fatality, fanfarria
-de victoria, corazón cuando te queda poca vida, pajaritos cuando alguien está mareado y ambiente en cada escenario
+cada round, tic-tac en los últimos 10 segundos, el público en el K.O. y al final, tambores en la fatality,
+corazón cuando te queda poca vida, pajaritos cuando alguien está mareado y ambiente en cada escenario
 (carretera y pájaros en SIX, viento en La Cabaña y el Templo, grillos de noche en Casa Chuy).
 
 ## Escenarios
@@ -186,7 +213,8 @@ Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de
    escribe el **id** (ej. `juan`), revisa las animaciones y dale **GUARDAR EN EL JUEGO** → crea
    `assets/peleadores/<id>/modelo.glb` (~3 MB, con esqueleto automático) y `retrato.png`.
 3. En [`src/roster.js`](src/roster.js) copia el bloque de otro peleador y cambia `id`, `nombre`, `color`,
-   `modelo`, `retrato`, `especiales`, `fatality` y `frase`.
+   `modelo`, `retrato`, `especiales`, `fatality`, `frase` e `intro` (su pose en la presentación de la
+   ronda 1: una animación de especial como `jojo`, `flexion`, `carga`, `rafaga`…).
 
 Tipos de especial: `proyectil`, `congelar`, `teletransporte`, `embestida`, `terremoto`, `gancho`,
 `uppercut_volador`, `poder`, `rayo`; robot: `puno_cohete`, `laser`, `misiles`, `armadura`; aeroespacial:

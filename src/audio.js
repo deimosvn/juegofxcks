@@ -1,55 +1,109 @@
 // Sonidos sintetizados (sin archivos) + narrador con la voz del navegador.
-// Si luego quieres sonidos reales, pon .mp3 en assets/sonidos/ y cámbialos aquí.
+// Todo pasa por un compresor (suena parejo y no satura cuando se juntan muchos golpes) y un poco de
+// eco de cuarto. Efectos y música van en canales aparte para bajarles el volumen por separado (OPCIONES);
+// la música está en music.js. Si luego quieres sonidos reales, pon .mp3 en assets/sonidos/ y cámbialos aquí.
 
 let ctx = null;
-let master = null;
+let master = null, sfxBus = null, musicBus = null, reverbIn = null;
 let noiseBuf = null;
 export let voiceEnabled = true;
+export const volumes = { musica: 0.7, efectos: 0.9 };
+const SFX_LEVEL = 0.62, MUSIC_LEVEL = 0.5;
+// music.js se entera cuando habla el narrador (para bajar la música) y cuando ya se puede sonar
+export const audioHooks = { onAnnounce: null };
+const unlockListeners = [];
 
-export function setVoice(v) { voiceEnabled = v; }
+export function setVoice(v) { voiceEnabled = v; if (!v && 'speechSynthesis' in window) speechSynthesis.cancel(); }
+export function setVolumes(musica, efectos) {
+  volumes.musica = musica; volumes.efectos = efectos;
+  if (!ctx) return;
+  sfxBus.gain.setTargetAtTime(SFX_LEVEL * efectos, ctx.currentTime, 0.05);
+  musicBus.gain.setTargetAtTime(MUSIC_LEVEL * musica, ctx.currentTime, 0.05);
+}
+export function onAudioUnlock(fn) { if (ctx) fn(); else unlockListeners.push(fn); }
+export function audioBus() { return ctx ? { ctx, master, musicBus, noiseBuf } : null; }
+
+// Respuesta de un cuarto: ruido que se va apagando (para el convolver)
+function impulse(seconds, decay) {
+  const n = Math.round(ctx.sampleRate * seconds);
+  const b = ctx.createBuffer(2, n, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = b.getChannelData(c);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay);
+  }
+  return b;
+}
 
 export function unlockAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
-  master = ctx.createGain();
-  master.gain.value = 0.55;
-  master.connect(ctx.destination);
-  noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  ctx = new AC();
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -15; comp.knee.value = 12; comp.ratio.value = 3.5; comp.attack.value = 0.003; comp.release.value = 0.22;
+  master = ctx.createGain(); master.gain.value = 1;
+  master.connect(comp); comp.connect(ctx.destination);
+  sfxBus = ctx.createGain(); sfxBus.gain.value = SFX_LEVEL * volumes.efectos; sfxBus.connect(master);
+  musicBus = ctx.createGain(); musicBus.gain.value = MUSIC_LEVEL * volumes.musica; musicBus.connect(master);
+  // eco: los efectos mandan un poco; la música solo sus agudos (el bajo con eco se oye lodoso)
+  const verb = ctx.createConvolver(); verb.buffer = impulse(1.7, 3.2);
+  reverbIn = ctx.createGain(); reverbIn.connect(verb); verb.connect(master);
+  const sfxSend = ctx.createGain(); sfxSend.gain.value = 0.15;
+  sfxBus.connect(sfxSend); sfxSend.connect(reverbIn);
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 450;
+  const musicSend = ctx.createGain(); musicSend.gain.value = 0.22;
+  musicBus.connect(hp); hp.connect(musicSend); musicSend.connect(reverbIn);
+  noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  for (const fn of unlockListeners.splice(0)) fn();
 }
 
-function noise(dur, freq, q = 1, gain = 1, type = 'lowpass', sweepTo = null) {
+// attack > 0: el sonido crece en vez de empezar de golpe (para los "whoosh" que suben)
+function noise(dur, freq, q = 1, gain = 1, type = 'lowpass', sweepTo = null, attack = 0) {
   if (!ctx) return;
   const t = ctx.currentTime;
-  const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+  const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
   const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
   if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + dur);
   const g = ctx.createGain();
-  g.gain.setValueAtTime(gain, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(f); f.connect(g); g.connect(master);
-  src.start(t); src.stop(t + dur);
+  if (attack) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); } else g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + Math.max(dur, attack + 0.02));
+  src.connect(f); f.connect(g); g.connect(sfxBus);
+  src.start(t, Math.random() * 1.5); src.stop(t + dur + 0.05);
 }
 
-function tone(freq, dur, type = 'sine', gain = 0.5, slideTo = null) {
+function tone(freq, dur, type = 'sine', gain = 0.5, slideTo = null, attack = 0) {
   if (!ctx) return;
   const t = ctx.currentTime;
   const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t);
   if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
   const g = ctx.createGain();
-  g.gain.setValueAtTime(gain, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g); g.connect(master);
-  o.start(t); o.stop(t + dur);
+  if (attack) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); } else g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + Math.max(dur, attack + 0.02));
+  o.connect(g); g.connect(sfxBus);
+  o.start(t); o.stop(t + dur + 0.05);
 }
+// un poco distinto cada vez: el mismo golpe repetido no suena a máquina
+const vary = () => 0.93 + Math.random() * 0.14;
 
 export const sfx = {
-  whoosh: () => noise(0.15, 900, 0.8, 0.25, 'bandpass', 2600),
-  hit: (strong) => { noise(strong ? 0.22 : 0.12, strong ? 700 : 1200, 1, strong ? 1.1 : 0.8); tone(strong ? 90 : 140, 0.15, 'sine', 0.7, 40); },
-  block: () => { noise(0.08, 3000, 4, 0.5, 'bandpass'); tone(900, 0.05, 'square', 0.12); },
+  whoosh: (heavy) => {
+    const p = vary();
+    if (heavy) { noise(0.26, 380 * p, 0.8, 0.42, 'bandpass', 1900 * p, 0.06); tone(170 * p, 0.2, 'sine', 0.08, 90); }
+    else noise(0.12 + Math.random() * 0.05, 750 * p, 0.9, 0.26, 'bandpass', 2800 * p, 0.03);
+  },
+  // golpe en capas: chasquido + cuerpo + golpe seco (+ retumbo si es fuerte)
+  hit: (strong) => {
+    const p = vary();
+    noise(0.035, 3200 * p, 0.8, 0.5, 'highpass');
+    noise(strong ? 0.24 : 0.13, (strong ? 700 : 1150) * p, 1, strong ? 1.05 : 0.8, 'lowpass', 180);
+    tone((strong ? 95 : 150) * p, strong ? 0.26 : 0.15, 'sine', strong ? 0.85 : 0.6, 40);
+    if (strong) { tone(52, 0.5, 'sine', 0.45, 30); noise(0.45, 900, 0.5, 0.22, 'lowpass', 120); }
+  },
+  block: () => { const p = vary(); tone(1750 * p, 0.12, 'triangle', 0.12, 1500 * p); tone(2630 * p, 0.09, 'sine', 0.05); noise(0.08, 3000, 4, 0.45, 'bandpass'); tone(130, 0.08, 'sine', 0.32, 70); },
   jump: () => noise(0.12, 500, 1, 0.15, 'lowpass', 1500),
-  land: () => noise(0.12, 300, 1, 0.35),
+  land: () => { noise(0.12, 300, 1, 0.35); tone(90, 0.08, 'sine', 0.2, 50); },
   fall: () => { noise(0.4, 250, 1, 0.9); tone(60, 0.4, 'sine', 0.8, 30); },
   fire: () => { noise(0.5, 400, 0.6, 0.6, 'lowpass', 2000); tone(200, 0.4, 'sawtooth', 0.12, 80); },
   ice: () => { tone(1800, 0.3, 'triangle', 0.2, 600); noise(0.3, 6000, 2, 0.25, 'highpass'); },
@@ -58,9 +112,28 @@ export const sfx = {
   boom: () => { noise(0.9, 200, 0.7, 1.2); tone(55, 0.9, 'sine', 1, 25); },
   chain: () => { for (let i = 0; i < 4; i++) setTimeout(() => noise(0.04, 5000, 6, 0.3, 'bandpass'), i * 30); },
   teleport: () => tone(200, 0.35, 'sine', 0.3, 1600),
-  select: () => tone(660, 0.08, 'square', 0.12),
-  confirm: () => { tone(440, 0.1, 'square', 0.15); setTimeout(() => tone(880, 0.15, 'square', 0.15), 80); },
   shatter: () => { for (let i = 0; i < 6; i++) setTimeout(() => noise(0.15, 5000 + Math.random() * 3000, 3, 0.4, 'bandpass'), i * 25); },
+  // --- interfaz ---
+  select: () => { tone(1046, 0.05, 'triangle', 0.09); tone(1568, 0.04, 'sine', 0.035); },
+  confirm: () => {
+    tone(523, 0.09, 'square', 0.08); noise(0.3, 5000, 2, 0.1, 'bandpass', 9000);
+    setTimeout(() => { tone(784, 0.16, 'square', 0.08); tone(1568, 0.22, 'sine', 0.045); }, 70);
+  },
+  back: () => { tone(660, 0.07, 'triangle', 0.09, 440); setTimeout(() => tone(440, 0.09, 'triangle', 0.08, 330), 60); },
+  // peleador elegido: golpe grave con brillo metálico
+  lockIn: () => { tone(72, 0.55, 'sine', 0.7, 34); noise(0.3, 1300, 0.7, 0.55, 'lowpass', 200); tone(1318, 0.6, 'triangle', 0.07); noise(0.5, 6500, 3, 0.12, 'bandpass', 3000); },
+  // golpe de cine (VS, logo): sub que cae + polvo + chasquido
+  impact: () => { tone(64, 1.4, 'sine', 0.95, 27); noise(1.0, 700, 0.6, 0.9, 'lowpass', 80); noise(0.06, 2600, 0.8, 0.6, 'highpass'); tone(128, 0.7, 'triangle', 0.14, 60); },
+  riser: (dur = 1.3) => { noise(dur, 260, 1.4, 0.45, 'bandpass', 7000, dur * 0.92); tone(110, dur, 'sawtooth', 0.045, 880, dur * 0.9); },
+  swoosh: () => noise(0.32, 1700, 0.9, 0.3, 'bandpass', 380, 0.05),
+  pauseIn: () => { tone(440, 0.16, 'triangle', 0.1, 220); noise(0.2, 1500, 1, 0.12, 'bandpass', 400); },
+  pauseOut: () => { tone(220, 0.16, 'triangle', 0.1, 440); noise(0.2, 400, 1, 0.12, 'bandpass', 1500); },
+  ko: () => {
+    tone(58, 1.6, 'sine', 1, 24); noise(1.2, 900, 0.5, 1.1, 'lowpass', 70); noise(0.07, 3000, 0.7, 0.7, 'highpass');
+    setTimeout(() => noise(1.4, 6000, 0.6, 0.18, 'highpass', 2500), 40);   // el "shhh" del golpe en cámara lenta
+  },
+  perfect: () => [1047, 1319, 1568, 2093].forEach((f, i) => setTimeout(() => { tone(f, 0.9 - i * 0.12, 'sine', 0.09); tone(f * 2, 0.4, 'sine', 0.02); }, i * 70)),
+  firstHit: () => { tone(880, 0.12, 'square', 0.06); tone(1320, 0.18, 'triangle', 0.06); },
   // --- robot ---
   servo: () => { for (let i = 0; i < 3; i++) setTimeout(() => tone(320 + i * 140, 0.07, 'square', 0.1, 520 + i * 140), i * 70); },
   rocket: () => { noise(0.7, 600, 0.7, 0.7, 'lowpass', 2400); tone(90, 0.6, 'sawtooth', 0.25, 160); },
@@ -103,10 +176,10 @@ export const sfx = {
   bell: () => { tone(1568, 0.9, 'sine', 0.2); tone(2093, 0.7, 'sine', 0.09); setTimeout(() => { tone(1568, 1.1, 'sine', 0.18); tone(2093, 0.9, 'sine', 0.07); }, 180); },
   pump: () => { for (let i = 0; i < 3; i++) setTimeout(() => { tone(90, 0.12, 'sine', 0.4, 60); noise(0.1, 400, 2, 0.2, 'bandpass'); }, i * 130); },
   // Para todo el juego
-  step: () => noise(0.06, 900, 1, 0.12, 'lowpass'),
+  step: () => noise(0.06, 900 * vary(), 1, 0.12, 'lowpass'),
   clankStep: () => { noise(0.05, 3500, 5, 0.18, 'bandpass'); tone(160, 0.07, 'square', 0.07, 110); },
-  smack: () => noise(0.07, 1800, 1.2, 0.5, 'bandpass'),                        // capa extra para los puños
-  thud: () => { tone(70, 0.16, 'sine', 0.55, 45); noise(0.1, 350, 1, 0.35); },  // capa extra para las patadas
+  smack: () => noise(0.07, 1800 * vary(), 1.2, 0.5, 'bandpass'),                        // capa extra para los puños
+  thud: () => { tone(70 * vary(), 0.16, 'sine', 0.55, 45); noise(0.1, 350, 1, 0.35); },   // capa extra para las patadas
   combo: (n) => tone(520 + Math.min(n, 10) * 70, 0.12, 'triangle', 0.12, 800 + Math.min(n, 10) * 90),
   tick: () => tone(1250, 0.06, 'square', 0.09),
   roundBell: () => { tone(988, 1.2, 'sine', 0.22); tone(1976, 0.8, 'sine', 0.07); },
@@ -116,7 +189,6 @@ export const sfx = {
   tweet: () => { for (let i = 0; i < 3; i++) setTimeout(() => tone(2600 + Math.random() * 900, 0.07, 'sine', 0.07, 3400), i * 110); },
   drum: () => { tone(48, 0.9, 'sine', 0.9, 30); noise(0.5, 160, 1, 0.5); setTimeout(() => tone(44, 1.0, 'sine', 0.8, 28), 420); },
   fanfare: () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => { const d = i === 3 ? 0.7 : 0.18; tone(f, d, 'square', 0.09); tone(f / 2, d, 'triangle', 0.09); }, i * 150)); },
-  back: () => tone(520, 0.08, 'square', 0.09, 330),
   getup: () => noise(0.25, 1200, 0.8, 0.16, 'bandpass', 600),
 };
 
@@ -139,7 +211,7 @@ export function setAmbience(id) {
     const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
     const g = ctx.createGain(); g.gain.value = gain;
-    src.connect(f); f.connect(g); g.connect(master); src.start();
+    src.connect(f); f.connect(g); g.connect(sfxBus); src.start();
     nodes.push(src, f, g);
     if (lfo) {   // el viento sube y baja
       const o = ctx.createOscillator(); o.frequency.value = lfo;
@@ -183,4 +255,5 @@ export function announce(text) {
   if (v) u.voice = v;
   u.rate = 0.85; u.pitch = 0.4; u.volume = 1;
   speechSynthesis.speak(u);
+  audioHooks.onAnnounce?.(text);   // la música se hace a un lado mientras habla
 }

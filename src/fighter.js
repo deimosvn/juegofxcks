@@ -121,7 +121,7 @@ export class Fighter {
     const m = MOVES[name];
     this.moveName = name; this.hasHit = false;
     this.setState(m.air ? 'airAttack' : 'attack', name, m.total, m.startup / m.total, (m.startup + m.active) / m.total);
-    sfx.whoosh();
+    sfx.whoosh(m.dmg >= 9);   // los golpes fuertes cortan el aire más grave
   }
 
   startSpecial(spec, opp) {
@@ -208,7 +208,7 @@ export class Fighter {
           this.flip = this.vx !== 0;
           this.airAttackUsed = false;
           this.setState('jump', 'saltar', 50);
-          sfx.jump();
+          sfx.jump(); this.game.effects.dust(new THREE.Vector3(this.x, 0.05, 0), 6);
           break;
         }
         if (inp.held.down) { this.setIfNew('crouch', 'agacharse'); break; }
@@ -313,7 +313,7 @@ export class Fighter {
     const g = this.game;
     switch (this.state) {
       case 'jump': case 'airAttack':
-        this.vx = 0; this.flip = false; this.setState('idle'); sfx.land(); break;
+        this.vx = 0; this.flip = false; this.setState('idle'); sfx.land(); g.effects.dust(new THREE.Vector3(this.x, 0.05, 0), 9); break;
       case 'airHit':
         this.vx *= 0.3;
         this.state = this.dead ? 'dead' : 'knockdown'; this.t = 0;   // la animación de caída sigue
@@ -381,9 +381,9 @@ export class Fighter {
     this.health = Math.max(0, this.health - dmg);
     this.comboTaken++;
     attacker.combo++;
-    g.event('hit', { side: this.side, attacker: attacker.side, combo: attacker.combo });
-
     const strong = dmg >= 9 || hit.launch || hit.knockdown;
+    g.event('hit', { side: this.side, attacker: attacker.side, combo: attacker.combo, strong: !!strong });
+
     if (armored || robot) { g.effects.metalSpark(pos, this.buffColor || '#9fe8ff'); sfx.clank(); }
     else {
       g.effects.hitSpark(pos, hit.color || '#ffd27a', strong);

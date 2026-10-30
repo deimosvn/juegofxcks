@@ -328,8 +328,9 @@ export class Salas {
     if (!d1 || !d2) { this.cur.skip = t.id; g.toast('Esta pelea tiene un peleador que no tienes: actualiza el juego'); return; }
     const w = this.watching = { id: t.id, arena: id };
     g.mode = 'watch';
-    const models = await g.loadModels(d1, d2);
-    if (this.watching !== w) { for (const m of models) m.dispose(); return; }
+    g.versus(d1, d2, t.escenario, [t.n1, t.n2]);   // la presentación mientras carga (sin esperarla: hay que alcanzar la pelea)
+    const models = await g.loadModels(d1, d2, true);
+    if (this.watching !== w) { g.hideVersus(); for (const m of models) m.dispose(); return; }
     await g.startMatch(d1, d2, models, t.escenario);
     $('player1').textContent = t.n1; $('player2').textContent = t.n2;
     w.ws = g.session = new WatchSession(g);

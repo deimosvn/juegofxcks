@@ -8,7 +8,11 @@ import { createStage, STAGES, camaro as buildCamaro } from './stages.js';
 import { CPU } from './ai.js';
 import { FATALITIES, impactProjectile, SOLID_PROJECTILES } from './specials.js';
 import { updateProjectileExtra as updateProjectile, BUTT_SPECIALS } from './specials-amigos.js';
-import { sfx, announce, unlockAudio, setVoice, audioState, setAmbience } from './audio.js';
+import { sfx, announce, unlockAudio, setVoice, setVolumes, audioState, setAmbience } from './audio.js';
+import { music } from './music.js';
+import { Post } from './post.js';
+import { Hud, cssUrl } from './hud.js';
+import { ajustes, guardarAjustes, OPCIONES } from './ajustes.js';
 import { loadNetConfig, createBackend, Link, RollbackSession, fnv } from './net.js';
 import { makeFish, makeKawama, makeScissors, makeBarberChair, makeCape } from './props.js';
 import { initTouch, isTouch, registerServiceWorker } from './touch.js';
@@ -18,7 +22,16 @@ const $ = (id) => document.getElementById(id);
 const STEP = 1 / 60;
 const MAX_GAP = 9.5;               // distancia máxima entre peleadores (cámara)
 const ORDINAL = ['UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO'];
+const PERFECT = '¡VICTORIA PERFECTA!';
 const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
+const smooth = (x) => { const k = Math.min(1, Math.max(0, x)); return k * k * (3 - 2 * k); };
+// La música de cada escenario (music.js)
+const STAGE_MUSIC = { six: 'six', cabana: 'cabana', casachuy: 'casachuy', templo: 'templo' };
+// Pose de presentación en la ronda 1 (solo se ve: la pelea no cambia). Con `intro` en roster.js cada quien
+// tiene la suya; si la pose usa una herramienta, la saca.
+const INTRO_PROP = { chela: 'caguama', afilar: 'navaja', rapar: 'maquina' };
+// Golpes fuertes que dejan estela: hueso del brazo o de la pierna que pega
+const TRAILS = { puno_fuerte: 'elF', gancho_arriba: 'elF', patada: 'knN', patada_giratoria: 'knF', patada_aerea: 'knN', barrida: 'knN' };
 // Firma aproximada de un efecto (tipo + posición redondeada) para no repetirlo en el rollback
 const r4 = (v) => Math.round(v * 4);
 const fxSig = (args) => args.slice(0, 2).map((a) => {
@@ -35,8 +48,6 @@ class Game {
   constructor() {
     const canvas = $('game');
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    // en celular, menos píxeles: se ve casi igual y va mucho más fluido
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -45,11 +56,14 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
     this.camera.position.set(0, 2, 9);
     this.camLook = new THREE.Vector3(0, 1.2, 0);
+    this.baseFov = 40; this.fovKick = 0;
+    // brillo, color de cine y calidad (en celular, menos píxeles: se ve casi igual y va más fluido)
+    this.post = new Post(this.renderer, this.scene, this.camera);
     this.effects = new Effects(this.scene, this.camera);
-    this.effects.blood = JUEGO.sangre;
     this.stage = createStage('six', this.scene, this.effects);
     this.stageId = 'six';
-    setVoice(JUEGO.voz);
+    this.hud = new Hud();
+    this.applySettings();
     document.title = JUEGO.titulo;
 
     // estado de la simulación
@@ -68,12 +82,17 @@ class Game {
     this.effects.gate = (name, args) => this.fxAllow(name, args);
     audioState.gate = (name, args) => this.fxAllow(name, args);
 
+    this.post.setStage(this.stageId);
+    this.stats = { hits: [0, 0], combo: [0, 0], specials: [0, 0] };
+
     this.buildMenu();
     this.buildSelect();
     this.buildLobby();
     this.buildViews();
     addEventListener('resize', () => this.resize()); this.resize();
-    const unlock = () => unlockAudio();
+    // pantalla de título: con la primera tecla o toque ya se puede sonar (los navegadores lo exigen)
+    this.splash = true;
+    const unlock = () => { unlockAudio(); if (this.splash && this.screen === 'menu') this.leaveSplash(); };
     addEventListener('keydown', unlock); addEventListener('pointerdown', unlock);
 
     this.last = performance.now(); this.acc = 0;
@@ -89,10 +108,30 @@ class Game {
   resize() {
     const w = innerWidth, h = innerHeight;
     this.renderer.setSize(w, h, false);
+    this.post.setSize(w, h);
     this.camera.aspect = w / h;
-    this.camera.fov = w / h < 1 ? 60 : 40;
+    this.baseFov = w / h < 1 ? 60 : 40;
+    this.camera.fov = this.baseFov - this.fovKick;
     this.camera.updateProjectionMatrix();
   }
+
+  // Opciones guardadas → audio, narrador, sangre y calidad de imagen
+  applySettings() {
+    setVolumes(ajustes.musica, ajustes.efectos);
+    setVoice(ajustes.narrador);
+    this.effects.blood = ajustes.sangre;
+    this.post.setQuality(ajustes.calidad);
+  }
+
+  leaveSplash(silent = false) {
+    if (!this.splash) return;
+    this.splash = false;
+    $('menu').classList.remove('splash');
+    clearKeyEdges();   // la tecla que quitó el título no cuenta como "aceptar"
+    if (!silent) { sfx.impact(); sfx.confirm(); }
+  }
+
+  vibrate(pattern) { if (ajustes.vibracion && isTouch()) navigator.vibrate?.(pattern); }
 
   get winner() { return this.fighters[this.winnerSide] || null; }
   get loser() { return this.fighters[this.loserSide] || null; }
@@ -208,7 +247,7 @@ class Game {
       this.phase = 'ko'; this.phaseT = 0; this.koKind = 'ko';
       this.winnerSide = attacker.side; this.loserSide = victim.side;
       if (!this.session) this.slowmo = 36;
-      sfx.boom(); sfx.crowd();
+      sfx.ko(); sfx.crowd();
     } else if (this.phase === 'finish') {
       this.phase = 'finishBlow'; this.phaseT = 0;
       if (!this.session) this.slowmo = 30;
@@ -289,14 +328,15 @@ class Game {
   endMatch() {
     this.phase = 'matchEnd'; this.phaseT = 0;
     this.winner.setState('victory', 'victoria');
-    sfx.fanfare(); sfx.cheer();
+    sfx.cheer();   // la fanfarria la toca la música (music.js)
   }
 
   // ================================================================== PANTALLAS
   show(screen) {
     this.screen = screen;
-    for (const id of ['menu', 'select', 'controls', 'lobby', 'stages', 'arena']) $(id).classList.toggle('hidden', id !== screen);
+    for (const id of ['menu', 'select', 'controls', 'lobby', 'stages', 'arena', 'options']) $(id).classList.toggle('hidden', id !== screen);
     $('hud').classList.toggle('hidden', screen !== 'fight');
+    if (screen !== 'menu') this.leaveSplash(true);   // la liga de una sala se salta el título
     clearKeyEdges();
   }
 
@@ -307,11 +347,12 @@ class Game {
   }
 
   buildMenu() {
-    this.menuButtons = [...document.querySelectorAll('#menu button')];
+    this.menuButtons = [...document.querySelectorAll('#menu .menu-options button')];
     this.menuButtons.forEach((b, i) => {
-      b.addEventListener('mouseenter', () => this.setMenuIdx(i));
+      b.addEventListener('mouseenter', () => { if (this.menuIdx !== i) { this.setMenuIdx(i); sfx.select(); } });
       b.addEventListener('click', () => this.menuAccept(i));
     });
+    $('controls-opts').addEventListener('click', () => this.openOptions());
   }
   setMenuIdx(i) {
     this.menuIdx = (i + this.menuButtons.length) % this.menuButtons.length;
@@ -321,14 +362,67 @@ class Game {
     unlockAudio(); sfx.confirm();
     const mode = this.menuButtons[i].dataset.mode;
     if (mode === 'controls') { this.showControls(false); return; }
+    if (mode === 'options') { this.openOptions(); return; }
     if (mode === 'online') { this.openLobby(); return; }
     this.mode = mode;
     this.openSelect();
   }
 
+  // ------------------------------------------------------------------ opciones
+  openOptions() {
+    // desde la pausa se regresa a la pausa (la pelea sigue detrás, congelada)
+    this.optReturn = this.screen === 'controls' && this.paused ? 'pause' : 'menu';
+    const box = $('opts');
+    box.innerHTML = '';
+    this.optRows = OPCIONES.filter((o) => !o.soloCelular || isTouch()).map((o, i) => {
+      const row = document.createElement('div');
+      row.className = 'opt';
+      row.innerHTML = `<span class="olabel">${o.nombre}</span><div class="oval"><button class="oarrow" data-d="-1" aria-label="menos">◀</button><span class="oview"></span><button class="oarrow" data-d="1" aria-label="más">▶</button></div>`;
+      row.addEventListener('mouseenter', () => { if (this.optIdx !== i) { this.optIdx = i; this.renderOptions(); } });
+      row.addEventListener('click', (e) => { this.optIdx = i; this.changeOption(+(e.target.closest('.oarrow')?.dataset.d || 1)); });
+      box.appendChild(row);
+      return { o, row };
+    });
+    this.optIdx = 0;
+    this.show('options');
+    if (this.optReturn === 'pause') $('hud').classList.remove('hidden');
+    this.renderOptions();
+  }
+
+  renderOptions() {
+    this.optRows.forEach(({ o, row }, i) => {
+      row.classList.toggle('sel', i === this.optIdx);
+      const v = ajustes[o.id];
+      row.querySelector('.oview').innerHTML = o.tipo === 'vol'
+        ? `<span class="obar">${Array.from({ length: 10 }, (_, k) => `<i class="${k < Math.round(v * 10) ? 'on' : ''}"></i>`).join('')}</span>`
+        : `<b class="otext">${o.tipo === 'si' ? (v ? 'SÍ' : 'NO') : esc(String(v).toUpperCase())}</b>`;
+    });
+  }
+
+  changeOption(d) {
+    const { o } = this.optRows[this.optIdx];
+    if (o.tipo === 'vol') ajustes[o.id] = Math.round(Math.min(1, Math.max(0, ajustes[o.id] + d * 0.1)) * 10) / 10;
+    else if (o.tipo === 'si') ajustes[o.id] = !ajustes[o.id];
+    else { const L = o.valores, k = L.indexOf(ajustes[o.id]); ajustes[o.id] = L[(k + d + L.length) % L.length]; }
+    guardarAjustes();
+    this.applySettings();
+    this.renderOptions();
+    // que se oiga/sienta el cambio
+    if (o.id === 'efectos') sfx.hit(false); else sfx.select();
+    if (o.id === 'narrador' && ajustes.narrador) announce('Narrador');
+    if (o.id === 'vibracion') this.vibrate(80);
+  }
+
+  closeOptions() {
+    sfx.back();
+    if (this.optReturn === 'pause') this.showControls(true); else this.show('menu');
+  }
+
   showControls(pause) {
     $('controls-title').textContent = pause ? 'PAUSA' : 'CONTROLES';
-    $('controls-hint').textContent = pause ? 'ESC para continuar · Q para salir al menú' : 'ESC para volver';
+    $('controls-hint').textContent = pause ? 'ESC para continuar · O opciones · Q para salir al menú' : 'ESC para volver';
+    $('controls').classList.toggle('paused', !!pause);
+    $('controls-opts').classList.toggle('hidden', !pause);
     const list = $('movelist');
     list.innerHTML = '';
     if (pause) for (const f of this.fighters) {
@@ -338,7 +432,7 @@ class Game {
         + (f.titanSpecials.length ? `<tr><td colspan="2" class="sub">CON EL TRAJE DE ROBOT</td></tr>${f.titanSpecials.map(row).join('')}` : '') + '</table>';
       list.appendChild(div);
     }
-    this.prevScreen = this.screen;
+    if (this.screen !== 'options') this.prevScreen = this.screen;
     this.show('controls');
     if (pause) $('hud').classList.remove('hidden');
   }
@@ -398,7 +492,7 @@ class Game {
   }
 
   lock(p) {
-    this.sel.locked[p] = true; sfx.confirm();
+    this.sel.locked[p] = true; sfx.lockIn();
     announce(PELEADORES[this.sel.cur[p]].nombre);
     if (this.mode === 'online') {
       this.online.link.sendCtrl({ t: 'pick', id: PELEADORES[this.sel.cur[p]].id });
@@ -414,8 +508,46 @@ class Game {
     this.renderSelect();
     if (this.sel.locked[0] && this.sel.locked[1]) {
       const d1 = PELEADORES[this.sel.cur[0]], d2 = PELEADORES[this.sel.cur[1]];
-      setTimeout(() => this.openStageSelect(true, (id) => this.startMatch(d1, d2, null, id)), 600);
+      setTimeout(() => this.openStageSelect(true, (id) => this.versusThenFight(d1, d2, id)), 600);
     }
+  }
+
+  // Presentación (VS) mientras cargan los modelos; la pelea empieza cuando ya se vio completa
+  async versusThenFight(d1, d2, stageId) {
+    const shown = this.versus(d1, d2, stageId, ['JUGADOR 1', this.mode === 'cpu' ? 'CPU' : 'JUGADOR 2']);
+    const models = this.loadModels(d1, d2, true);
+    await shown;
+    $('vs-status').textContent = 'Cargando peleadores…';   // solo se ve si todavía no terminan
+    this.startMatch(d1, d2, await models, stageId);
+  }
+
+  versus(def1, def2, stageId, names = [], minMs = 2700) {
+    const st = STAGES.find((s) => s.id === stageId);
+    [def1, def2].forEach((d, i) => {
+      const n = i + 1, img = $(`vs-img${n}`);
+      img.parentElement.style.setProperty('--c', d.color || '#444');
+      img.style.setProperty('--img', d.retrato ? cssUrl(d.retrato) : 'none');
+      img.classList.toggle('none', !d.retrato);
+      img.textContent = d.retrato ? '' : d.nombre.split(/\s+/).map((w) => w[0]).join('').slice(0, 2);
+      $(`vs-n${n}`).textContent = d.nombre;
+      $(`vs-p${n}`).textContent = names[i] || '';
+    });
+    $('vs-stage').textContent = st ? `${st.nombre} · ${st.lugar}` : '';
+    $('vs-status').textContent = '';
+    $('loading').classList.add('hidden');
+    $('versus').classList.remove('hidden', 'out');
+    this.versusOn = true;
+    sfx.swoosh();
+    setTimeout(() => { if (this.versusOn) { sfx.impact(); this.vibrate(70); } }, 470);
+    announce(`${def1.nombre} contra ${def2.nombre}`);
+    return new Promise((res) => setTimeout(res, minMs));
+  }
+
+  hideVersus() {
+    if (!this.versusOn) return;
+    this.versusOn = false;
+    $('versus').classList.add('out');
+    setTimeout(() => { if (!this.versusOn) $('versus').classList.add('hidden'); }, 400);
   }
 
   renderSelect() {
@@ -433,6 +565,14 @@ class Game {
     for (const p of [0, 1]) {
       const show = p === 0 || showP2;
       const def = PELEADORES[s.cur[p]];
+      // retrato grande: se cambia (con un destello) solo cuando cambia el peleador señalado
+      const face = $(`pface${p + 1}`), fid = show ? def.id : '';
+      if (face.dataset.id !== fid) {
+        face.dataset.id = fid;
+        face.style.setProperty('--img', show && def.retrato ? cssUrl(def.retrato) : 'none');
+        face.style.setProperty('--fc', show ? def.color : '#222');
+        face.classList.remove('swap'); void face.offsetWidth; face.classList.add('swap');
+      }
       $(`pick${p + 1}`).textContent = show ? def.nombre : '?';
       const list = (l) => l.map((e) => `<b>${esc(e.nombre)}</b><br><span class="inp">${esc(e.input)}</span>`).join('<br>');
       $(`pspec${p + 1}`).innerHTML = show ? list(def.especiales) + (def.especialesTitan ? `<p class="suit">Con el traje de robot:</p>${list(def.especialesTitan)}` : '')
@@ -471,8 +611,9 @@ class Game {
   }
 
   // ------------------------------------------------------------------ partida
-  async loadModels(def1, def2) {
-    $('loading').classList.remove('hidden');
+  // quiet: sin la pantalla de "Cargando…" (la presentación VS la tapa)
+  async loadModels(def1, def2, quiet = false) {
+    if (!quiet) $('loading').classList.remove('hidden');
     this.disposeModels();
     this.models = [];
     // con `traje` también se carga el robot que se pone en el MODO TITÁN (model.suit)
@@ -525,6 +666,7 @@ class Game {
     this.stage?.dispose();
     this.stage = createStage(id, this.scene, this.effects);
     this.stageId = id;
+    this.post.setStage(id);
   }
 
   async startMatch(def1, def2, preloaded = null, stageId = null) {
@@ -543,9 +685,11 @@ class Game {
     this.frame = 0; this.round = 0; this.projSeq = 0; this.slowmo = 0;
     this.fxSeen.clear();
     this.clearViews();
-    $('name1').textContent = def1.nombre; $('name2').textContent = def2.nombre;
-    $('player1').textContent = this.mode === 'online' ? (this.online.side === 0 ? this.online.myName : this.online.peerName) : '';
-    $('player2').textContent = this.mode === 'online' ? (this.online.side === 1 ? this.online.myName : this.online.peerName) : '';
+    const o = this.online;
+    this.hud.start([def1, def2], this.mode === 'online' && o ? (o.side === 0 ? [o.myName, o.peerName] : [o.peerName, o.myName]) : []);
+    this.stats = { hits: [0, 0], combo: [0, 0], specials: [0, 0] };
+    this.firstHitRound = 0; this.viewPhase = null; this.introCue = 0;
+    this.hideVersus();
     this.show('fight');
     this.startRound();
     this.reported = false;
@@ -562,6 +706,11 @@ class Game {
     this.session = null; this.cpu = null; this.phase = 'none';
     $('announcer').classList.remove('show');
     $('netbadge').classList.add('hidden');
+    $('results').classList.add('hidden'); this.resultsOn = false;
+    $('fade').style.opacity = 0;
+    this.hideVersus();
+    Object.assign(this.post.fx, { aberr: 0, desat: 0, danger: 0 });
+    this.aberr = 0; this.fovKick = 0; this.camRoll = 0;
     this.renderer.toneMappingExposure = 1;
   }
 
@@ -785,11 +934,14 @@ class Game {
     const o = this.online;
     if (!o || o.stageId) return;
     o.stageId = stageId;
-    o.models = await this.loadModels(o.defs[0], o.defs[1]);
-    if (!this.online) return;
+    // los dos ven la presentación completa mientras cargan; luego se esperan uno al otro
+    const shown = this.versus(o.defs[0], o.defs[1], stageId, o.side === 0 ? [o.myName, o.peerName] : [o.peerName, o.myName]);
+    o.models = await this.loadModels(o.defs[0], o.defs[1], true);
+    await shown;
+    if (this.online !== o) return;
     o.ready[o.side] = true;
     o.link.sendCtrl({ t: 'ready' });
-    $('loading').classList.remove('hidden'); $('loading-text').textContent = `Esperando a ${o.peerName}…`;
+    $('vs-status').textContent = `Esperando a ${o.peerName}…`;
     this.maybeGo();
   }
 
@@ -966,12 +1118,48 @@ class Game {
     this.alpha = Math.min(1, Math.max(0, this.acc / STEP));
     this.stage.update(now / 1000);
     this.syncView(dt);
+    this.menuEmbers(dt);
     this.effects.update(dt);
     this.updateCamera(dt);
-    this.renderer.render(this.scene, this.camera);
+    this.updateMusic();
+    this.post.render(dt);
+  }
+
+  // Qué música va: la del menú, la del escenario (con más capas en la ronda final), la tensión del
+  // "¡ACÁBALO!" o la fanfarria del que gana. En pausa y en cámara lenta se oye apagada.
+  updateMusic() {
+    if (this.paused) { music.muffle(true); return; }
+    let id = 'menu', lvl = ['menu', 'options', 'controls'].includes(this.screen) ? 0 : 1;
+    if (this.versusOn) id = null;
+    else if (this.screen === 'fight' && this.fighters.length) {
+      const ph = this.phase;
+      lvl = 0;
+      if (ph === 'matchEnd') id = 'victoria';
+      else if (ph === 'postFatality') id = null;
+      else if (ph === 'finish' || ph === 'finishBlow' || ph === 'fatality') id = 'tension';
+      else {
+        id = STAGE_MUSIC[this.stageId] || 'six';
+        const final = this.fighters.every((f) => f.wins === JUEGO.rondasParaGanar - 1);
+        lvl = ph === 'intro' ? 0 : final || this.timer <= 15 ? 2 : 1;
+      }
+    }
+    music.set(id, lvl);
+    music.muffle(!this.session && this.slowmo > 0);
+  }
+
+  // En los menús: chispas de brasa que suben despacio frente al escenario
+  menuEmbers(dt) {
+    if (this.fighters.length) return;
+    this.emberT = (this.emberT || 0) + dt;
+    while (this.emberT > 0.06) {
+      this.emberT -= 0.06;
+      this.effects.glow.emit({ pos: V((Math.random() - 0.5) * 18, Math.random() * 2, -5 + Math.random() * 9), count: 1, speed: 0.5, dir: [0.25, 1, 0], spread: 0.5,
+        color: '#ffd08a', colorEnd: '#ff3000', life: 4.5, size: 0.07, drag: 0.15, gravity: -0.12 });
+    }
   }
 
   handleUI() {
+    if (this.versusOn) { clearKeyEdges(); return; }   // durante la presentación no se aceptan teclas
     if (this.screen === 'menu') {
       if (consumeKey('ArrowUp', 'KeyW')) { this.setMenuIdx(this.menuIdx - 1); sfx.select(); }
       if (consumeKey('ArrowDown', 'KeyS')) { this.setMenuIdx(this.menuIdx + 1); sfx.select(); }
@@ -984,8 +1172,20 @@ class Game {
     } else if (this.screen === 'lobby') {
       if (consumeKey('Escape')) { if (!$('modal').classList.contains('hidden')) this.modalAnswer(false); else this.leaveLobby(); }
       if (this.incoming && consumeKey('Enter')) this.modalAnswer(true);
+    } else if (this.screen === 'options') {
+      const n = this.optRows.length;
+      if (consumeKey('ArrowUp', 'KeyW')) { this.optIdx = (this.optIdx - 1 + n) % n; sfx.select(); this.renderOptions(); }
+      if (consumeKey('ArrowDown', 'KeyS')) { this.optIdx = (this.optIdx + 1) % n; sfx.select(); this.renderOptions(); }
+      if (consumeKey('ArrowLeft', 'KeyA')) this.changeOption(-1);
+      if (consumeKey('ArrowRight', 'KeyD', 'Enter', 'KeyF', 'Space')) this.changeOption(1);
+      if (consumeKey('Escape')) this.closeOptions();
     } else if (this.screen === 'controls') {
-      if (consumeKey('Escape', 'Enter')) { this.paused = false; if (this.prevScreen !== 'fight') sfx.back(); this.show(this.prevScreen === 'fight' ? 'fight' : 'menu'); }
+      if (consumeKey('Escape', 'Enter')) {
+        const back = this.prevScreen === 'fight';
+        this.paused = false; if (back) sfx.pauseOut(); else sfx.back();
+        this.show(back ? 'fight' : 'menu');
+      }
+      if (this.prevScreen === 'fight' && consumeKey('KeyO')) this.openOptions();
       if (this.prevScreen === 'fight' && consumeKey('KeyQ')) { this.paused = false; this.quitMatch(); this.show('menu'); }
     } else if (this.screen === 'fight') {
       // espectador: solo puede salirse a la sala
@@ -1020,7 +1220,7 @@ class Game {
       if (this.phase === 'matchEnd' && this.phaseT > 120) {
         if (consumeKey('Enter', 'KeyF', 'KeyK', 'Space')) { this.quitMatch(); this.openSelect(); }
         else if (consumeKey('Escape')) { this.quitMatch(); this.show('menu'); }
-      } else if (consumeKey('Escape')) { this.paused = true; this.showControls(true); }
+      } else if (consumeKey('Escape')) { this.paused = true; sfx.pauseIn(); this.showControls(true); }
     }
   }
 
@@ -1226,6 +1426,12 @@ class Game {
     this.projViews.clear();
     this.events.length = 0;
     this.viewRound = -1; this.announced = null;
+    // sin peleadores nadie apaga estos objetos: que no se queden en el menú (la capa, el satélite…)
+    for (const o of [this.chair, this.cape, this.bigFish, this.scanner]) o.visible = false;
+    for (const c of this.chains) c.line.visible = false;
+    for (const L of this.lasers) for (const m of [...L.beams, ...L.cores]) m.visible = false;
+    for (const G of this.gadgets) for (const o of [G.sat, G.aim, G.ray, G.turb, G.spring, G.sglove, G.rocket, ...G.gogo]) o.visible = false;
+    this.projLight.intensity = 0;
   }
 
   syncView(dt) {
@@ -1243,15 +1449,71 @@ class Game {
     this.syncGadgets(dt);
     this.updateAnnouncer();
     this.syncBarber(dt);
-    this.updateHUD();
-    // poca vida: se oye el corazón del que juega en esta pantalla
-    const me = this.mode === 'watch' ? null : this.fighters[this.online ? this.online.side : 0];
-    if (me && this.phase === 'fight' && !this.paused && me.health > 0 && me.health < me.maxHealth * 0.25) {
+    this.hud.update(this.fighters, this.timer);
+    // poca vida: se oye el corazón del que juega en esta pantalla (y las orillas se ponen rojas)
+    const me = this.localFighter();
+    const danger = me && this.phase === 'fight' && !this.paused && me.health > 0 && me.health < me.maxHealth * 0.25;
+    if (danger) {
       this.beat = (this.beat ?? 0) - dt;
       if (this.beat <= 0) { this.beat = 0.85; sfx.heartbeat(); }
     }
     const exp = this.phase === 'fatality' ? 0.55 : 1;
     this.renderer.toneMappingExposure += (exp - this.renderer.toneMappingExposure) * Math.min(1, dt * 6);
+    this.screenFx(dt, danger);
+  }
+
+  localFighter() { return this.mode === 'watch' ? null : this.fighters[this.online ? this.online.side : 0]; }
+
+  // Postproceso y capas de la pantalla según lo que pasa: destello y aberración en el K.O., gris en la
+  // cámara lenta, orillas rojas con poca vida, fundido a negro entre rondas y la tabla de resultados
+  screenFx(dt, danger) {
+    const fx = this.post.fx, ph = this.phase, t = this.phaseT;
+    // presentación de la ronda 1: el nombre de cada quien mientras la cámara lo enfoca
+    if (ph === 'intro' && this.round === 1) {
+      if (t >= 2 && this.introCue < 1) { this.introCue = 1; this.hud.special(0, this.fighters[0].def.nombre, this.fighters[0].def.color, 950); }
+      if (t >= 30 && this.introCue < 2) { this.introCue = 2; this.hud.special(1, this.fighters[1].def.nombre, this.fighters[1].def.color, 950); }
+    }
+    if (ph !== this.viewPhase) {
+      if (ph === 'ko' && this.koKind === 'ko') {
+        const fl = $('flash'); fl.classList.remove('on'); void fl.offsetWidth; fl.classList.add('on');
+        this.aberr = 1.8; this.fovKick = Math.max(this.fovKick, 3);
+        this.vibrate([70, 50, 140]);
+      }
+      if (ph === 'fight' && this.viewPhase === 'intro') this.fovKick = Math.max(this.fovKick, 2.2);   // ¡PELEA!
+      this.viewPhase = ph;
+    }
+    this.aberr = Math.max(0, (this.aberr || 0) - dt * 2.6);
+    fx.aberr = this.aberr;
+    const desat = (ph === 'ko' && this.koKind === 'ko' && t < 70) ? 0.6 : ph === 'finish' ? 0.3 : 0;
+    fx.desat += (desat - fx.desat) * Math.min(1, dt * 5);
+    fx.danger = danger ? 0.3 + 0.14 * Math.sin(performance.now() / 150) : Math.max(0, fx.danger - dt * 2);
+    const fade = this.fadeLevel().toFixed(3);
+    if (fade !== this.fadeShown) { this.fadeShown = fade; $('fade').style.opacity = fade; }
+    const res = this.screen === 'fight' && ph === 'matchEnd' && t > 100;
+    if (res !== !!this.resultsOn) {
+      this.resultsOn = res;
+      if (res) this.renderResults();
+      $('results').classList.toggle('hidden', !res);
+    }
+  }
+
+  // Negro entre rondas: baja al final de "GANA ..." y sube al empezar la siguiente
+  fadeLevel() {
+    if (this.screen !== 'fight') return 0;
+    const t = this.phaseT + (this.alpha ?? 0);
+    if (this.phase === 'roundOver') return smooth((t - 98) / 20);
+    if (this.phase === 'intro') return 1 - smooth(t / 16);
+    return 0;
+  }
+
+  renderResults() {
+    const s = this.stats, w = this.winnerSide;
+    const row = (label, v) => {
+      const best = v[0] === v[1] ? -1 : v[0] > v[1] ? 0 : 1;
+      return `<tr><td>${label}</td>${v.map((x, i) => `<td class="${i === best ? 'best' : ''}">${x}</td>`).join('')}</tr>`;
+    };
+    $('results').innerHTML = `<table><tr><th></th>${this.fighters.map((f, i) => `<th class="${i === w ? 'win' : ''}">${esc(f.def.nombre)}</th>`).join('')}</tr>`
+      + row('GOLPES', s.hits) + row('COMBO MÁX.', s.combo) + row('ESPECIALES', s.specials) + row('RONDAS', this.fighters.map((f) => f.wins)) + '</table>';
   }
 
   // Fatality de Ramces: la silla sube del piso, le pone la capa y, tras el navajazo, la cabeza sale volando
@@ -1294,24 +1556,25 @@ class Game {
   }
 
   handleEvent(e) {
-    if (e.type === 'special') this.showSpecialName(e.side, e.nombre, e.color);
-    if (e.type === 'hit') {
-      this.viewModel(e.side)?.flash(1);
-      if (e.combo >= 2) {
-        const el = $(e.attacker === 0 ? 'combo1' : 'combo2');
-        el.textContent = `${e.combo} GOLPES`;
-        el.classList.add('show');
-        clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1200);
-      }
+    const s = this.stats;
+    if (e.type === 'special') {
+      this.hud.special(e.side, e.nombre, e.color);
+      if (this.phase !== 'fatality') s.specials[e.side]++;
+      this.fovKick = Math.max(this.fovKick, 1.2);
     }
-  }
-
-  showSpecialName(side, nombre, color) {
-    const el = $(side === 0 ? 'spec1' : 'spec2');
-    el.textContent = nombre;
-    el.style.setProperty('--c', color || '#f80');
-    el.classList.add('show');
-    clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1100);
+    if (e.type === 'hit') {
+      const a = e.attacker;
+      this.viewModel(e.side)?.flash(1);
+      s.hits[a]++; s.combo[a] = Math.max(s.combo[a], e.combo);
+      if (e.combo >= 2) this.hud.combo(a, e.combo);
+      if (this.firstHitRound !== this.round && this.phase === 'fight') {
+        this.firstHitRound = this.round;
+        this.hud.banner(a, '¡PRIMER GOLPE!'); sfx.firstHit();
+      }
+      if (e.strong) { this.fovKick = Math.max(this.fovKick, 1.6); this.aberr = Math.max(this.aberr || 0, 0.6); }
+      // en el celular se siente cuando te pegan
+      if (this.localFighter()?.side === e.side) this.vibrate(e.strong ? 45 : 18);
+    }
   }
 
   // el modelo que se ve de cada peleador (Diego en MODO TITÁN: el traje de robot)
@@ -1345,9 +1608,12 @@ class Game {
     m.burn = f.burn; m.squash = f.squash;
     m.paused = f.iced; m.setIced(f.iced);
     m.detachArm = this.projectiles.some((p) => p.alive && p.owner === f.side && p.kind === 'puno');
+    // ronda 1: cada quien hace su pose de presentación mientras la cámara pasa (`intro` en roster.js)
+    const intro = this.phase === 'intro' && f.state === 'intro' && this.round === 1 && this.phaseT < 74 ? f.def.intro || 'victoria' : null;
     // nalgas infladas (José) y fuego del jetpack (Alan)
     let butt = 1;
     if (f.state === 'special' && BUTT_SPECIALS.has(f.spec?.tipo)) butt = f.spec.tipo === 'twerk' ? 1.75 + Math.sin(f.t * 1.25) * 0.25 : 1.7;
+    if (intro === 'twerk') butt = 1.75 + Math.sin(this.phaseT * 1.25) * 0.25;
     if (this.phase === 'fatality' && this.fatal?.tipo === 'nalgon' && this.winner === f && this.phaseT < 100) butt = 1 + 2.3 * Math.min(1, Math.max(0, (this.phaseT - 6) / 30));
     m.buttScale += (butt - m.buttScale) * Math.min(1, (animDt || 0) * 10);
     m.jetOn = f.state === 'special' && f.spec?.tipo === 'jetpack' && ['up', 'dive'].includes(f.specData?.phase);
@@ -1358,18 +1624,34 @@ class Game {
     m.prop = tipo === 'pescado' && f.t < 12 ? 'pez' : (tipo === 'kawama' && f.t < 14) || tipo === 'chela' ? 'caguama'
       : tipo === 'tijeras' && f.t < 12 ? 'tijeras' : tipo === 'rapado' ? 'maquina' : tipo === 'navaja' ? 'navaja' : tipo === 'talco' ? 'brocha'
         : corte >= 40 && corte < 104 ? 'maquina' : corte >= 104 && corte < 176 ? 'navaja' : null;
+    if (intro) m.prop = INTRO_PROP[intro] || null;
     if (m.jetOn && animDt) this.effects.glow.emit({ pos: V(f.x - f.facing * 0.3, f.y + 0.75, -0.1), count: 3, speed: 4, dir: [0, -1, 0], spread: 0.25, color: '#fff3c0', colorEnd: '#ff6a00', life: 0.3, size: 0.28 });
     // el robot corre con chispas de propulsor en los pies
     if (robot && f.state === 'walk' && animDt) this.effects.glow.emit({ pos: V(f.rx - f.facing * 0.2, f.y + 0.12, 0), count: 2, speed: 2.5, dir: [-f.facing, 0.3, 0], spread: 0.4, color: '#ffffff', colorEnd: f.buffColor || '#4fd8ff', life: 0.25, size: 0.18 });
-    const st = f.animState();
+    const st = intro ? { key: intro, t: this.phaseT, total: 74, s: 0.25, a: 0.8, id: 'intro', flip: false, rate: 1 } : f.animState();
     if (this.hitstop <= 0 && !this.paused) st.t += a * st.rate;   // tiempo de animación continuo entre pasos
     m.apply(st, animDt);
+    this.swingTrail(f, m, st, animDt);
     let tint = null, amount = 0.6;
     if (f.iced) tint = '#3aa8ff';
     else if (f.buffTimer > 0 && f.buffKind === 'armor') { tint = f.buffColor; amount = 0.28 + 0.16 * Math.sin(performance.now() / 90); }
     else if (f.titan) tint = f.buffTimer < 90 && (f.t >> 3) % 2 ? f.buffColor : null;   // parpadea cuando ya se le acaba
     else if (f.buffTimer > 0 && (f.t >> 2) % 2) tint = f.buffColor;
     m.tickMaterials(animDt || 1 / 60, tint, amount);
+  }
+
+  // Golpes fuertes: una estela de luz sigue al puño o al pie que pega
+  swingTrail(f, m, st, dt) {
+    const boneName = TRAILS[st.key], bone = boneName && m.parts?.[boneName];
+    const p = st.total ? st.t / st.total : 0;
+    if (!bone || !dt || f.hidden || p < st.s * 0.6 || p > st.a + 0.1) { m.trail = null; return; }
+    m.root.updateMatrixWorld(true);
+    const off = boneName[0] === 'e' ? m.rig?.handF ?? V(0, -0.29, 0) : V(0, -(m.rig?.H ?? 1.85) * 0.24, 0);
+    const pos = bone.localToWorld(off.clone());
+    if (m.trail && m.trail.distanceTo(pos) < 1.5) {
+      for (let i = 1; i <= 5; i++) this.effects.glow.emit({ pos: m.trail.clone().lerp(pos, i / 5), count: 1, speed: 0.02, color: '#fff6dc', colorEnd: f.def.color || '#ffb347', life: 0.15, size: 0.2, drag: 0 });
+    }
+    m.trail = pos;
   }
 
   makeProjectileView(p) {
@@ -1575,20 +1857,24 @@ class Game {
   announcerState() {
     const t = this.phaseT, w = this.winner;
     const final = this.fighters.length === 2 && this.fighters.every((f) => f.wins === JUEGO.rondasParaGanar - 1);
+    const perfect = !!w && w.health >= w.maxHealth;   // ganó sin que le pegaran
     switch (this.phase) {
-      case 'intro': return t < 88 ? { text: final ? 'RONDA FINAL' : `RONDA ${this.round}`, say: final ? 'Ronda final' : `Ronda ${ORDINAL[this.round - 1] || this.round}` } : null;
+      // ronda 1: el letrero sale ya que la cámara se abre (antes se ven de cerca los dos)
+      case 'intro': return t < 88 && (this.round > 1 || t >= 38) ? { text: final ? 'RONDA FINAL' : `RONDA ${this.round}`, say: final ? 'Ronda final' : `Ronda ${ORDINAL[this.round - 1] || this.round}` } : null;
       case 'fight': return t < 50 ? { text: '¡PELEA!', say: '¡Pelea!' } : null;
-      case 'ko': return t < 95 ? { text: this.koKind === 'time' ? '¡TIEMPO!' : 'K.O.', blood: true } : null;
-      case 'roundOver': return t > 5 ? (w ? { text: `GANA ${w.def.nombre}` } : { text: 'EMPATE' }) : null;
-      case 'finish': return t < 120 ? { text: '¡ACÁBALO!', blood: true, say: '¡Acábalo!' } : null;
+      case 'ko': return t < 95 ? { text: this.koKind === 'time' ? '¡TIEMPO!' : 'K.O.', blood: true, kind: 'ko' } : null;
+      case 'roundOver':
+        if (t <= 5) return null;
+        return w ? { text: `GANA ${w.def.nombre}`, sub: perfect ? [PERFECT] : [], perfect, say: perfect ? '¡Victoria perfecta!' : `Gana ${w.def.nombre}` } : { text: 'EMPATE', say: 'Empate' };
+      case 'finish': return t < 120 ? { text: '¡ACÁBALO!', blood: true, kind: 'ko', say: '¡Acábalo!' } : null;
       case 'finishBlow': return null;
       case 'fatality': return null;
-      case 'postFatality': return t < 130 ? { text: '¡FATALIDAD!', blood: true, say: 'Fatalidad' } : null;
+      case 'postFatality': return t < 130 ? { text: '¡FATALIDAD!', blood: true, kind: 'ko', say: 'Fatalidad' } : null;
       case 'matchEnd': {
         const room = this.mode === 'watch' || !!this.online?.turno;
         const hint = room ? (t > 60 ? 'Siguiente pelea en un momento…' : '')
           : t > 120 && !isTouch() ? (this.mode === 'online' ? 'ENTER revancha · ESC salir' : 'ENTER para continuar · ESC menú') : '';
-        return { text: `GANA ${w.def.nombre}`, sub: [w.def.frase, hint].filter(Boolean), say: `${w.def.nombre} gana` };
+        return { text: `GANA ${w.def.nombre}`, sub: [perfect ? PERFECT : '', w.def.frase, hint].filter(Boolean), perfect, say: `${w.def.nombre} gana` };
       }
     }
     return null;
@@ -1602,28 +1888,21 @@ class Game {
     const sameText = s && this.announcedText === s.text;
     this.announced = key; this.announcedText = s?.text;
     if (!s) { a.classList.remove('show'); return; }
-    a.innerHTML = esc(s.text) + (s.sub || []).map((x) => `<small>${esc(x)}</small>`).join('');
+    const subs = (s.sub || []).map((x) => `<small class="${x === PERFECT ? 'perfect' : ''}">${esc(x)}</small>`).join('');
+    a.classList.toggle('end', this.phase === 'matchEnd');   // más arriba: abajo va la tabla de resultados
+    // mismo letrero con otra línea abajo (p. ej. la ayuda de teclas): solo se cambian las líneas
+    if (sameText) { a.querySelectorAll('small').forEach((n) => n.remove()); a.insertAdjacentHTML('beforeend', subs); return; }
+    a.innerHTML = `<div class="big"><span>${esc(s.text)}</span></div>${subs}`;
     a.classList.toggle('blood', !!s.blood);
-    if (!sameText) {
-      a.classList.remove('show'); void a.offsetWidth; a.classList.add('show');
-      if (s.say && this.lastSaid !== s.text) { announce(s.say); this.lastSaid = s.text; clearTimeout(this.saidT); this.saidT = setTimeout(() => { this.lastSaid = null; }, 1500); }
-    }
-  }
-
-  updateHUD() {
-    for (const [i, f] of this.fighters.entries()) {
-      const pct = Math.max(0, f.health / f.maxHealth * 100);
-      const fill = $(`hp${i + 1}`), lag = $(`lag${i + 1}`);
-      fill.style.width = pct + '%'; lag.style.width = pct + '%';
-      fill.classList.toggle('low', pct < 30);
-      $(`wins${i + 1}`).textContent = '◆ '.repeat(f.wins).trim();
-    }
-    $('timer').textContent = Math.max(0, this.timer);
+    a.classList.toggle('ko', s.kind === 'ko');
+    a.classList.remove('show'); void a.offsetWidth; a.classList.add('show');
+    if (s.perfect) sfx.perfect();
+    if (s.say && this.lastSaid !== s.text) { announce(s.say); this.lastSaid = s.text; clearTimeout(this.saidT); this.saidT = setTimeout(() => { this.lastSaid = null; }, 1500); }
   }
 
   updateCamera(dt) {
     const cam = this.camera;
-    let target, look;
+    let target, look, roll = 0, k = 1 - Math.exp(-dt * 5);
     if (this.screen === 'fight' && this.fighters.length) {
       const [a, b] = this.fighters;
       const ax = a.rx ?? a.x, bx = b.rx ?? b.x;
@@ -1643,16 +1922,54 @@ class Game {
         const ly = Math.min(this.loser.y, 10);
         target.y += ly * 0.7; target.z += ly * 0.35; look.y += ly * 0.9;
       }
+      // tomas de cine (solo la vista, no cambian la pelea): presentación, K.O. y el que gana
+      const t = this.phaseT + (this.alpha ?? 0), w = this.winner, l = this.loser, close = Math.min(narrow, 1.4);
+      if (this.phase === 'intro') {
+        if (this.round === 1) {
+          // de cerca a uno, pasa al otro y se abre a la toma de pelea
+          const near = (f, fx) => [V(fx + f.facing * 1.25 * f.sizeScale, 1.4 * f.sizeScale, 2.7 * f.sizeScale * close), V(fx, 1.2 * f.sizeScale, 0)];
+          const [p1, l1] = near(a, ax), [p2, l2] = near(b, bx);
+          const e1 = smooth((t - 26) / 18), e2 = smooth((t - 54) / 32);
+          target = p1.lerp(p2, e1).lerp(target, e2);
+          look = l1.lerp(l2, e1).lerp(look, e2);
+        } else {
+          const e = 1 - smooth(t / 70);   // desde arriba y lejos, bajando a la toma de pelea
+          target.add(V(0, 2.4 * e, 3.5 * e)); look.y += 0.4 * e;
+        }
+        k = 1;
+      } else if (this.phase === 'ko' && this.koKind === 'ko' && w && l) {
+        // se acerca al que cae y se ladea
+        const e = smooth(t / 12) * (1 - smooth((t - 58) / 28)), lx = l.rx ?? l.x;
+        target.lerp(V(lx - w.facing * 0.9, 1.1 + l.y * 0.4, 3.6 * close), e * 0.8);
+        look.lerp(V(lx, 0.8 + l.y * 0.6, 0), e * 0.85);
+        roll = 0.07 * e * w.facing;
+      } else if (this.phase === 'roundOver' && w) {
+        const e = smooth((t - 10) / 50) * 0.65, wx = w.rx ?? w.x;
+        target.lerp(V(wx + w.facing * 1.6, 1.5 * w.sizeScale, 4.4 * close * w.sizeScale), e);
+        look.lerp(V(wx, 1.25 * w.sizeScale, 0), e);
+      } else if (this.phase === 'matchEnd' && w) {
+        // vuelta lenta alrededor del que ganó
+        const wx = w.rx ?? w.x, s = w.sizeScale, ang = Math.sin(t * 0.008) * 0.75 + w.facing * 0.35, R = 4.3 * Math.min(narrow, 1.5) * s;
+        target = V(wx + Math.sin(ang) * R, 1.55 * s, Math.cos(ang) * R);
+        look = V(wx, 1.2 * s, 0);
+        k = 1 - Math.exp(-dt * 2.2);
+      }
     } else {
+      // menús: la cámara pasea despacio por el escenario
       const t = performance.now() / 1000 * 0.12;
-      target = new THREE.Vector3(Math.sin(t) * 6, 2.4, 9 + Math.cos(t) * 2);
-      look = new THREE.Vector3(0, 1.6, -3);
+      target = new THREE.Vector3(Math.sin(t) * 5.5, 2.1 + Math.sin(t * 0.7) * 0.3, 8.6 + Math.cos(t) * 1.8);
+      look = new THREE.Vector3(0, 1.5, -3);
     }
-    const k = 1 - Math.exp(-dt * 5);
     cam.position.lerp(target, k);
     this.camLook.lerp(look, k);
     const s = this.effects.shake;
     cam.lookAt(this.camLook.x + (Math.random() - 0.5) * s, this.camLook.y + (Math.random() - 0.5) * s, this.camLook.z);
+    this.camRoll = (this.camRoll || 0) + (roll - (this.camRoll || 0)) * Math.min(1, dt * 6);
+    if (Math.abs(this.camRoll) > 0.0005) cam.rotateZ(this.camRoll);
+    // "golpe" de zoom en los golpes fuertes, los especiales y el K.O.
+    this.fovKick *= Math.exp(-dt * 6);
+    const fov = this.baseFov - this.fovKick;
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
   }
 }
 
