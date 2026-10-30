@@ -238,14 +238,20 @@ Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo), cada uno co
 PUÑO GLACIAR, CAMPO ELÉCTRICO y SUPLEX), su especial en el aire y su brutality.
 
 ## 🔊 Sonidos y música
-Todo es sintetizado (no hay archivos de audio) y pasa por un compresor y un poco de eco de cuarto.
+Los efectos son sintetizados (no hay archivos) y todo pasa por un compresor y un poco de eco de cuarto.
 
-**Música** ([`src/music.js`](src/music.js), toda original): tema épico en el menú (le entran tambores al elegir
-peleador), una pista por escenario — electrónica rápida en SIX, **cumbia** con güiro y acordeón en La Cabaña,
-synthwave nocturno en Casa Chuy y taikos con flauta en el Templo —, tensión con latido en “¡ACÁBALO!” y la fatality, y
-fanfarria del ganador. En la presentación de cada ronda la pista baja, y en “¡PELEA!” vuelve a entrar con platillo; en
-la ronda final (o con poco tiempo) suena con todo. En pausa y en la cámara lenta se oye apagada, y se hace a un lado
-cuando habla el narrador.
+**Canciones de los escenarios** ([`assets/musica/`](assets/musica)): cada escenario tiene su canción — SIX
+(`six.m4a`), La Cabaña con Los Ángeles Azules (`cabana.m4a`) y Casa Chuy con Oscar Maydón y Peso Pluma
+(`casachuy.m4a`). Están recortadas, al mismo volumen (−16 LUFS) y en AAC para que pesen poco; el navegador las pide
+por pedazos (por eso el service worker no las toca y `servidor.js` contesta con `Range`). Empiezan a cargar desde la
+pantalla del VS y suenan igual que la música: bajan en la presentación, se apagan en pausa y en cámara lenta y se
+hacen a un lado cuando habla el narrador. Si una no carga, entra la pista sintetizada de ese escenario.
+
+**Música sintetizada** ([`src/music.js`](src/music.js), toda original): tema épico en el menú (le entran tambores al
+elegir peleador), taikos con flauta en el Templo (y las pistas de respaldo de los otros escenarios), tensión con
+latido en “¡ACÁBALO!” y la fatality, y fanfarria del ganador. En la presentación de cada ronda la pista baja, y en
+“¡PELEA!” vuelve a entrar con platillo; en la ronda final (o con poco tiempo) suena con todo. En pausa y en la cámara
+lenta se oye apagada, y se hace a un lado cuando habla el narrador.
 
 **Efectos**: además de golpes (en capas: chasquido, cuerpo y retumbo; cada uno suena un poco distinto), especiales y
 el narrador:

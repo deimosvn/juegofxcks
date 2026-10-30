@@ -6,7 +6,7 @@
 //  - Modelos e imágenes: se usan de la copia y se actualizan en segundo plano.
 //  - Firebase (tiempo real) y /api/ nunca pasan por aquí.
 // =====================================================================
-const VERSION = 'fxcks-v10';
+const VERSION = 'fxcks-v11';
 const SHELL = [
   './', 'css/style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
   'src/main.js', 'src/model.js', 'src/fighter.js', 'src/specials.js', 'src/specials-amigos.js', 'src/stages.js',
@@ -34,6 +34,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/herramientas/')) return;
+    // las canciones las pide el navegador por pedazos (Range): directo, sin guardarlas (Safari no las toca si no)
+    if (url.pathname.startsWith('/assets/musica/')) return;
     e.respondWith(url.pathname.startsWith('/assets/') ? staleWhileRevalidate(req) : networkFirst(req));
     return;
   }

@@ -33,6 +33,7 @@ const TYPES = {
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
   '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
   '.ogg': 'audio/ogg',
   '.wav': 'audio/wav',
 };
@@ -61,7 +62,16 @@ http.createServer((req, res) => {
   if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); return res.end('No encontrado'); }
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    const head = { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache', 'Accept-Ranges': 'bytes' };
+    // las canciones se piden por pedazos (Range): Safari no las toca si el servidor no lo hace
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (range) {
+      const size = data.length, a = range[1] ? +range[1] : Math.max(0, size - +range[2]), b = range[1] && range[2] ? Math.min(+range[2], size - 1) : size - 1;
+      if (a >= size || a > b) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }); return res.end(); }
+      res.writeHead(206, { ...head, 'Content-Range': `bytes ${a}-${b}/${size}`, 'Content-Length': b - a + 1 });
+      return res.end(data.subarray(a, b + 1));
+    }
+    res.writeHead(200, head);
     res.end(data);
   });
 }).listen(PORT, () => console.log(`Kombate de Amigos en http://localhost:${PORT}`));

@@ -581,6 +581,7 @@ class Game {
       $(`vs-p${n}`).textContent = names[i] || '';
     });
     $('vs-stage').textContent = st ? `${st.nombre} · ${st.lugar}` : '';
+    music.prepare(STAGE_MUSIC[stageId]);   // la canción del escenario va bajando mientras tanto
     $('vs-status').textContent = '';
     $('loading').classList.add('hidden');
     $('versus').classList.remove('hidden', 'out');

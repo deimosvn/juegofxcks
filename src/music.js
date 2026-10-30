@@ -2,7 +2,18 @@
 // así no se atrasa aunque el juego tenga un tirón. Cada pista dice qué tocar en cada dieciseisavo;
 // `nivel` agrega capas: 0 = tranquila (menú, presentación de la ronda), 1 = completa (la pelea),
 // 2 = con todo (ronda final o poco tiempo). Al pasar de 0 a más, la pista "cae" con un platillo.
-import { audioBus, audioHooks, volumes } from './audio.js';
+// Los escenarios con canción de verdad (SONGS, en assets/musica/) la tocan en vez de su pista.
+import { audioBus, audioHooks, volumes, onAudioUnlock } from './audio.js';
+
+// Canción de cada escenario (ya recortadas y al mismo volumen: -16 LUFS). Si no carga (sin internet), suena su pista.
+export const SONGS = {
+  six: 'assets/musica/six.m4a',                // la de videoplayback
+  cabana: 'assets/musica/cabana.m4a',          // Los Ángeles Azules – Cómo te voy a olvidar
+  casachuy: 'assets/musica/casachuy.m4a',      // Oscar Maydón x Peso Pluma – Asquerosamente rico
+};
+const SONG_GAIN = 0.85;
+// un instante de silencio: con el primer toque se "desbloquea" la etiqueta <audio> (en iPhone si no, no suena después)
+const SILENCE = 'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==';
 
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const on = (pat, s) => pat[s % pat.length] !== '.';
@@ -415,8 +426,45 @@ class Player {
   }
 }
 
+// Una canción de verdad (la etiqueta <audio> es una sola para todas: va pasando por el mismo filtro y
+// la misma bajada de volumen que la música sintetizada). Nivel 0: como de lejos, filtrada y más bajita
+// (la presentación de la ronda); 1 y 2: completa (al abrirse en "¡PELEA!" se siente como el drop).
+class SongPlayer {
+  constructor(eng, id, level) {
+    this.eng = eng; this.c = eng.ctx; this.id = id; this.song = true; this.next = 0; this.level = -1;
+    const el = eng.songEl, t = this.c.currentTime;
+    this.token = ++eng.songToken;
+    if (eng.songSrc !== SONGS[id]) { el.src = SONGS[id]; eng.songSrc = SONGS[id]; }
+    try { el.currentTime = 0; } catch { /* todavía sin cargar */ }   // cada pelea empieza desde el principio
+    const g = eng.songGain.gain;
+    g.cancelScheduledValues(t); g.setValueAtTime(0.0001, t);
+    this.setLevel(level);
+    this.play();
+  }
+  play() {
+    if (this.done) return;
+    this.eng.songEl.play().catch((e) => { if (e?.name !== 'AbortError') this.eng.songFailed(this, e); });
+  }
+  setLevel(level) {
+    if (level === this.level) return;
+    const t = this.c.currentTime, quiet = level === 0;
+    const g = this.eng.songGain.gain, f = this.eng.songLP.frequency;
+    f.cancelScheduledValues(t); f.setTargetAtTime(quiet ? 900 : 20000, t, quiet ? 0.3 : 0.12);
+    g.cancelScheduledValues(t); g.setTargetAtTime(SONG_GAIN * (quiet ? 0.6 : level >= 2 ? 1.08 : 1), t, quiet ? 0.4 : 0.15);
+    this.level = level;
+  }
+  schedule() {}
+  stop(fade) {
+    this.done = true;
+    const t = this.c.currentTime, g = this.eng.songGain.gain, token = this.token;
+    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + fade);
+    // (si mientras se apaga ya empezó otra canción, esa no se pausa)
+    setTimeout(() => { if (this.eng.songToken === token) this.eng.songEl.pause(); }, fade * 1000 + 60);
+  }
+}
+
 class Music {
-  constructor() { this.id = null; this.cur = null; this.ctx = null; this.muffled = false; }
+  constructor() { this.id = null; this.cur = null; this.ctx = null; this.muffled = false; this.songToken = 0; this.badSong = new Set(); }
 
   init() {
     const b = audioBus();
@@ -428,13 +476,52 @@ class Music {
     this.duckG = c.createGain();
     this.input.connect(this.filter); this.filter.connect(this.duckG); this.duckG.connect(b.musicBus);
     audioHooks.onAnnounce = () => this.duck(0.5, 1.4);   // el narrador se oye por encima
+    // las canciones: <audio> → filtro propio (lejos/cerca) → volumen → el mismo camino que la música sintetizada
+    const el = this.songEl = new Audio();
+    el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', '');
+    this.songLP = c.createBiquadFilter(); this.songLP.type = 'lowpass'; this.songLP.frequency.value = 20000; this.songLP.Q.value = 0.6;
+    this.songGain = c.createGain(); this.songGain.gain.value = 0;
+    c.createMediaElementSource(el).connect(this.songLP); this.songLP.connect(this.songGain); this.songGain.connect(this.input);
+    el.addEventListener('error', () => { if (this.cur?.song) this.songFailed(this.cur, el.error); });
     setInterval(() => this.tick(), 25);
     return true;
+  }
+
+  // Con el primer toque o tecla (audio.js): la etiqueta <audio> toca un instante de silencio y ya queda permitida
+  unlockSong() {
+    if (!this.ctx && !this.init()) return;
+    const el = this.songEl;
+    if (this.songSrc) return;
+    el.src = SILENCE;
+    el.play().then(() => { if (!this.songSrc) el.pause(); }).catch(() => {});
+  }
+
+  // Ya se sabe el escenario (pantalla VS): la canción empieza a bajar para que suene sin espera
+  prepare(id) {
+    if (!SONGS[id] || this.badSong.has(id) || (!this.ctx && !this.init())) return;
+    if (this.songSrc === SONGS[id] || this.cur?.song) return;
+    this.songEl.src = SONGS[id]; this.songSrc = SONGS[id];
+    this.songEl.load();
+  }
+
+  // No se pudo tocar la canción (sin internet, el navegador no la deja…): suena la pista sintetizada del escenario
+  songFailed(p, err) {
+    if (p.done || this.cur !== p) return;
+    if (err?.name !== 'NotAllowedError') this.badSong.add(p.id);
+    p.done = true;
+    this.cur = TRACKS[p.id] ? new Player(this, TRACKS[p.id], Math.max(0, p.level)) : null;
   }
 
   tick() {
     const p = this.cur, c = this.ctx;
     if (!p || c.state !== 'running') return;
+    // la canción se pausa con la pestaña escondida o con la música en 0 (no gasta datos) y sigue al volver
+    if (p.song) {
+      const want = !document.hidden && volumes.musica > 0;
+      if (want && this.songEl.paused) p.play();
+      else if (!want && !this.songEl.paused) this.songEl.pause();
+      return;
+    }
     // con la pestaña escondida los temporizadores se atrasan: mejor no agendar y seguir al volver;
     // con la música en 0 tampoco (en el celular ahorra trabajo)
     if (document.hidden || volumes.musica <= 0) { p.next = Math.max(p.next, c.currentTime + 0.05); return; }
@@ -446,12 +533,14 @@ class Music {
     if (!this.ctx && !this.init()) return;
     if (id === this.id) {
       const p = this.cur;
-      if (p && level !== p.level) { if (p.level === 0 && level > 0) p.drop = true; p.level = level; }
+      if (p?.song) p.setLevel(level);
+      else if (p && level !== p.level) { if (p.level === 0 && level > 0) p.drop = true; p.level = level; }
       return;
     }
     this.id = id;
     this.cur?.stop(id ? 0.7 : 1.4);
-    this.cur = id && TRACKS[id] ? new Player(this, TRACKS[id], level) : null;
+    this.cur = id && SONGS[id] && !this.badSong.has(id) ? new SongPlayer(this, id, level)
+      : id && TRACKS[id] ? new Player(this, TRACKS[id], level) : null;
   }
 
   // pausa o cámara lenta: la música se oye como detrás de una puerta
@@ -469,3 +558,4 @@ class Music {
 }
 
 export const music = new Music();
+onAudioUnlock(() => music.unlockSong());
