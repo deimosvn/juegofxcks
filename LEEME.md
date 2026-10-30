@@ -37,6 +37,30 @@ cualquiera de las dos teclas o un mando.
 - Imagen “de cine”: brillo (bloom) en focos, rayos y chispas, viñeta, grano fino, estelas en los golpes fuertes,
   onda de choque en cada impacto, polvo al saltar y caer, y orillas rojas cuando te queda poca vida.
 
+## ☠ Fatalities de cine
+Cada fatality se ve como escena de película ([`src/fatal.js`](src/fatal.js); la fatality en sí no cambió, así que en
+línea sigue igual en las dos computadoras):
+- **Franjas negras** arriba y abajo, se esconde el HUD (y los botones del celular) y abajo a la izquierda sale el
+  **título**: “FATALITY · CORTE AL RAS · RAMCES”.
+- **Cámara propia de cada una**, con cortes y movimientos: primeros planos, contrapicados, vueltas alrededor del que va a
+  morir y persecuciones (al que sale volando de un gancho, al cohete de Alan, a la cabeza que vuela con Ramces).
+- **Luz de escenario** sobre los dos, el resto se oscurece y la imagen toma el color de la fatality (rojo sangre, azul
+  hielo, naranja fuego…). La de Diego hace que la imagen “se descomponga” como señal digital mientras escanea.
+- **El remate**: destello, colores corridos, zoom de golpe, temblor, cámara lenta (contra la CPU; en línea no) y un
+  trancazo grave. Al empezar suena un golpe de tráiler y con “¡FATALIDAD!” un acorde oscuro; las letras escurren sangre.
+- **Poses**: el que va a morir ve venir lo que le cae y se cubre temblando; Alan saluda a su cohete; Voltio alza los
+  brazos para llamar a los rayos.
+
+| Quién | Cómo se ve |
+|---|---|
+| Ramces | la silla sube, vuelta lenta alrededor de la cabeza con la máquina, primer plano de la navaja con destello, tajo en cámara lenta y la cámara sigue a la cabeza |
+| Diego | primer plano de los ojos que se encienden, sigue el láser, vuelta alrededor mientras lo escanea y se deshace en cubos de luz |
+| Alan | el cohete amarrado, despegue desde el piso entre humo, lo persigue hasta el cielo y fuegos artificiales de colores |
+| Gera | ráfaga con tres ángulos, gancho en cámara lenta y lo sigue volando hasta que brilla como estrella |
+| José | lo sigue en el brinco, desde los ojos del otro ve caer las nalgas gigantes y el aplastón sale con destello rosa |
+| Conde | la cámara se queda y él crece hasta salirse del cuadro; contrapicado con el pie gigante sobre el otro |
+| Emi | primer plano chiflando, el pescado rompe el piso entre agua, se lo traga y se vuelve a clavar |
+
 ## 🤖 Dificultad de la CPU
 Al elegir peleador contra la CPU, en el panel de la CPU: **◀ NORMAL ▶** (con el mouse, tocándolo o con **Q / E**).
 También está en OPCIONES. Sale en el VS y arriba de la barra de vida de la CPU.

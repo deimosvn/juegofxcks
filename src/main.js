@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { JUEGO, PELEADORES } from './roster.js';
 import { FighterModel, loadAsset } from './model.js';
 import { styleOf } from './anim.js';
+import { FatalDirector } from './fatal.js';
 import { Fighter, ARENA_HALF } from './fighter.js';
 import { PlayerInput, consumeKey, clearKeyEdges, decodeMask } from './input.js';
 import { Effects } from './effects.js';
@@ -90,6 +91,7 @@ class Game {
     this.buildSelect();
     this.buildLobby();
     this.buildViews();
+    this.cine = new FatalDirector(this);   // fatalities de cine (fatal.js)
     addEventListener('resize', () => this.resize()); this.resize();
     // pantalla de título: con la primera tecla o toque ya se puede sonar (los navegadores lo exigen)
     this.splash = true;
@@ -716,6 +718,8 @@ class Game {
     this.startRound();
     this.reported = false;
     setAmbience(this.stageId);   // pájaros, grillos, viento… según el escenario
+    this.cine.reset();
+    this.cine.prewarm();         // la luz de la fatality, ya preparada (que no se trabe al prenderla)
   }
 
   quitMatch() {
@@ -731,7 +735,8 @@ class Game {
     $('results').classList.add('hidden'); this.resultsOn = false;
     $('fade').style.opacity = 0;
     this.hideVersus();
-    Object.assign(this.post.fx, { aberr: 0, desat: 0, danger: 0 });
+    this.cine.reset();
+    Object.assign(this.post.fx, { aberr: 0, desat: 0, danger: 0, tintAmt: 0, glitch: 0, vignette: 0.4, bloom: 1 });
     this.aberr = 0; this.fovKick = 0; this.camRoll = 0;
     this.renderer.toneMappingExposure = 1;
   }
@@ -1166,7 +1171,7 @@ class Game {
       }
     }
     music.set(id, lvl);
-    music.muffle(!this.session && this.slowmo > 0);
+    music.muffle((!this.session && this.slowmo > 0) || this.phase === 'fatality');
   }
 
   // En los menús: chispas de brasa que suben despacio frente al escenario
@@ -1471,6 +1476,7 @@ class Game {
     this.syncGadgets(dt);
     this.updateAnnouncer();
     this.syncBarber(dt);
+    this.cine.update(dt);
     this.hud.update(this.fighters, this.timer);
     // poca vida: se oye el corazón del que juega en esta pantalla (y las orillas se ponen rojas)
     const me = this.localFighter();
@@ -1479,7 +1485,7 @@ class Game {
       this.beat = (this.beat ?? 0) - dt;
       if (this.beat <= 0) { this.beat = 0.85; sfx.heartbeat(); }
     }
-    const exp = this.phase === 'fatality' ? 0.55 : 1;
+    const exp = this.cine.active ? this.cine.exposure : 1;
     this.renderer.toneMappingExposure += (exp - this.renderer.toneMappingExposure) * Math.min(1, dt * 6);
     this.screenFx(dt, danger);
   }
@@ -1506,8 +1512,16 @@ class Game {
     }
     this.aberr = Math.max(0, (this.aberr || 0) - dt * 2.6);
     fx.aberr = this.aberr;
-    const desat = (ph === 'ko' && this.koKind === 'ko' && t < 70) ? 0.6 : ph === 'finish' ? 0.3 : 0;
+    const C = this.cine, cine = C.active;
+    const desat = cine ? C.desat : (ph === 'ko' && this.koKind === 'ko' && t < 70) ? 0.6 : ph === 'finish' ? 0.3 : 0;
     fx.desat += (desat - fx.desat) * Math.min(1, dt * 5);
+    // fatality: más viñeta, tinte de su color y, en la de Diego, la imagen que se descompone (fatal.js)
+    const kk = Math.min(1, dt * 6);
+    fx.vignette += ((cine ? C.vignette : 0.4) - fx.vignette) * kk;
+    fx.tintAmt += ((cine ? C.tintAmt : 0) - fx.tintAmt) * kk;
+    if (cine) fx.tint.copy(C.tint);
+    fx.glitch = cine ? C.glitch : 0;
+    fx.bloom += ((cine ? 0.6 : 1) - fx.bloom) * kk;   // con la luz de escenario, menos brillo (si no, la ropa clara resplandece)
     fx.danger = danger ? 0.3 + 0.14 * Math.sin(performance.now() / 150) : Math.max(0, fx.danger - dt * 2);
     const fade = this.fadeLevel().toFixed(3);
     if (fade !== this.fadeShown) { this.fadeShown = fade; $('fade').style.opacity = fade; }
@@ -1580,7 +1594,7 @@ class Game {
   handleEvent(e) {
     const s = this.stats;
     if (e.type === 'special') {
-      this.hud.special(e.side, e.nombre, e.color);
+      if (this.phase !== 'fatality') this.hud.special(e.side, e.nombre, e.color);   // la fatality trae su propio título
       if (this.phase !== 'fatality') s.specials[e.side]++;
       this.fovKick = Math.max(this.fovKick, 1.2);
     }
@@ -1653,7 +1667,7 @@ class Game {
     if (m.jetOn && animDt) this.effects.glow.emit({ pos: V(f.x - f.facing * 0.3, f.y + 0.75, -0.1), count: 3, speed: 4, dir: [0, -1, 0], spread: 0.25, color: '#fff3c0', colorEnd: '#ff6a00', life: 0.3, size: 0.28 });
     // el robot corre con chispas de propulsor en los pies
     if (robot && f.state === 'walk' && animDt) this.effects.glow.emit({ pos: V(f.rx - f.facing * 0.2, f.y + 0.12, 0), count: 2, speed: 2.5, dir: [-f.facing, 0.3, 0], spread: 0.4, color: '#ffffff', colorEnd: f.buffColor || '#4fd8ff', life: 0.25, size: 0.18 });
-    const st = intro ? { key: intro, t: this.phaseT, total: 74, s: 0.25, a: 0.8, id: 'intro', flip: false, rate: 1 } : f.animState();
+    const st = intro ? { key: intro, t: this.phaseT, total: 74, s: 0.25, a: 0.8, id: 'intro', flip: false, rate: 1 } : this.cine.pose(f) || f.animState();
     if (this.hitstop <= 0 && !this.paused) st.t += a * st.rate;   // tiempo de animación continuo entre pasos
     // lo que la animación necesita saber de la pelea (anim.js): solo se usa para verse, no cambia nada
     const opp = this.other(f);
@@ -1902,7 +1916,7 @@ class Game {
       case 'finish': return t < 120 ? { text: '¡ACÁBALO!', blood: true, kind: 'ko', say: '¡Acábalo!' } : null;
       case 'finishBlow': return null;
       case 'fatality': return null;
-      case 'postFatality': return t < 130 ? { text: '¡FATALIDAD!', blood: true, kind: 'ko', say: 'Fatalidad' } : null;
+      case 'postFatality': return t < 130 ? { text: '¡FATALIDAD!', blood: true, kind: 'fatal', sub: [w?.fatality?.nombre].filter(Boolean), say: 'Fatalidad' } : null;
       case 'matchEnd': {
         const room = this.mode === 'watch' || !!this.online?.turno;
         const hint = room ? (t > 60 ? 'Siguiente pelea en un momento…' : '')
@@ -1927,7 +1941,8 @@ class Game {
     if (sameText) { a.querySelectorAll('small').forEach((n) => n.remove()); a.insertAdjacentHTML('beforeend', subs); return; }
     a.innerHTML = `<div class="big"><span>${esc(s.text)}</span></div>${subs}`;
     a.classList.toggle('blood', !!s.blood);
-    a.classList.toggle('ko', s.kind === 'ko');
+    a.classList.toggle('ko', s.kind === 'ko' || s.kind === 'fatal');
+    a.classList.toggle('fatal', s.kind === 'fatal');
     a.classList.remove('show'); void a.offsetWidth; a.classList.add('show');
     if (s.perfect) sfx.perfect();
     if (s.say && this.lastSaid !== s.text) { announce(s.say); this.lastSaid = s.text; clearTimeout(this.saidT); this.saidT = setTimeout(() => { this.lastSaid = null; }, 1500); }
@@ -1935,7 +1950,7 @@ class Game {
 
   updateCamera(dt) {
     const cam = this.camera;
-    let target, look, roll = 0, k = 1 - Math.exp(-dt * 5);
+    let target, look, roll = 0, k = 1 - Math.exp(-dt * 5), cineFov = 0;
     if (this.screen === 'fight' && this.fighters.length) {
       const [a, b] = this.fighters;
       const ax = a.rx ?? a.x, bx = b.rx ?? b.x;
@@ -1987,6 +2002,8 @@ class Game {
         look = V(wx, 1.2 * s, 0);
         k = 1 - Math.exp(-dt * 2.2);
       }
+      // fatality: manda el director de cine (fatal.js) con sus tomas, cortes y movimientos
+      if (this.cine.cam) { const c = this.cine.cam; target = c.pos; look = c.look; roll = c.roll; k = 1; cineFov = c.fov; this.camRoll = roll; }
     } else {
       // menús: la cámara pasea despacio por el escenario
       const t = performance.now() / 1000 * 0.12;
@@ -2001,7 +2018,7 @@ class Game {
     if (Math.abs(this.camRoll) > 0.0005) cam.rotateZ(this.camRoll);
     // "golpe" de zoom en los golpes fuertes, los especiales y el K.O.
     this.fovKick *= Math.exp(-dt * 6);
-    const fov = this.baseFov - this.fovKick;
+    const fov = (cineFov ? cineFov * this.baseFov / 40 : this.baseFov) - this.fovKick;
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
   }
 }

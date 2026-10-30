@@ -84,6 +84,20 @@ function tone(freq, dur, type = 'sine', gain = 0.5, slideTo = null, attack = 0) 
   o.connect(g); g.connect(sfxBus);
   o.start(t); o.stop(t + dur + 0.05);
 }
+// Acorde grave de película: osciladores un poco desafinados entre sí, por un filtro que se va cerrando
+function chord(freqs, dur, gain = 0.3, cutoff = 900, attack = 0.04, type = 'sawtooth') {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 0.8;
+  f.frequency.setValueAtTime(cutoff, t); f.frequency.exponentialRampToValueAtTime(Math.max(60, cutoff * 0.22), t + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  f.connect(g); g.connect(sfxBus);
+  for (const fr of freqs) for (const det of [-7, 7]) {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = fr; o.detune.value = det;
+    o.connect(f); o.start(t); o.stop(t + dur + 0.05);
+  }
+}
 // un poco distinto cada vez: el mismo golpe repetido no suena a máquina
 const vary = () => 0.93 + Math.random() * 0.14;
 
@@ -190,6 +204,23 @@ export const sfx = {
   drum: () => { tone(48, 0.9, 'sine', 0.9, 30); noise(0.5, 160, 1, 0.5); setTimeout(() => tone(44, 1.0, 'sine', 0.8, 28), 420); },
   fanfare: () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => { const d = i === 3 ? 0.7 : 0.18; tone(f, d, 'square', 0.09); tone(f / 2, d, 'triangle', 0.09); }, i * 150)); },
   getup: () => noise(0.25, 1200, 0.8, 0.16, 'bandpass', 600),
+  // fatalities de cine (fatal.js)
+  braam: () => {   // golpe grave al empezar, como en los tráilers
+    chord([43.65, 65.4, 87.3], 2.8, 0.3, 760, 0.05); tone(43.65, 2.4, 'sine', 0.42, 40);
+    noise(2.2, 150, 0.7, 0.38, 'lowpass', 60, 0.03); noise(0.4, 2200, 0.6, 0.14, 'bandpass', 500);
+  },
+  fatalHit: () => {   // el remate: trueno seco, golpe que se hunde y retumbo largo
+    tone(72, 1.9, 'sine', 1.0, 24); chord([36.7, 55], 1.7, 0.26, 520, 0.01);
+    noise(0.14, 2600, 0.6, 0.95, 'highpass'); noise(2.2, 420, 0.5, 0.6, 'lowpass', 80);
+  },
+  stinger: () => {   // ¡FATALIDAD!: acorde menor oscuro con un brillo agudo encima
+    chord([55, 110, 130.81, 164.81], 3.4, 0.3, 1500, 0.12); chord([440, 523.25, 659.26], 3.0, 0.045, 2800, 0.45, 'triangle');
+    tone(65, 1.2, 'sine', 0.8, 45); noise(1.4, 300, 0.6, 0.4, 'lowpass', 80);
+  },
+  thunder: () => { noise(0.22, 1900, 0.5, 0.7, 'bandpass', 400); noise(2.6, 150, 0.6, 0.9, 'lowpass', 55, 0.08); tone(38, 1.8, 'sine', 0.45, 27); },
+  crackle: () => { for (let i = 0; i < 16; i++) setTimeout(() => noise(0.035, 3000 + Math.random() * 5000, 4, 0.28, 'bandpass'), i * 38 + Math.random() * 45); },
+  fuse: () => { noise(1.1, 5200, 0.9, 0.2, 'highpass', 3200); for (let i = 0; i < 7; i++) setTimeout(() => noise(0.02, 6000, 5, 0.18, 'bandpass'), i * 140 + Math.random() * 60); },
+  glint: () => { tone(2637, 0.5, 'sine', 0.06, 3520); tone(3951, 0.35, 'sine', 0.035); },
 };
 
 // Ambiente de cada escenario, muy bajito: un fondo continuo y detalles al azar (pájaros, grillos…)

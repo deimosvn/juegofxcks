@@ -388,6 +388,38 @@ function dizzy(P, a, c, h) {
   Object.assign(P.legs.F, { x: 0.12 * h, z: 0.17 * h, yaw: -0.2 }); Object.assign(P.legs.N, { x: -0.14 * h, z: -0.15 * h, yaw: -0.6, pitch: 0 });
 }
 
+// ---------------------------------------------------------------- fatalities (fatal.js)
+// Miedo: ve venir lo que le va a caer, se echa para atrás y se cubre la cara, temblando
+function fear(P, a, c, h) {
+  const k = kf(a.t, [[0, 0], [8, 1, 'O']]), tr = Math.sin(a.t * 1.9) * 0.012 * k;
+  Object.assign(P, { hipsY: lerp(P.hipsY, 0.86, k), hipsYaw: lerp(P.hipsYaw, -0.8, k), hipsX: -0.06 * k, hipsZ: -0.06 * h * k,
+    torsoX: lerp(P.torsoX, -0.28, k) + tr, torsoY: lerp(P.torsoY, -0.25, k), headX: -0.5 * k, look: 1 - 0.85 * k });
+  toward(P.arms.F, 0.14 * h, (1.76 + tr) * h, 0.34 * h, k); P.arms.F.pole = [0.6, -0.6, 0.4];
+  toward(P.arms.N, -0.15 * h, (1.72 - tr) * h, 0.3 * h, k); P.arms.N.pole = [-0.6, -0.6, 0.4];
+  P.legs.F.z = lerp(P.legs.F.z, 0.12 * h, k); P.legs.N.z = lerp(P.legs.N.z, -0.3 * h, k); P.legs.N.pitch = 0.3 * k;
+}
+
+// Atrapado (rayos, láser, energía): rígido, brazos abiertos, de puntitas y sacudiéndose
+function trapped(P, a, c, h) {
+  const k = kf(a.t, [[0, 0], [6, 1, 'O']]), s = Math.sin(a.t * 2.7) * 0.035 * k, s2 = Math.sin(a.t * 3.3 + 1) * 0.035 * k;
+  Object.assign(P, { hipsY: lerp(P.hipsY, 0.97, k), hipsYaw: lerp(P.hipsYaw, -0.5, k), torsoX: lerp(P.torsoX, -0.18, k) + s, torsoY: lerp(P.torsoY, 0, k),
+    torsoZ: s2, headX: -0.35 * k + s2, headZ: s, look: 1 - k });
+  fkArm(P.arms.N, lerp(-1.0, -0.35, k) + s, lerp(0.1, 0.8, k) + s2, lerp(-1.8, -0.25, k));
+  fkArm(P.arms.F, lerp(-0.9, -0.35, k) - s2, lerp(-0.1, -0.8, k) - s, lerp(-1.9, -0.25, k));
+  Object.assign(P.legs.F, { z: lerp(P.legs.F.z, 0.1 * h, k), pitch: 0.55 * k }); Object.assign(P.legs.N, { z: lerp(P.legs.N.z, -0.1 * h, k), pitch: 0.55 * k });
+}
+
+// Saludo militar (Alan despidiendo a su cohete): firmes, la mano en la frente, mirando al cielo
+function salute(P, a, c, h) {
+  const k = kf(a.t, [[0, 0], [10, 1, 'B']]);
+  Object.assign(P, { hipsY: lerp(P.hipsY, 0.975, k), hipsYaw: lerp(P.hipsYaw, -0.9, k), hipsX: lerp(P.hipsX, 0, k), torsoX: lerp(P.torsoX, -0.1, k),
+    torsoY: lerp(P.torsoY, -0.05, k), headX: -0.55 * k, look: 1 - k });
+  toward(P.arms.N, -0.05 * h, 1.73 * h, 0.13 * h, k); P.arms.N.pole = [-1, 0.25, 0.15];
+  toward(P.arms.F, 0.19 * h, 0.95 * h, 0.02 * h, k); P.arms.F.pole = [0.3, -1, -0.5];
+  Object.assign(P.legs.F, { x: lerp(P.legs.F.x, 0.07 * h, k), z: lerp(P.legs.F.z, 0.05 * h, k), yaw: -0.45 });
+  Object.assign(P.legs.N, { x: lerp(P.legs.N.x, -0.07 * h, k), z: lerp(P.legs.N.z, -0.04 * h, k), yaw: -0.7, pitch: 0 });
+}
+
 // ---------------------------------------------------------------- ganar
 // 0 puño arriba · 1 brazos en V (campeón) · 2 bíceps · 3 brazos cruzados
 function victory(P, a, c, h, st) {
@@ -519,6 +551,7 @@ const ANIMS = {
   golpeado: hurt, caer: fall, muerto: fall, levantarse: getUp, mareado: dizzy, victoria: victory,
   especial: push, lanzar: toss, carga: charge, embestida: tackle, laser, misiles, retrato,
   rafaga, resorte, contra,
+  miedo: fear, atrapado: trapped, saludo: salute,
   congelado: () => null,
 };
 
