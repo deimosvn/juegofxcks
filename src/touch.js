@@ -1,4 +1,5 @@
 import { setVirtualKey } from './input.js';
+import { specialSlot } from './fighter.js';
 
 // =====================================================================
 //  CELULAR: controles táctiles y app instalable (PWA)
@@ -107,29 +108,39 @@ export function initTouch(game) {
   document.querySelectorAll('[data-key]').forEach(bindKeyButton);
   const joy = bindJoystick();
 
-  // Especial: solo = 1º, adelante = 2º, abajo = 3º, atrás = 4º (igual que fighter.js trySpecial)
+  // Especial: solo = 1º, adelante = 2º, abajo = 3º, atrás = 4º, abajo-adelante = 5º, abajo-atrás = 6º (fighter.js)
   const specialIndex = (f) => {
-    if (joy.held.KeyS) return 2;
     const hx = joy.held.KeyD ? 1 : joy.held.KeyA ? -1 : 0;
-    return hx && hx === f.facing ? 1 : hx && hx === -f.facing ? 3 : 0;
+    return specialSlot(joy.held.KeyS, hx !== 0 && hx === f.facing, hx !== 0 && hx === -f.facing);
   };
 
-  // ☠ marca la fatality del peleador con las teclas, como si la hiciera el jugador
-  let busy = false;
-  $('tfatal').addEventListener('pointerdown', async (e) => {
+  // ☠ marca la fatality del peleador con las teclas, como si la hiciera el jugador. Un toque = FATALITY;
+  // si el dedo se queda encima, el botón sigue presionado y sale la BRUTALITY.
+  let busy = false, finger = false;
+  const tfatal = $('tfatal');
+  tfatal.addEventListener('pointerdown', async (e) => {
     e.preventDefault();
     const f = localFighter(game), p = f?.fatality?.parsed;
     if (busy || !p) return;
-    busy = true;
+    busy = true; finger = true;
+    capture(tfatal, e.pointerId);
     joy.reset();
     const fwd = f.facing > 0 ? 'KeyD' : 'KeyA', back = f.facing > 0 ? 'KeyA' : 'KeyD';
     const dirKey = { F: fwd, B: back, D: 'KeyS', U: 'KeyW' };
     const btnKey = { punch: 'KeyF', kick: 'KeyG', block: 'KeyH', special: 'KeyR' }[p.btn] || 'KeyF';
     const tap = async (code) => { setVirtualKey(code, true); await sleep(55); setVirtualKey(code, false); await sleep(35); };
     for (const d of p.seq) await tap(dirKey[d]);
-    await tap(btnKey);
+    setVirtualKey(btnKey, true);
+    const t0 = performance.now();
+    while (finger && performance.now() - t0 < 2500) await sleep(16);
+    await sleep(Math.max(0, MIN_HOLD - (performance.now() - t0)));
+    setVirtualKey(btnKey, false);
     busy = false;
   });
+  const lift = () => { finger = false; };
+  tfatal.addEventListener('pointerup', lift);
+  tfatal.addEventListener('pointercancel', lift);
+  tfatal.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // Pantalla completa y horizontal al entrar a jugar desde el celular
   const installed = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
@@ -167,7 +178,12 @@ export function initTouch(game) {
     ui.pause.style.visibility = ui.announcer.classList.contains('show') ? 'hidden' : '';
     if (!fight) joy.reset();
     const f = fight ? localFighter(game) : null;
-    if (touch && f) { const s = f.specials[specialIndex(f)] || f.specials[0]; setText(ui.spec, s ? s.nombre : ''); }
+    if (touch && f) {
+      // en el aire el botón saca el especial aéreo; en el piso, el que toca según la dirección
+      const i = specialIndex(f), air = f.airSpecial && f.y > 0.45 && (f.state === 'jump' || (f.state === 'special' && f.spec === f.airSpecial));
+      const s = air ? f.airSpecial : f.specials[i] || (i >= 4 ? f.specials[2] : null) || f.specials[0];
+      setText(ui.spec, s ? s.nombre : '');
+    }
     ui.fatal.classList.toggle('hidden', !(touch && f && game.phase === 'finish' && game.winner === f && f.fatality));
     // en una sala la siguiente pelea se arma sola
     const end = fight && game.phase === 'matchEnd' && game.phaseT > 120 && !watch && !game.online?.turno;

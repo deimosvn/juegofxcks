@@ -15,6 +15,9 @@ const BODY_H = 1.85, CROUCH_H = 1.1;
 // Conde gigante: +35% de tamaño. En su fatality crece hasta 3.2 veces y luego regresa.
 export const GIANT = 0.35;
 const ramp = (x) => Math.min(1, Math.max(0, x));
+// Botón de especial + dirección -> cuál especial (0 solo · 1 adelante · 2 abajo · 3 atrás · 4 abajo-adelante · 5 abajo-atrás).
+// touch.js lo usa para el letrero de arriba del botón.
+export const specialSlot = (down, fwd, back) => (down && fwd ? 4 : down && back ? 5 : down ? 2 : fwd ? 1 : back ? 3 : 0);
 export const stompScale = (t) => 1 + 2.2 * ramp((t - 8) / 36) * (1 - ramp((t - 150) / 30));
 
 // Golpes normales. Tiempos en frames (60 por segundo).
@@ -47,9 +50,13 @@ export class Fighter {
     // con el traje de robot (MODO TITÁN) los botones sacan otras armas: especialesTitan
     this.normalSpecials = parse(def.especiales);
     this.titanSpecials = parse(def.especialesTitan);
-    this.allSpecials = [...this.normalSpecials, ...this.titanSpecials];
+    // el especial en el aire: Especial mientras va saltando (`aire` en el roster; tipo 'picada' si no dice)
+    this.airSpecial = def.aire ? { tipo: 'picada', ...def.aire, parsed: null } : null;
+    this.allSpecials = [...this.normalSpecials, ...this.titanSpecials, ...(this.airSpecial ? [this.airSpecial] : [])];
     this.titanSpeed = this.normalSpecials.find((s) => s.tipo === 'titan')?.velocidad ?? 1.7;
     this.fatality = def.fatality ? { ...def.fatality, parsed: parseInput(def.fatality.input) } : null;
+    // BRUTALITY: la misma entrada que la fatality, dejando presionado el botón (main.js tryFatality)
+    this.brutality = def.brutality ? { ...def.brutality } : null;
     this.wins = 0;
     this.reset(side === 0 ? -2.6 : 2.6);
   }
@@ -146,11 +153,10 @@ export class Fighter {
         }
       }
     }
-    // 2) Botón de especial: solo = 1º, adelante = 2º, abajo = 3º, atrás = 4º
+    // 2) Botón de especial: solo = 1º, adelante = 2º, abajo = 3º, atrás = 4º, abajo-adelante = 5º, abajo-atrás = 6º
     if (inp.pressed.special) {
-      let i = 0;
-      if (inp.held.down) i = 2; else if (inp.forward(this.facing)) i = 1; else if (inp.back(this.facing)) i = 3;
-      const sp = this.specials[i] || this.specials[0];
+      const i = specialSlot(inp.held.down, inp.forward(this.facing), inp.back(this.facing));
+      const sp = this.specials[i] || (i >= 4 ? this.specials[2] : null) || this.specials[0];
       if (sp && this.startSpecial(sp, opp)) { inp.clearBuffer(); return true; }
     }
     return false;
@@ -225,6 +231,11 @@ export class Fighter {
       }
 
       case 'jump':
+        // Especial en el aire (una vez por salto)
+        if (inp.pressed.special && this.airSpecial && !this.airAttackUsed && g.phase === 'fight' && this.startSpecial(this.airSpecial, opp)) {
+          this.airAttackUsed = true; inp.clearBuffer();
+          break;
+        }
         if ((inp.pressed.punch || inp.pressed.kick) && !this.airAttackUsed && g.phase === 'fight') {
           this.airAttackUsed = true;
           const m = MOVES.patada_aerea;
@@ -256,7 +267,7 @@ export class Fighter {
 
       case 'stunned':
         this.vx *= 0.8;
-        if (this.t % 40 === 8) sfx.tweet();   // pajaritos
+        if (this.t % 40 === 8 && this.animKey !== 'doblado') sfx.tweet();   // pajaritos (el que se dobló del higadazo no)
         if (this.t >= this.stunDur) { this.setState('idle'); opp.combo = 0; this.comboTaken = 0; }
         break;
 

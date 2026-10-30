@@ -10,6 +10,9 @@ import { createStage, STAGES, camaro as buildCamaro } from './stages.js';
 import { CPU, DIFICULTADES, NIVELES } from './ai.js';
 import { FATALITIES, impactProjectile, SOLID_PROJECTILES } from './specials.js';
 import { updateProjectileExtra as updateProjectile, BUTT_SPECIALS } from './specials-amigos.js';
+import './especiales-extra.js';
+import { BRUTALITIES, MANTENER } from './brutalidades.js';
+import { VistaEspeciales } from './vista-especiales.js';
 import { sfx, announce, unlockAudio, setVoice, setVolumes, audioState, setAmbience } from './audio.js';
 import { music } from './music.js';
 import { Post } from './post.js';
@@ -91,6 +94,7 @@ class Game {
     this.buildSelect();
     this.buildLobby();
     this.buildViews();
+    this.vista = new VistaEspeciales(this);   // cómo se ven los ataques nuevos (vista-especiales.js)
     this.cine = new FatalDirector(this);   // fatalities de cine (fatal.js)
     addEventListener('resize', () => this.resize()); this.resize();
     // pantalla de título: con la primera tecla o toque ya se puede sonar (los navegadores lo exigen)
@@ -211,8 +215,9 @@ class Game {
 
     if (this.phase === 'fatality') {
       for (const f of this.fighters) f.t++;
-      const w = this.winner, l = this.loser;
-      if (FATALITIES[this.fatal.tipo](this.phaseT, w, l, w.fatality, this, this.fatal.data)) { this.phase = 'postFatality'; this.phaseT = 0; }
+      const w = this.winner, l = this.loser, brutal = this.fatal.brutal;
+      const run = (brutal ? BRUTALITIES : FATALITIES)[this.fatal.tipo];
+      if (run(this.phaseT, w, l, brutal ? w.brutality : w.fatality, this, this.fatal.data)) { this.phase = 'postFatality'; this.phaseT = 0; }
       return;
     }
 
@@ -237,7 +242,8 @@ class Game {
 
   separate(a, b, mid) {
     const dx = b.x - a.x;
-    if (Math.abs(a.y - b.y) < 1.3 && Math.abs(dx) < 0.7 && !a.hidden && !b.hidden && a.state !== 'scripted' && b.state !== 'scripted') {
+    const ghost = a.specData?.ghost || b.specData?.ghost;   // el BOOM SÓNICO de Alan lo atraviesa
+    if (!ghost && Math.abs(a.y - b.y) < 1.3 && Math.abs(dx) < 0.7 && !a.hidden && !b.hidden && a.state !== 'scripted' && b.state !== 'scripted') {
       const push = (0.7 - Math.abs(dx)) / 2 * (dx >= 0 ? 1 : -1) || 0.35;
       a.x -= push; b.x += push;
       for (const f of [a, b]) if (Math.abs(f.x) > ARENA_HALF) { const o = Math.sign(f.x) * (Math.abs(f.x) - ARENA_HALF); f.x -= o; this.other(f).x -= o; }
@@ -257,20 +263,37 @@ class Game {
     }
   }
 
+  // ¡ACÁBALO!: con la entrada de la fatality y soltando el botón, FATALITY; dejándolo presionado
+  // MANTENER cuadros, BRUTALITY. Mientras lo aguanta se queda quieto cargando (this.fatal.pending).
   tryFatality(f, inp) {
     const fat = f.fatality;
     if (!fat || !fat.parsed) return false;
     const p = fat.parsed;
+    if (this.fatal?.pending) {
+      const held = !!p.btn && inp.held[p.btn];
+      if (held && this.frame - this.fatal.f0 < MANTENER) { f.vx = 0; return true; }
+      this.startFinisher(f, held && !!f.brutality);
+      return true;
+    }
     const trigger = p.btn ? inp.pressed[p.btn] : inp.newDir;
     if (!trigger || !inp.matchMotion(p.seq, this.frame, 34)) return false;
     if (Math.abs(f.x - this.loser.x) > 4.5) return false;
+    if (!p.btn || !f.brutality) { this.startFinisher(f, false); return true; }
+    this.fatal = { pending: true, f0: this.frame };
+    f.setState('idle'); f.vx = 0;
+    sfx.riser(MANTENER / 60 + 0.15);
+    return true;
+  }
+
+  startFinisher(f, brutal) {
+    const fin = brutal ? f.brutality : f.fatality, table = brutal ? BRUTALITIES : FATALITIES;
     this.phase = 'fatality'; this.phaseT = 0;
-    this.fatal = { tipo: FATALITIES[fat.tipo] ? fat.tipo : 'explosion', data: {} };
+    this.fatal = { tipo: table[fin.tipo] ? fin.tipo : brutal ? 'combo_brutal' : 'explosion', data: {}, brutal };
     f.faceOpponent(this.loser);
     f.state = 'scripted'; this.loser.state = 'scripted';
-    this.event('special', { side: f.side, nombre: fat.nombre, color: fat.color });
+    this.event('special', { side: f.side, nombre: fin.nombre, color: fin.color });
     sfx.drum();
-    return true;
+    if (brutal) sfx.brutalHit();
   }
 
   phases(a, b) {
@@ -316,8 +339,8 @@ class Game {
       case 'roundOver':
         if (this.phaseT > 120) this.startRound();
         break;
-      case 'finish':
-        if (this.phaseT > 60 * 6) { this.loser.setState('airHit', 'caer'); this.loser.vy = 3; this.phase = 'finishBlow'; this.phaseT = 0; }
+      case 'finish':   // (si ya marcó la fatality y está aguantando el botón, se espera a ver si es BRUTALITY)
+        if (this.phaseT > 60 * 6 && !this.fatal?.pending) { this.loser.setState('airHit', 'caer'); this.loser.vy = 3; this.phase = 'finishBlow'; this.phaseT = 0; }
         break;
       case 'finishBlow':
         if (this.phaseT > 70) this.endMatch();
@@ -431,7 +454,10 @@ class Game {
     if (pause) for (const f of this.fighters) {
       const div = document.createElement('div');
       const row = (s) => `<tr><td>${esc(s.nombre)}</td><td>${esc(s.input)}</td></tr>`;
-      div.innerHTML = `<h3>${esc(f.def.nombre)}</h3><table>${f.normalSpecials.map(row).join('')}${f.fatality ? `<tr><td>☠ ${esc(f.fatality.nombre)}</td><td>${esc(f.fatality.input)}</td></tr>` : ''}`
+      div.innerHTML = `<h3>${esc(f.def.nombre)}</h3><table>${f.normalSpecials.map(row).join('')}`
+        + (f.airSpecial ? `<tr><td>${esc(f.airSpecial.nombre)}</td><td>en el aire + ESPECIAL</td></tr>` : '')
+        + (f.fatality ? `<tr><td>☠ FATALITY: ${esc(f.fatality.nombre)}</td><td>${esc(f.fatality.input)}</td></tr>` : '')
+        + (f.brutality ? `<tr><td>☠ BRUTALITY: ${esc(f.brutality.nombre)}</td><td>la de la fatality, dejando presionado el botón</td></tr>` : '')
         + (f.titanSpecials.length ? `<tr><td colspan="2" class="sub">CON EL TRAJE DE ROBOT</td></tr>${f.titanSpecials.map(row).join('')}` : '') + '</table>';
       list.appendChild(div);
     }
@@ -597,7 +623,8 @@ class Game {
       }
       $(`pick${p + 1}`).textContent = show ? def.nombre : '?';
       const list = (l) => l.map((e) => `<b>${esc(e.nombre)}</b><br><span class="inp">${esc(e.input)}</span>`).join('<br>');
-      $(`pspec${p + 1}`).innerHTML = show ? list(def.especiales) + (def.especialesTitan ? `<p class="suit">Con el traje de robot:</p>${list(def.especialesTitan)}` : '')
+      const extra = [def.aire && { nombre: def.aire.nombre, input: 'en el aire + ESPECIAL' }, def.brutality && { nombre: `☠ ${def.brutality.nombre}`, input: 'BRUTALITY: la fatality dejando presionado' }].filter(Boolean);
+      $(`pspec${p + 1}`).innerHTML = show ? list([...def.especiales, ...extra]) + (def.especialesTitan ? `<p class="suit">Con el traje de robot:</p>${list(def.especialesTitan)}` : '')
         + (s.locked[p] ? '<p class="ready">¡LISTO!</p>' : '') : '';
     }
   }
@@ -1461,6 +1488,7 @@ class Game {
     for (const c of this.chains) c.line.visible = false;
     for (const L of this.lasers) for (const m of [...L.beams, ...L.cores]) m.visible = false;
     for (const G of this.gadgets) for (const o of [G.sat, G.aim, G.ray, G.turb, G.spring, G.sglove, G.rocket, ...G.gogo]) o.visible = false;
+    this.vista?.clear();
     this.projLight.intensity = 0;
   }
 
@@ -1477,6 +1505,7 @@ class Game {
     this.syncChains();
     this.syncLasers(dt);
     this.syncGadgets(dt);
+    this.vista.update(this.paused || this.screen !== 'fight' ? 0 : dt);
     this.updateAnnouncer();
     this.syncBarber(dt);
     this.cine.update(dt);
@@ -1667,6 +1696,8 @@ class Game {
       : tipo === 'tijeras' && f.t < 12 ? 'tijeras' : tipo === 'rapado' ? 'maquina' : tipo === 'navaja' ? 'navaja' : tipo === 'talco' ? 'brocha'
         : corte >= 40 && corte < 104 ? 'maquina' : corte >= 104 && corte < 176 ? 'navaja' : null;
     if (intro) m.prop = INTRO_PROP[intro] || null;
+    const cineProp = this.cine.prop(f);   // en una brutality: el pescado de Emi…
+    if (cineProp !== undefined) m.prop = cineProp;
     if (m.jetOn && animDt) this.effects.glow.emit({ pos: V(f.x - f.facing * 0.3, f.y + 0.75, -0.1), count: 3, speed: 4, dir: [0, -1, 0], spread: 0.25, color: '#fff3c0', colorEnd: '#ff6a00', life: 0.3, size: 0.28 });
     // el robot corre con chispas de propulsor en los pies
     if (robot && f.state === 'walk' && animDt) this.effects.glow.emit({ pos: V(f.rx - f.facing * 0.2, f.y + 0.12, 0), count: 2, speed: 2.5, dir: [-f.facing, 0.3, 0], spread: 0.4, color: '#ffffff', colorEnd: f.buffColor || '#4fd8ff', life: 0.25, size: 0.18 });
@@ -1688,6 +1719,16 @@ class Game {
     else if (f.buffTimer > 0 && f.buffKind === 'armor') { tint = f.buffColor; amount = 0.28 + 0.16 * Math.sin(performance.now() / 90); }
     else if (f.titan) tint = f.buffTimer < 90 && (f.t >> 3) % 2 ? f.buffColor : null;   // parpadea cuando ya se le acaba
     else if (f.buffTimer > 0 && (f.t >> 2) % 2) tint = f.buffColor;
+    // ¡ACÁBALO! aguantando el botón: se va poniendo rojo y tiembla; al llenarse es BRUTALITY
+    if (this.phase === 'finish' && this.fatal?.pending && this.winner === f) {
+      const k = Math.min(1, (this.frame - this.fatal.f0) / MANTENER);
+      tint = '#ff1a1a'; amount = 0.15 + 0.75 * k * (0.75 + 0.25 * Math.sin(performance.now() / 45));
+      m.root.position.x += (Math.random() - 0.5) * 0.05 * k;
+      if (animDt) {
+        this.effects.glow.emit({ pos: V(f.rx, f.y + 0.2 + Math.random() * 1.6, (Math.random() - 0.5) * 0.4), count: 1 + Math.round(3 * k), speed: 2.5, dir: [0, 1, 0], spread: 0.5, color: '#ffffff', colorEnd: '#ff1a1a', life: 0.35, size: 0.12 + 0.2 * k });
+        this.fovKick = Math.max(this.fovKick, 2.2 * k);
+      }
+    }
     m.tickMaterials(animDt || 1 / 60, tint, amount);
   }
 
@@ -1706,6 +1747,7 @@ class Game {
   }
 
   makeProjectileView(p) {
+    if (this.vista.has(p.kind)) return this.vista.makeProjectile(p);   // drones de Diego y la losa de Conde
     const g = new THREE.Group();
     const add = (geo, mat, setup) => { const mesh = new THREE.Mesh(geo, mat); setup?.(mesh); g.add(mesh); return mesh; };
     const glow = (c, o = 0.7) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -1788,6 +1830,7 @@ class Game {
       if (p.kind === 'misil') v.obj.rotation.z = Math.atan2(p.vy, p.vx);
       else v.obj.rotation.y = dir > 0 ? 0 : Math.PI;
       if (p.kind === 'camaro') { this.syncCamaro(p, v, dt, n); continue; }
+      if (v.custom) { this.vista.syncProjectile(p, v, dt, n); continue; }
       if (v.spin) { v.spin.rotation.x += dt * 12; v.spin.rotation.y += dt * 9; v.spin.scale.setScalar(1 + Math.sin(v.t * 36) * 0.12); }
       // pescado/caguama: da vueltas; el de la lluvia cae de cabeza coleteando
       if (v.tumble) v.tumble.rotation.z = p.fall ? -Math.PI / 2 + Math.sin(v.t * 9) * 0.35 : -v.t * (p.kind === 'kawama' ? 11 : 15);
@@ -1913,10 +1956,19 @@ class Game {
       case 'roundOver':
         if (t <= 5) return null;
         return w ? { text: `GANA ${w.def.nombre}`, sub: perfect ? [PERFECT] : [], perfect, say: perfect ? '¡Victoria perfecta!' : `Gana ${w.def.nombre}` } : { text: 'EMPATE', say: 'Empate' };
-      case 'finish': return t < 120 ? { text: '¡ACÁBALO!', blood: true, kind: 'ko', say: '¡Acábalo!' } : null;
+      case 'finish': {
+        // al que le toca rematar (en esta pantalla) se le recuerda cómo: soltando el botón FATALITY, aguantándolo BRUTALITY
+        const fat = w === this.localFighter() && this.mode !== 'watch' ? w?.fatality : null;
+        const hint = fat ? (isTouch() ? ['☠ tócalo: FATALITY · déjalo presionado: BRUTALITY'] : [`☠ ${fat.input}  ·  déjalo presionado: BRUTALITY`]) : [];
+        return t < 150 ? { text: '¡ACÁBALO!', blood: true, kind: 'ko', say: '¡Acábalo!', sub: hint } : null;
+      }
       case 'finishBlow': return null;
       case 'fatality': return null;
-      case 'postFatality': return t < 130 ? { text: '¡FATALIDAD!', blood: true, kind: 'fatal', sub: [w?.fatality?.nombre].filter(Boolean), say: 'Fatalidad' } : null;
+      case 'postFatality': {
+        // como en los juegos de antes: FATALITY o BRUTALITY, dicho en inglés con voz grave
+        const brutal = !!this.fatal?.brutal, fin = brutal ? w?.brutality : w?.fatality;
+        return t < 130 ? { text: brutal ? 'BRUTALITY' : 'FATALITY', blood: true, kind: 'fatal', sub: [fin?.nombre].filter(Boolean), say: brutal ? 'Brutality' : 'Fatality', lang: 'en' } : null;
+      }
       case 'matchEnd': {
         const room = this.mode === 'watch' || !!this.online?.turno;
         const hint = room ? (t > 60 ? 'Siguiente pelea en un momento…' : '')
@@ -1945,7 +1997,7 @@ class Game {
     a.classList.toggle('fatal', s.kind === 'fatal');
     a.classList.remove('show'); void a.offsetWidth; a.classList.add('show');
     if (s.perfect) sfx.perfect();
-    if (s.say && this.lastSaid !== s.text) { announce(s.say); this.lastSaid = s.text; clearTimeout(this.saidT); this.saidT = setTimeout(() => { this.lastSaid = null; }, 1500); }
+    if (s.say && this.lastSaid !== s.text) { announce(s.say, s.lang); this.lastSaid = s.text; clearTimeout(this.saidT); this.saidT = setTimeout(() => { this.lastSaid = null; }, 1500); }
   }
 
   updateCamera(dt) {

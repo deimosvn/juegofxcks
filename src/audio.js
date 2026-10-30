@@ -221,6 +221,31 @@ export const sfx = {
   crackle: () => { for (let i = 0; i < 16; i++) setTimeout(() => noise(0.035, 3000 + Math.random() * 5000, 4, 0.28, 'bandpass'), i * 38 + Math.random() * 45); },
   fuse: () => { noise(1.1, 5200, 0.9, 0.2, 'highpass', 3200); for (let i = 0; i < 7; i++) setTimeout(() => noise(0.02, 6000, 5, 0.18, 'bandpass'), i * 140 + Math.random() * 60); },
   glint: () => { tone(2637, 0.5, 'sine', 0.06, 3520); tone(3951, 0.35, 'sine', 0.035); },
+  // --- ataques nuevos (especiales-extra.js)
+  drone: () => { tone(220, 0.5, 'sawtooth', 0.05, 260); tone(330, 0.5, 'square', 0.03, 380); noise(0.5, 2600, 3, 0.08, 'bandpass'); },
+  sonicBoom: () => {   // dos chasquidos secos y el retumbo (el estruendo de romper la barrera del sonido)
+    noise(0.08, 2400, 0.6, 1.0, 'highpass'); tone(48, 0.9, 'sine', 0.9, 26); noise(0.9, 500, 0.6, 0.8, 'lowpass', 80);
+    setTimeout(() => noise(0.07, 2000, 0.6, 0.8, 'highpass'), 90);
+  },
+  oof: () => { tone(140, 0.25, 'sawtooth', 0.12, 80); noise(0.2, 600, 1.5, 0.35, 'bandpass', 300); tone(60, 0.3, 'sine', 0.6, 40); },
+  crumble: () => {   // piso que se rompe
+    noise(0.7, 500, 0.6, 0.7, 'lowpass', 120); tone(45, 0.6, 'sine', 0.5, 30);
+    for (let i = 0; i < 6; i++) setTimeout(() => noise(0.06, 1200 + Math.random() * 1500, 2, 0.25, 'bandpass'), i * 60 + Math.random() * 40);
+  },
+  flame: () => { noise(1.4, 700, 0.5, 0.55, 'lowpass', 1800, 0.08); noise(0.15, 4000, 1, 0.25, 'highpass'); },
+  reel: () => noise(0.03, 4500, 5, 0.25, 'bandpass'),
+  kiss: () => { tone(1200, 0.08, 'sine', 0.15, 1800); setTimeout(() => tone(900, 0.25, 'sine', 0.1, 1400), 90); },
+  // --- brutalities (brutalidades.js)
+  pop: () => { noise(0.05, 3000, 0.8, 1.0, 'highpass'); tone(500, 0.08, 'sine', 0.4, 120); noise(0.3, 900, 0.8, 0.5, 'lowpass', 200); },
+  inflate: () => { tone(160, 1.2, 'sine', 0.18, 900, 0.1); noise(1.2, 1200, 2, 0.12, 'bandpass', 4000, 0.3); },
+  gulp: () => { tone(300, 0.12, 'sine', 0.3, 120); setTimeout(() => tone(180, 0.15, 'sine', 0.25, 90), 120); },
+  beep: (pct = 0) => tone(600 + pct * 6, 0.05, 'square', 0.06),
+  glitch: () => { for (let i = 0; i < 5; i++) setTimeout(() => { tone(200 + Math.random() * 2000, 0.03, 'square', 0.07); noise(0.03, 3000, 4, 0.15, 'bandpass'); }, i * 25); },
+  brutalHit: () => { tone(90, 0.5, 'square', 0.18, 40); noise(0.3, 1400, 0.7, 0.8, 'lowpass', 120); },
+  brutal: () => {   // BRUTALITY: tres trancazos de tambor y un acorde rasposo
+    for (let i = 0; i < 3; i++) setTimeout(() => { tone(62, 0.5, 'sine', 0.9, 30); noise(0.25, 900, 0.6, 0.7, 'lowpass', 100); }, i * 150);
+    setTimeout(() => { chord([55, 82.4, 110], 2.8, 0.32, 1800, 0.02, 'square'); noise(1.5, 300, 0.6, 0.4, 'lowpass', 70); }, 450);
+  },
 };
 
 // Ambiente de cada escenario, muy bajito: un fondo continuo y detalles al azar (pájaros, grillos…)
@@ -277,14 +302,18 @@ if ('speechSynthesis' in window) {
   load(); speechSynthesis.onvoiceschanged = load;
 }
 
-export function announce(text) {
+// lang 'en': FATALITY y BRUTALITY se dicen en inglés, más lento y más grave (como el narrador de las maquinitas)
+export function announce(text, lang = 'es') {
   if (!voiceEnabled || !('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'es-ES';
-  const v = voices.find((x) => /^es/i.test(x.lang) && /male|hombre|pablo|jorge|raul|alvaro|diego/i.test(x.name)) || voices.find((x) => /^es/i.test(x.lang));
+  const en = lang === 'en', re = en ? /^en/i : /^es/i;
+  u.lang = en ? 'en-US' : 'es-ES';
+  const male = en ? /david|daniel|guy|fred|alex|george|james|mark|ryan|christopher|\bmale/i : /male|hombre|pablo|jorge|raul|alvaro|diego/i;
+  const woman = /female|woman|zira|samantha|victoria|susan|hazel|helena|sabina|laura/i;
+  const v = voices.find((x) => re.test(x.lang) && male.test(x.name) && !woman.test(x.name)) || voices.find((x) => re.test(x.lang));
   if (v) u.voice = v;
-  u.rate = 0.85; u.pitch = 0.4; u.volume = 1;
+  u.rate = en ? 0.7 : 0.85; u.pitch = en ? 0.1 : 0.4; u.volume = 1;
   speechSynthesis.speak(u);
   audioHooks.onAnnounce?.(text);   // la música se hace a un lado mientras habla
 }

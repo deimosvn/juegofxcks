@@ -11,30 +11,14 @@
 // =====================================================================
 import * as THREE from 'three';
 import { sfx, audioState } from './audio.js';
+import { V, clamp01, lerp, smooth, S, O, OPEN, HERO } from './cine-util.js';
+import { BRUTALS } from './cine-brutal.js';
 
-const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
-const lerp = (a, b, t) => a + (b - a) * t;
-const smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
 const EASE = { S: smooth, L: clamp01, O: (x) => 1 - (1 - clamp01(x)) ** 3, I: (x) => clamp01(x) ** 2.2 };
 const $ = (id) => document.getElementById(id);
 
-// Toma: dónde va la cámara (p) y a dónde mira (l), cada una pegada a un "ancla":
-//   W el que gana · L el que pierde · M entre los dos, en el piso · Wf / Lf la cara de cada uno
-//   Wh la mano del que gana · H la cabeza que vuela (Ramces) · F el pescado gigante (Emi)
-// x va hacia donde mira el que gana (así sirve de los dos lados), y hacia arriba, z hacia la cámara.
-// Lo que se pega a W crece con él (Conde gigante).
-const S = (pa, px, py, pz, la, lx, ly, lz, fov = 38, roll = 0) => ({ p: [pa, px, py, pz], l: [la, lx, ly, lz], fov, roll });
-// vuelta alrededor de un ancla: ángulo inicial y final (0 = de frente, + hacia donde mira el que gana),
-// radio, altura de la cámara, altura a la que mira
-const O = (a, a0, a1, r, y, ly, fov = 36) => ({ orbit: a, a0, a1, r, y, ly, fov });
-
 // Escenarios de noche: la imagen se oscurece menos (si no, no se ve nada)
 const DARK_STAGES = { casachuy: 0.18, templo: 0.32 };
-
-// Tomas que se repiten: abre con el que gana de cerca y desde abajo; cierra con él posando
-const OPEN = (t1 = 18) => [0, t1, S('Wf', 1.0, -0.55, 2.1, 'Wf', 0, -0.18, 0, 34), S('Wf', 0.75, -0.45, 1.75, 'Wf', 0, -0.12, 0, 30)];
-const HERO = (t0, t1) => [t0, t1, S('W', 1.4, 0.85, 2.9, 'W', 0, 1.3, 0, 36), S('W', 1.0, 0.95, 2.4, 'W', 0, 1.38, 0, 32)];
 // después, con el "¡FATALIDAD!": vuelta lenta alrededor del que ganó
 // (el que ganó queda abajo del letrero: la cámara mira un poco arriba de su cabeza)
 const POST = [[0, 150, O('W', 0.85, 0.2, 3.9, 0.75, 1.85, 36)]];
@@ -288,6 +272,7 @@ export class FatalDirector {
     this.exposure = 1; this.desat = 0; this.vignette = 0.4; this.tint = new THREE.Color('#ff2020'); this.tintAmt = 0; this.glitch = 0;
     this._p = V(); this._l = V(); this._v = V();
     this.rb = null; this.lift = 0; this.hitFlash = 0; this.prevT = 0;   // robots de Diego (robotShow)
+    this.extra = {};   // objetos propios de las brutalities (la barra, la grieta, la tumba, el Camaro…): obj()
     // luz de escenario: un cañón sobre los dos. Está oculta y se prende en la fatality; sus sombreados se
     // preparan antes (prewarm) para que al prenderla no se trabe el juego recompilando
     this.spot = new THREE.SpotLight('#ffe2c8', 0, 34, 0.48, 0.6, 1.1);
@@ -304,8 +289,11 @@ export class FatalDirector {
   prewarm() {
     const g = this.g, r = g.renderer;
     const R = this.rb ||= this.buildRobotProps();   // los rayos y misiles de la fatality de Diego, también ya preparados
+    // y lo de las brutalities de los que van a pelear (el Camaro, la tumba, la barra de Diego…)
+    for (const f of g.fighters || []) if (f.brutality) BRUTALS[f.brutality.tipo]?.warm?.(this);
+    this.hideExtra();   // (obj() los deja prendidos: aquí solo se preparan)
     // lo que solo sale en las fatalities, prendido un momento: la luz, el traje de Diego, sus robots y sus rayos
-    const extra = [this.spot, this.warmStar, ...R.all, ...R.rings, R.cubes,
+    const extra = [this.spot, this.warmStar, ...R.all, ...R.rings, R.cubes, ...Object.values(this.extra),
       ...(g.models || []).flatMap((m) => [m.suit?.root, ...(m.robots || []).map((b) => b.root)])].filter(Boolean);
     const was = extra.map((o) => o.visible);
     for (const o of extra) o.visible = true;
@@ -326,14 +314,15 @@ export class FatalDirector {
   reset() { if (this.key) this.end(); }
 
   begin(def, key) {
-    const g = this.g, w = g.winner, fat = w.fatality || {};
+    const g = this.g, w = g.winner, brutal = !!g.fatal.brutal, fat = (brutal ? w.brutality : w.fatality) || {};
     this.key = key; this.def = def; this.fired.clear(); this.killPulse = 0;
     this.prevT = 0; this.lift = 0; this.hitFlash = 0; this.zapT = -99;
     this.f = w.facing || 1; this.t0 = performance.now();
     $('cine').classList.add('on');
     document.body.classList.add('cine');   // sin HUD ni botones del celular
     const card = $('fcard');
-    $('fcard-name').textContent = fat.nombre || 'FATALITY';
+    $('fcard-kind').textContent = brutal ? 'BRUTALITY' : 'FATALITY';
+    $('fcard-name').textContent = fat.nombre || (brutal ? 'BRUTALITY' : 'FATALITY');
     $('fcard-who').textContent = w.def.nombre;
     card.style.setProperty('--c', fat.color || '#ff2a2a');
     this.spot.color.set(def.key || '#ffe2c8');
@@ -351,6 +340,27 @@ export class FatalDirector {
     $('flash').style.background = '';
     this.exposure = 1; this.desat = 0; this.vignette = 0.4; this.tintAmt = 0; this.glitch = 0;
     this.hideRobots(); this.lift = 0;
+    this.hideExtra();
+    // lo que las brutalities le hicieron al modelo (voltearlo de cabeza…) se regresa
+    for (const m of this.g.models || []) for (const v of [m, m?.suit]) if (v?.root) { v.root.rotation.order = 'XYZ'; v.root.rotation.x = 0; v.root.rotation.z = 0; }
+  }
+
+  // objetos propios de una brutality: se crean una vez, se reusan y cada cuadro se prenden solo los que se usan
+  obj(name, build) {
+    let o = this.extra[name];
+    if (!o) { o = this.extra[name] = build(); o.visible = false; this.g.scene.add(o); }
+    o.visible = true;
+    return o;
+  }
+  hideExtra() { for (const o of Object.values(this.extra)) o.visible = false; }
+
+  // Lo que trae en la mano durante la brutality (el pescado de Emi…). undefined = lo de siempre
+  prop(f) {
+    const g = this.g, list = this.def?.prop?.[f === g.winner ? 'W' : 'L'];
+    if (!list || g.phase !== 'fatality') return undefined;
+    let cur;
+    for (const e of list) if (g.phaseT >= e[0]) cur = e;
+    return cur ? cur[1] : undefined;
   }
 
   // Diego trae puesto el traje de robot en su fatality (desde que se lo pone hasta los resultados)
@@ -363,10 +373,18 @@ export class FatalDirector {
   // ---------------------------------------------------------------- cada cuadro
   update(dt) {
     const g = this.g;
-    const on = g.screen === 'fight' && g.fatal && (g.phase === 'fatality' || g.phase === 'postFatality') && g.winner && g.loser;
-    if (!on) { if (this.key) this.end(); return; }
-    const def = FATALS[g.fatal.tipo] || FATALS.explosion;
-    const key = `${g.round}:${g.fatal.tipo}:${g.winnerSide}`;
+    const on = g.screen === 'fight' && g.fatal?.tipo && (g.phase === 'fatality' || g.phase === 'postFatality') && g.winner && g.loser;
+    if (!on) {
+      if (this.key) this.end();
+      // al final de la pelea siguen ahí la tumba de José, las piernas que dejó Conde enterradas…
+      const kept = g.screen === 'fight' && g.phase === 'matchEnd' && g.fatal?.brutal && g.loser ? BRUTALS[g.fatal.tipo]?.keep : null;
+      this.hideExtra();
+      if (kept) { this.updateAnchors(); kept(this, g.fatal.data || {}); }
+      return;
+    }
+    const brutal = !!g.fatal.brutal;
+    const def = (brutal ? BRUTALS : FATALS)[g.fatal.tipo] || (brutal ? BRUTALS.combo_brutal : FATALS.explosion);
+    const key = `${g.round}:${g.fatal.tipo}:${g.winnerSide}:${brutal}`;
     if (key !== this.key) this.begin(def, key);
     const post = g.phase === 'postFatality';
     const t = g.phaseT + (g.alpha ?? 0);
@@ -375,12 +393,15 @@ export class FatalDirector {
     // momentos clave (solo una vez cada uno; si ya pasaron hace mucho, por ejemplo al entrar a ver una sala, no)
     if (!g.ffwd) {
       if (!post) def.beats?.forEach(([bt, o], i) => { if (!this.fired.has(i) && t >= bt) { this.fired.add(i); if (t - bt < 20) this.beat(o); } });
-      else if (!this.fired.has('post')) { this.fired.add('post'); this.beat({ sfx: 'stinger', flash: '#ff1a1a', aberr: 0.9 }); this.killPulse = Math.max(this.killPulse, 0.55); }
+      else if (!this.fired.has('post')) { this.fired.add('post'); this.beat({ sfx: brutal ? 'brutal' : 'stinger', flash: '#ff1a1a', aberr: 0.9 }); this.killPulse = Math.max(this.killPulse, 0.55); }
       if (!post && def.fx && dt > 0) def.fx(this, t, Math.max(1, Math.round(dt * 60)));
     }
     // los robots de Diego
     if (def.robots && !post) this.robotShow(t, dt, this.prevT);
     else this.hideRobots();
+    // lo propio de cada brutality (la barra de "desinstalando", la grieta, el Camaro, el pez globo…)
+    this.hideExtra();
+    def.view?.(this, t, dt, this.prevT, g.fatal.data || {}, post);
     this.prevT = t;
     // cámara
     const segs = post ? def.post || POST : def.shots;
@@ -411,7 +432,7 @@ export class FatalDirector {
   updateAnchors() {
     const g = this.g, w = g.winner, l = g.loser, A = this.anchors;
     A.W = V(w.rx ?? w.x, w.y, 0);
-    A.L = V(l.rx ?? l.x, l.y, 0);
+    A.L = V(l.rx ?? l.x, Math.max(0, l.y), 0);   // (si se lo traga la tierra, la cámara no se mete bajo el piso)
     A.M = V((A.W.x + A.L.x) / 2, 0, 0);
     this.wScale = w.sizeScale || 1;
     const wm = g.viewModel(g.winnerSide), lm = g.viewModel(g.loserSide);

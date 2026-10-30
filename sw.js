@@ -6,13 +6,14 @@
 //  - Modelos e imágenes: se usan de la copia y se actualizan en segundo plano.
 //  - Firebase (tiempo real) y /api/ nunca pasan por aquí.
 // =====================================================================
-const VERSION = 'fxcks-v9';
+const VERSION = 'fxcks-v10';
 const SHELL = [
   './', 'css/style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
   'src/main.js', 'src/model.js', 'src/fighter.js', 'src/specials.js', 'src/specials-amigos.js', 'src/stages.js',
   'src/effects.js', 'src/audio.js', 'src/input.js', 'src/ai.js', 'src/roster.js', 'src/net.js',
   'src/firebase-config.js', 'src/props.js', 'src/touch.js', 'src/salas.js',
   'src/music.js', 'src/post.js', 'src/hud.js', 'src/ajustes.js', 'src/anim.js', 'src/fatal.js',
+  'src/especiales-extra.js', 'src/vista-especiales.js', 'src/brutalidades.js', 'src/cine-util.js', 'src/cine-brutal.js',
 ];
 // Librerías con versión fija: si ya están guardadas no hace falta pedirlas otra vez
 const CDN = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];

@@ -21,8 +21,10 @@ Abre http://localhost:8080 (no funciona abriendo el `.html` con doble clic; nece
 | Especial | R | I (o Num0) |
 
 Abajo+Puño = gancho al aire · Abajo+Patada = barrida · Adelante+Puño = puño fuerte · Atrás+Patada = patada giratoria.
-Especiales: su combinación (ej. `← → + P`) o el botón Especial (solo / adelante / abajo / atrás).
-ESC = pausa con la lista de movimientos y fatalidades (ahí mismo **O** abre las opciones). En línea se puede usar
+Especiales: su combinación (ej. `← → + P`) o el botón Especial: solo / adelante / abajo / atrás / abajo-adelante /
+abajo-atrás (especial 1 a 6). **Saltando + Especial** = el especial en el aire de cada quien.
+En “¡ACÁBALO!”: la entrada de la fatality soltando el botón = **FATALITY**; dejándolo presionado = **BRUTALITY**.
+ESC = pausa con la lista de movimientos, fatalities y brutalities (ahí mismo **O** abre las opciones). En línea se puede usar
 cualquiera de las dos teclas o un mando.
 
 ## 🎬 Presentación
@@ -48,7 +50,8 @@ en línea los dos tienen que tener la versión nueva del juego.
 - **Luz de escenario** sobre los dos, el resto se oscurece y la imagen toma el color de la fatality (rojo sangre, azul
   hielo, naranja fuego…). En la de Diego la imagen “se descompone” como señal digital cuando disparan todos juntos.
 - **El remate**: destello, colores corridos, zoom de golpe, temblor, cámara lenta (contra la CPU; en línea no) y un
-  trancazo grave. Al empezar suena un golpe de tráiler y con “¡FATALIDAD!” un acorde oscuro; las letras escurren sangre.
+  trancazo grave. Al empezar suena un golpe de tráiler y al final sale **FATALITY** (o **BRUTALITY**) tal cual, como en
+  las maquinitas: letras que escurren sangre y el narrador lo dice en inglés con voz grave.
 - **Poses**: el que va a morir ve venir lo que le cae y se cubre temblando; Alan saluda a su cohete; Voltio alza los
   brazos para llamar a los rayos.
 - **Sin trabones**: al empezar la pelea se prepara, sin que se vea, todo lo que solo sale en las fatalities (la luz, el
@@ -64,6 +67,31 @@ en línea los dos tienen que tener la versión nueva del juego.
 | José | lo sigue en el brinco, desde los ojos del otro ve caer las nalgas gigantes y el aplastón sale con destello rosa |
 | Conde | la cámara se queda y él crece hasta salirse del cuadro; contrapicado con el pie gigante sobre el otro |
 | Emi | primer plano chiflando, el pescado rompe el piso entre agua, se lo traga y se vuelve a clavar |
+
+## 💀 Brutalities
+Con “¡ACÁBALO!” marca la entrada de tu fatality y **deja presionado el botón** (P o K) ~medio segundo: te pones rojo y
+tiemblas mientras carga, y en vez de la fatality sale la **BRUTALITY** (si lo sueltas antes, es FATALITY). En el
+celular: toca ☠ para la fatality o déjalo presionado para la brutality. La CPU a veces hace una y a veces la otra.
+Tiempos en [`src/brutalidades.js`](src/brutalidades.js) (en línea las dos computadoras lo calculan igual) y la escena de
+cine en [`src/cine-brutal.js`](src/cine-brutal.js).
+
+| Quién | Brutality | Qué pasa |
+|---|---|---|
+| Diego | DESINSTALACIÓN | Ráfaga de puños de robot, lo escanea con los ojos y le sale una barra “DESINSTALANDO RIVAL…” que sube a 100% mientras el otro parpadea como señal mala… **ERROR 404: RIVAL NO ENCONTRADO** y revienta |
+| Alan | TRIPLE ATROPELLO | Pose de JoJo y su Camaro lo atropella, se echa de reversa sobre él y lo vuelve a atropellar; hace donas y se va. Queda aplastado como calcomanía entre las marcas de llanta (toma desde arriba) |
+| Gera | CABEZA DE PIÑATA | Ráfaga a la cara: con cada golpe la cabeza se le infla y se pone roja… el gancho la revienta como piñata: confeti, dulces y el cuerpo sin cabeza |
+| José | TRAGADO POR LA TIERRA | Menea las nalgas tan fuerte que el piso se agrieta bajo el otro y se lo traga (se hunde gritando); el piso se cierra y sale una tumba: “Q.E.P. — se lo tragó la tierra” |
+| Conde | MUÑECO DE TRAPO | Lo agarra de los tobillos y lo azota contra el piso de un lado y del otro, cada vez más rápido; el último lo clava de cabeza: quedan las piernas saliendo del piso |
+| Emi | PEZ GLOBO | Cuatro pescadazos, le mete un pez globo a la boca, se infla con púas y flota… y revienta en lluvia de pescaditos |
+| Ramces | YA ESTÁS RASURADO | Afila la navaja, lo atraviesa en un parpadeo y queda de espaldas cerrándola mientras los cortes se quedan brillando en el aire… “clic”: el otro se cae en pedazos |
+| Brasa · Escarcha · Voltio · Mole | CARBONIZADO · ESTATUA ROTA · CORTOCIRCUITO · APLANADO | Combo de ocho golpes, gancho que lo levanta y revienta en el aire en fuego, hielo, rayos o polvo |
+
+## ✈️ Ataques nuevos
+- **Especial en el aire** (saltando + Especial): se queda un instante arriba y se lanza en picada hacia el rival; si
+  pega rebota hacia atrás y si cae al piso sin pegar algunos hacen una onda. Cada quien con su estilo: PATADA METEORO
+  de Diego (botas cohete), REENTRADA de Alan (envuelto en fuego como cápsula espacial), MAZAZO de Gera, PEDO COHETE de
+  José, PLANCHA de Conde, CLAVADO de Emi, NAVAJA EN PICADA de Ramces, y fuego, hielo, rayo y bala de cañón para los demás.
+- **Un especial más para cada uno** (Especial + abajo-adelante, o su combinación): ver las tablas de abajo.
 
 ## 🤖 Dificultad de la CPU
 Al elegir peleador contra la CPU, en el panel de la CPU: **◀ NORMAL ▶** (con el mouse, tocándolo o con **Q / E**).
@@ -101,9 +129,10 @@ en el navegador.
 
 ## 📱 En el celular (y como app)
 - **Joystick** en la mitad izquierda (aparece donde pones el dedo): moverse, saltar (arriba) y agacharse (abajo).
-- **PUÑO · PATADA · BLOQ. · ESPECIAL** a la derecha. ESPECIAL solo = especial 1, adelante = 2, abajo = 3, atrás = 4;
-  arriba del botón sale el nombre del que vas a hacer.
-- **☠ FATALITY**: aparece en “¡ACÁBALO!” y la marca por ti. **❚❚** = pausa.
+- **PUÑO · PATADA · BLOQ. · ESPECIAL** a la derecha. ESPECIAL solo = especial 1, adelante = 2, abajo = 3, atrás = 4,
+  abajo-adelante = 5, abajo-atrás = 6; saltando, el especial en el aire. Arriba del botón sale el nombre del que vas a hacer.
+- **☠ FATALITY**: aparece en “¡ACÁBALO!” y la marca por ti: tócalo para la FATALITY o déjalo presionado para la
+  BRUTALITY. **❚❚** = pausa.
 - Se juega mejor acostado (horizontal); al entrar a jugar se pone en pantalla completa.
 - No hace zoom aunque toques dos veces rápido (ni en la pelea ni en los menús) ni con dos dedos.
 - **Instalarlo como app**: en Android sale el botón “INSTALAR EL JUEGO” en el menú (o menú del navegador → Instalar).
@@ -118,7 +147,10 @@ en el navegador.
 | LÁSER OCULAR | `↓ → + P` | Rayos de los ojos, 5 impactos (18 en total). Pasa por encima si el rival se agacha |
 | LLUVIA DE MISILES | `↓ ← + K` | 4 misiles desde la espalda que caen alrededor del rival (20 en total) |
 | MODO TITÁN | `↓ ↓ + P` (o Especial + atrás) | Se pone el traje de robot 7 s: camina y salta mucho más rápido, recibe 35% menos daño, no le hace daño bloquear y el botón de especial saca las armas del robot |
+| DRONES KAMIKAZE | `← ← + P` (o Especial + abajo-adelante) | Suelta dos drones de la espalda que se acomodan arriba y luego lo persiguen hasta estrellarse en él: uno a la cabeza y otro al cuerpo (el segundo lo tumba) |
+| PATADA METEORO | saltando + Especial | Se lanza en picada con las botas cohete encendidas; si cae al piso, explota |
 | ☠ DESINTEGRACIÓN | `→ → ↓ + P` | Se pone el traje, llama a cuatro robots y entre todos (láser, plasma, rayos, misiles y su rayo del pecho) deshacen al rival en cubos de luz |
+| 💀 DESINSTALACIÓN | la de la fatality, dejando presionado P | BRUTALITY: lo “desinstala” hasta el ERROR 404 |
 
 Con el traje puesto (al final parpadea y se le cae en pedazos):
 
@@ -136,8 +168,11 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | COHETE SATURNO | `← → + P` (o Especial + adelante) | Cohete que acelera y explota al impactar |
 | JETPACK | `→ ↓ → + K` (o Especial + abajo) | Despega y cae en picada sobre el rival |
 | ATAQUE ORBITAL | `↓ ← + P` (o Especial + atrás) | Un satélite dispara un rayo desde el cielo donde está el rival |
-| TURBINA | `← ← + K` (solo con la combinación) | Turbina de avión: ráfaga caliente que empuja y golpea varias veces |
+| TURBINA | `← ← + K` (o Especial + abajo-adelante) | Turbina de avión: ráfaga caliente que empuja y golpea varias veces |
+| BOOM SÓNICO | `→ → + K` (o Especial + abajo-atrás) | Prende el jetpack a todo y lo atraviesa más rápido que el sonido: el estruendo lo manda a volar |
+| REENTRADA | saltando + Especial | Cae en picada envuelto en fuego como cápsula que regresa del espacio; al caer, onda de fuego |
 | ☠ DESPEGUE ESPACIAL | `↓ → ↓ + P` | Le amarra un cohete al rival y lo manda al espacio con fuegos artificiales |
+| 💀 TRIPLE ATROPELLO | la de la fatality, dejando presionado P | BRUTALITY: su Camaro lo atropella tres veces |
 
 ### Gera (boxeo) — siempre con guantes de box
 | Especial | Entrada | Qué hace |
@@ -146,7 +181,10 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | GANCHO DEMOLEDOR | `→ ↓ → + P` | Gancho volador que lanza al rival por los aires |
 | PUÑO RESORTE | `← → + P` | Un guante con resorte sale disparado a lo lejos |
 | CONTRAGOLPE | `↓ ← + P` | Guardia: si le pegan, responde con un gancho imbloqueable |
+| HIGADAZO | `↓ → + P` (o Especial + abajo-adelante) | Entra agachado y le hunde el puño en el costado: si conecta, el otro se dobla de rodillas sin aire |
+| MAZAZO | saltando + Especial | Los dos puños juntos desde arriba |
 | ☠ NOCAUT | `→ → → + P` | Ráfaga de golpes y un gancho que lo manda a las estrellas |
+| 💀 CABEZA DE PIÑATA | la de la fatality, dejando presionado P | BRUTALITY: la cabeza se infla con cada golpe y revienta |
 
 ### José Cortez (nalgas)
 | Especial | Entrada | Qué hace |
@@ -155,7 +193,10 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | SENTÓN | `↓ ↓ + K` | Brinca y cae sentado: aplasta al de abajo y hace una onda |
 | TWERK SÍSMICO | `↓ ← + K` | Cada sacudida manda una onda (7 golpes de cerca) |
 | GAS NUCLEAR | `← ← + P` | Nube verde que avanza y lastima mientras estés dentro (no se bloquea) |
+| IMÁN DE NALGAS | `← → + P` (o Especial + abajo-adelante) | Se voltea y las menea: si estás cerca quedas hipnotizado (corazones), te acercas solito… y nalgazo (no se bloquea) |
+| PEDO COHETE | saltando + Especial | Se lanza de nalgas propulsado por un pedo; al caer deja la nube |
 | ☠ APLASTE NALGÓN | `↓ ↓ ↓ + K` | Las nalgas le crecen y aplasta al rival desde el cielo |
+| 💀 TRAGADO POR LA TIERRA | la de la fatality, dejando presionado K | BRUTALITY: el piso se lo traga y sale una tumba |
 
 ### Conde (fuerza) — un poco más chaparro que los demás… hasta que se hace gigante
 | Especial | Entrada | Qué hace |
@@ -164,7 +205,10 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | EMBESTIDA DE TORO | `← → + K` | Se lanza con el hombro y tumba al rival |
 | PISOTÓN SÍSMICO | `↓ ↓ + K` | Brinca y cae con todo: onda en el suelo (bloquear agachado) |
 | LANZAMIENTO TITÁNICO | `← → + P` | Agarre de cerca: lo levanta sobre la cabeza y lo avienta. No se puede bloquear |
+| ARRANCABANQUETAS | `↓ → + P` (o Especial + abajo-adelante) | Arranca un pedazo de banqueta del piso y se lo avienta en arco; al caer se hace pedazos |
+| PLANCHA | saltando + Especial | Plancha de luchador: cae acostado encima y retumba el piso |
 | ☠ PISOTÓN GIGANTE | `↓ → ↓ + K` | Se hace gigantesco y lo aplasta de un pisotón |
+| 💀 MUÑECO DE TRAPO | la de la fatality, dejando presionado K | BRUTALITY: lo azota de un lado al otro y lo deja enterrado de cabeza |
 
 ### Emi (pescadero) — pescados y caguamas
 | Especial | Entrada | Qué hace |
@@ -173,7 +217,10 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | KAWAMA VOLADORA | `↓ → + P` | Avienta una caguama en parábola: se rompe y deja al rival mareado |
 | LLUVIA DE PESCADOS | `↓ ← + K` | Chifla y le caen 5 pescados encima (el último lo tumba) |
 | BAÑO DE CHELA | `← ← + K` | Agita la caguama y lo baña: varios chorros que lo empujan |
+| ANZUELO | `← ← + P` (o Especial + abajo-adelante) | Lanza el hilo de pescar con su corcho: si lo engancha, lo jala hasta él y lo deja mareado |
+| CLAVADO | saltando + Especial | Clavado olímpico de cabeza: al caer salpica como alberca |
 | ☠ PESCADO GIGANTE | `→ ↓ → + K` | Un pescado gigante sale del suelo y se lo traga |
+| 💀 PEZ GLOBO | la de la fatality, dejando presionado K | BRUTALITY: se infla con púas y revienta en lluvia de pescaditos |
 
 ### Ramces (barbero) — trae sus tijeras, máquina, navaja y brocha
 | Especial | Entrada | Qué hace |
@@ -182,9 +229,13 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | RAPADO EXPRESS | `→ → + P` (o Especial + adelante) | Se lanza con la máquina y le rapa la cabeza: 6 toques con pelos volando (agachado se esquiva) |
 | NAVAJAZO | `↓ → + P` (o Especial + abajo) | Tajo de navaja de abajo hacia arriba que lo manda por los aires |
 | BROCHAZO DE TALCO | `↓ ← + K` (o Especial + atrás) | Nube de talco en la cara: si lo agarra de cerca se queda mareado tosiendo |
+| LANZALLAMAS DE SPRAY | `← ← + P` (o Especial + abajo-adelante) | Spray para el pelo + encendedor: llamarada de cerca que pega varias veces |
+| NAVAJA EN PICADA | saltando + Especial | Cae en picada tajando con la navaja |
 | ☠ CORTE AL RAS | `↓ ← → + P` | Sale su silla de barbero, lo sienta, le pone la capa y le pasa la máquina… afila la navaja y le quedó demasiado al ras: la cabeza sale volando |
+| 💀 YA ESTÁS RASURADO | la de la fatality, dejando presionado P | BRUTALITY: lo atraviesa, “clic”… y se cae en pedazos |
 
-Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo).
+Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo), cada uno con un especial más (COLUMNA DE FUEGO,
+PUÑO GLACIAR, CAMPO ELÉCTRICO y SUPLEX), su especial en el aire y su brutality.
 
 ## 🔊 Sonidos y música
 Todo es sintetizado (no hay archivos de audio) y pasa por un compresor y un poco de eco de cuarto.
@@ -271,15 +322,20 @@ Con `prueba-online.html?firebase=1` los dos jugadores se conectan por la base de
    escribe el **id** (ej. `juan`), revisa las animaciones y dale **GUARDAR EN EL JUEGO** → crea
    `assets/peleadores/<id>/modelo.glb` (~3 MB, con esqueleto automático) y `retrato.png`.
 3. En [`src/roster.js`](src/roster.js) copia el bloque de otro peleador y cambia `id`, `nombre`, `color`,
-   `modelo`, `retrato`, `especiales`, `fatality`, `frase` e `intro` (su pose en la presentación de la
-   ronda 1: una animación de especial como `jojo`, `flexion`, `carga`, `rafaga`…). Opcional: `victoria` (0–3, su
-   pose al ganar; si no, sale una según su estilo).
+   `modelo`, `retrato`, `especiales` (hasta 6: el botón Especial solo, adelante, abajo, atrás, abajo-adelante y
+   abajo-atrás), `aire` (su especial en el aire: `{ nombre, estilo, color, danio, onda }`), `fatality`, `brutality`,
+   `frase` e `intro` (su pose en la presentación de la ronda 1: una animación de especial como `jojo`, `flexion`,
+   `carga`, `rafaga`…). Opcional: `victoria` (0–3, su pose al ganar; si no, sale una según su estilo).
 
 Tipos de especial: `proyectil`, `congelar`, `teletransporte`, `embestida`, `terremoto`, `gancho`,
 `uppercut_volador`, `poder`, `rayo`; robot: `puno_cohete`, `laser`, `misiles`, `armadura`; aeroespacial:
 `cohete`, `jetpack`, `orbital`, `turbina`, `camaro` (con `modelo`: el carro); robot con traje: `titan`, `plasma`, `megalaser`, `propulsores`, `descarga`; boxeo: `rafaga`, `resorte`, `contra`; nalgas: `culazo`, `senton`,
-`twerk`, `gas`; fuerza: `gigante`, `agarre`; barbero: `tijeras`, `rapado`, `navaja`, `talco`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
-`aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`, `pescadote`, `corte`. Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
+`twerk`, `gas`; fuerza: `gigante`, `agarre`; barbero: `tijeras`, `rapado`, `navaja`, `talco`; nuevos: `drones`, `boom_sonico`,
+`higadazo`, `iman`, `losa`, `anzuelo`, `lanzallamas` (y `rayo` con `estilo: 'fuego'`). Estilos de `aire`: `cohete`, `reentrada`,
+`mazazo`, `pedo`, `plancha`, `clavado`, `navaja`, `fuego`, `hielo`, `rayo`, `bala`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
+`aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`, `pescadote`, `corte`. Brutalities: `desinstalar`,
+`atropello`, `pinata`, `tragado`, `trapo`, `pezglobo`, `rasurado`, `combo_brutal` (con `estilo`: `fuego`, `hielo`, `rayo`,
+`tanque`). Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
 
 Traje que se pone con un especial `titan` (como Diego): pasa el modelo por el convertidor con otro id (ej. `diego-robot`)
 y en el roster agrega `traje: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 }` y la lista

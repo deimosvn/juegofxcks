@@ -570,7 +570,8 @@ const OLD = { hipsY: 0.93, hipsX: 0, torsoX: 0.1, torsoY: 0.35, torsoZ: 0, headX
   hipNX: -0.35, knNX: 0.55, hipFX: 0.25, knFX: 0.4 };
 // piernas en ángulos directos (en el aire, sentado, de espaldas…); 'swap': la de adelante es la F
 const LEG_MODE = { jet_sube: 'fk', jet_cae: 'fk', turbina: 'swap', culazo: 'fk', senton: 'fk', senton_suelo: 'fk', twerk: 'fk',
-  gas: 'fk', jojo: 'fk', navaja: 'swap', sentado: 'fk', propulsor: 'fk', pisar_arriba: 'fk', pisar: 'fk' };
+  gas: 'fk', jojo: 'fk', navaja: 'swap', sentado: 'fk', propulsor: 'fk', pisar_arriba: 'fk', pisar: 'fk',
+  picada_carga: 'fk', mazazo: 'fk', plancha: 'fk', clavado: 'fk', bola: 'fk', doblado: 'fk', colgado: 'fk' };
 
 function legacy(a, h, st) {
   const L = { ...OLD };
@@ -667,10 +668,41 @@ function oldPose(a, P, e, t) {
     case 'chela':     // agita la caguama y luego la apunta al rival
       Object.assign(P, { torsoX: 0.12, torsoY: -0.2, shFX: -1.45, shFZ: -0.1, elFX: -0.15, shNX: -0.6, shNZ: 0.3, elNX: -1.9, hipsY: 0.9 });
       if (t < 14) { P.shFX = -1.0; P.elFX = -1.2 + Math.sin(t * 2.2) * 0.6; }
+      return;
+    // Ataques nuevos (especiales-extra.js)
+    case 'picada_carga':   // en el aire: se encoge un instante antes de lanzarse en picada
+      Object.assign(P, { torsoX: 0.45, torsoY: 0, headX: -0.3, shNX: 0.4, shNZ: 0.5, elNX: -1.2, shFX: 0.4, shFZ: -0.5, elFX: -1.2, hipNX: -1.4, knNX: 1.9, hipFX: -1.2, knFX: 1.7, hipsY: 0.95 });
+      return;
+    case 'mazazo':         // Gera: los dos puños juntos arriba de la cabeza… y abajo con todo
+      Object.assign(P, { torsoY: 0, headX: -0.2, hipNX: -0.6, knNX: 0.8, hipFX: -0.2, knFX: 0.5, hipsY: 0.95, shNZ: 0.15, shFZ: -0.15 });
+      P.shNX = P.shFX = lerp(-3.0, -1.2, e); P.elNX = P.elFX = lerp(-0.6, -0.2, e); P.torsoX = lerp(-0.35, 0.6, e);
+      return;
+    case 'plancha':        // Conde: vuela acostado con brazos y piernas abiertos, como luchador
+      Object.assign(P, { tilt: 1.35, torsoX: -0.1, torsoY: 0, headX: -0.5, shNX: -1.6, shNZ: 0.9, elNX: -0.3, shFX: -1.6, shFZ: -0.9, elFX: -0.3, hipNX: 0.1, knNX: 0.3, hipFX: 0.15, knFX: 0.3, hipsY: 0.95 });
+      return;
+    case 'clavado':        // Emi: clavado olímpico de cabeza, los brazos estirados por delante
+      Object.assign(P, { tilt: 2.4, torsoX: 0, torsoY: 0, headX: -0.3, shNX: -3.0, shNZ: 0.1, elNX: 0, shFX: -3.0, shFZ: -0.1, elFX: 0, hipNX: 0.05, knNX: 0.05, hipFX: 0.05, knFX: 0.05, hipsY: 0.95 });
+      return;
+    case 'bola':           // bala de cañón: hecho bolita
+      Object.assign(P, { tilt: 0.6, torsoX: 1.0, torsoY: 0, headX: 0.4, shNX: -0.9, shNZ: 0.2, elNX: -1.9, shFX: -0.9, shFZ: -0.2, elFX: -1.9, hipNX: -2.0, knNX: 2.3, hipFX: -2.0, knFX: 2.3, hipsY: 0.95 });
+      return;
+    case 'higadazo':       // Gera: se agacha, gira el torso y el puño de atrás se hunde en el costado
+      Object.assign(P, { torsoX: 0.3, hipsY: 0.8, headX: 0.1, shFX: -1.1, shFZ: -0.1, elFX: -1.9, hipNX: -0.5, knNX: 0.8, hipFX: 0.2, knFX: 0.6 });
+      P.torsoY = lerp(0.4, -0.6, e); P.shNX = lerp(-0.3, -1.25, e); P.shNZ = lerp(0.5, 0.15, e); P.elNX = lerp(-1.9, -1.1, e);
+      return;
+    case 'doblado':        // le sacaron el aire: de rodillas, doblado y agarrándose la panza
+      Object.assign(P, { torsoX: 0.95, torsoY: 0, headX: 0.25, shNX: -0.55, shNZ: 0.35, elNX: -1.7, shFX: -0.55, shFZ: -0.35, elFX: -1.7, hipNX: -1.45, knNX: 2.0, hipFX: -0.7, knFX: 1.5, hipsY: 0.52 });
+      P.torsoZ = Math.sin(t * 0.3) * 0.03;
+      return;
+    case 'colgado':        // lo cargan de los tobillos (brutality de Conde): flojo, las piernas juntas y los brazos colgando
+      Object.assign(P, { torsoX: 0, torsoY: 0, headX: 0.2, shNX: -2.8, shNZ: 0.35, elNX: -0.3, shFX: -2.7, shFZ: -0.35, elFX: -0.4, hipNX: 0, knNX: 0.08, hipFX: 0.05, knFX: 0.1, hipsY: 0.95 });
+      P.shNX += Math.sin(t * 0.5) * 0.25; P.shFX += Math.sin(t * 0.5 + 1) * 0.25;
+      return;
   }
 }
 const OLD_KEYS = new Set(['jet_sube', 'jet_cae', 'turbina', 'orbital', 'culazo', 'senton', 'senton_suelo', 'twerk', 'gas', 'jojo',
-  'rapar', 'navaja', 'afilar', 'capa', 'sentado', 'canon', 'propulsor', 'descarga', 'flexion', 'agarrar', 'levantar', 'pisar_arriba', 'pisar', 'silbido', 'chela']);
+  'rapar', 'navaja', 'afilar', 'capa', 'sentado', 'canon', 'propulsor', 'descarga', 'flexion', 'agarrar', 'levantar', 'pisar_arriba', 'pisar', 'silbido', 'chela',
+  'picada_carga', 'mazazo', 'plancha', 'clavado', 'bola', 'higadazo', 'doblado', 'colgado']);
 
 // Cómo se mueve cada quien (sale de sus stats y accesorios)
 export function styleOf(def) {

@@ -13,6 +13,9 @@
 //    stats      velocidad / fuerza (1 = normal), vida (100 = normal)
 //    especiales lista de habilidades (ver tipos en src/specials.js)
 //    fatality   remate final cuando sale "¡ACÁBALO!"
+//    brutality  el otro remate: la entrada de la fatality DEJANDO PRESIONADO el botón (brutalidades.js)
+//    aire       especial en el aire (Especial mientras saltas): { nombre, estilo, color, danio, onda }
+//               estilos: cohete, reentrada, mazazo, pedo, plancha, clavado, navaja, fuego, hielo, rayo, bala
 //    traje      (opcional) modelo que se pone con un especial tipo 'titan': { modelo, escala }
 //    especialesTitan  (opcional) lo que sacan los mismos botones mientras trae el traje puesto
 //    intro      (opcional) pose de presentación en la ronda 1 (una animación de especial: jojo, flexion, carga…)
@@ -35,10 +38,16 @@
 //    fuerza: gigante (se hace gigante y súper fuerte), agarre (lo levanta y lo avienta)
 //    pescadero: pescado, kawama (caguama en parábola), lluvia_pescados, chela (chorro de cerveza)
 //    barbero: tijeras (bumerán), rapado (máquina, varios toques), navaja (tajo hacia arriba), talco (lo marea)
+//    nuevos: drones (dos drones que lo persiguen), boom_sonico (lo atraviesa volando), higadazo (se dobla sin aire),
+//      iman (lo jala meneando las nalgas), losa (arranca la banqueta y se la avienta), anzuelo (lo pesca y lo jala),
+//      lanzallamas (spray + encendedor); rayo con estilo 'fuego' es una columna de fuego
+//    Botón de especial: solo = 1º · adelante = 2º · abajo = 3º · atrás = 4º · abajo-adelante = 5º · abajo-atrás = 6º
 //
 //  Tipos de fatality disponibles:
 //    explosion, incinerar, congelar_romper, rayo, aplastar, desintegrar,
 //    despegue, nocaut, nalgon, pisoton, pescadote, corte (silla de barbero)
+//  Tipos de brutality: desinstalar, atropello, pinata, tragado, trapo, pezglobo, rasurado,
+//    combo_brutal (con estilo fuego, hielo, rayo o tanque)
 //
 //  accesorios: ['guantes'] (guantes de box, color con colorGuantes), ['jetpack'],
 //    ['pescadero'] (pescado y caguama en la mano), ['barbero'] (tijeras, máquina, navaja y brocha)
@@ -98,7 +107,9 @@ export const PELEADORES = [
       { nombre: 'LÁSER OCULAR', tipo: 'laser', input: '↓ → + P', color: '#ff2a3a', danio: 18 },
       { nombre: 'LLUVIA DE MISILES', tipo: 'misiles', input: '↓ ← + K', color: '#ffb000', danio: 20 },
       { nombre: 'MODO TITÁN', tipo: 'titan', input: '↓ ↓ + P', color: '#4fd8ff', duracion: 7, velocidad: 1.7 },
+      { nombre: 'DRONES KAMIKAZE', tipo: 'drones', input: '← ← + P', color: '#ff3b3b', danio: 14 },
     ],
+    aire: { nombre: 'PATADA METEORO', estilo: 'cohete', color: '#ff8a00', danio: 12 },
     // Con el traje puesto, el botón de especial (solo / adelante / abajo / atrás) saca las armas del robot
     especialesTitan: [
       { nombre: 'CAÑÓN DE PLASMA', tipo: 'plasma', input: '← → + P', color: '#4fd8ff', danio: 16 },
@@ -107,6 +118,7 @@ export const PELEADORES = [
       { nombre: 'DESCARGA ELÉCTRICA', tipo: 'descarga', input: '↓ ↓ + P', color: '#9fe8ff', danio: 16 },
     ],
     fatality: { nombre: 'DESINTEGRACIÓN', tipo: 'desintegrar', input: '→ → ↓ + P', color: '#4fd8ff' },
+    brutality: { nombre: 'DESINSTALACIÓN', tipo: 'desinstalar', color: '#4fd8ff' },
     frase: 'Sistema de combate: victoria confirmada.',
     intro: 'carga',
   },
@@ -126,8 +138,11 @@ export const PELEADORES = [
       { nombre: 'JETPACK', tipo: 'jetpack', input: '→ ↓ → + K', color: '#4fd8ff', danio: 13 },
       { nombre: 'ATAQUE ORBITAL', tipo: 'orbital', input: '↓ ← + P', color: '#7fe3ff', danio: 14 },
       { nombre: 'TURBINA', tipo: 'turbina', input: '← ← + K', color: '#ffd27a', danio: 12 },
+      { nombre: 'BOOM SÓNICO', tipo: 'boom_sonico', input: '→ → + K', color: '#bfe9ff', danio: 13 },
     ],
+    aire: { nombre: 'REENTRADA', estilo: 'reentrada', color: '#ff7a1a', danio: 12, onda: 1.6 },
     fatality: { nombre: 'DESPEGUE ESPACIAL', tipo: 'despegue', input: '↓ → ↓ + P', color: '#ff7a1a' },
+    brutality: { nombre: 'TRIPLE ATROPELLO', tipo: 'atropello', color: '#cfd6dd' },
     frase: 'Houston, tenemos un ganador.',
     intro: 'jojo',
   },
@@ -145,8 +160,11 @@ export const PELEADORES = [
       { nombre: 'GANCHO DEMOLEDOR', tipo: 'uppercut_volador', input: '→ ↓ → + P', color: '#ff3b2f', danio: 14 },
       { nombre: 'PUÑO RESORTE', tipo: 'resorte', input: '← → + P', color: '#d1121b', danio: 11 },
       { nombre: 'CONTRAGOLPE', tipo: 'contra', input: '↓ ← + P', color: '#ffffff', danio: 16 },
+      { nombre: 'HIGADAZO', tipo: 'higadazo', input: '↓ → + P', color: '#ff3b2f', danio: 12 },
     ],
+    aire: { nombre: 'MAZAZO', estilo: 'mazazo', color: '#ffd23a', danio: 13 },
     fatality: { nombre: 'NOCAUT', tipo: 'nocaut', input: '→ → → + P', color: '#ffd23a' },
+    brutality: { nombre: 'CABEZA DE PIÑATA', tipo: 'pinata', color: '#ffd23a' },
     frase: '¡Ding, ding! Se acabó la pelea.',
     intro: 'rafaga',
   },
@@ -163,8 +181,11 @@ export const PELEADORES = [
       { nombre: 'SENTÓN', tipo: 'senton', input: '↓ ↓ + K', color: '#ffb3d1', danio: 13 },
       { nombre: 'TWERK SÍSMICO', tipo: 'twerk', input: '↓ ← + K', color: '#ff4fa3', danio: 14 },
       { nombre: 'GAS NUCLEAR', tipo: 'gas', input: '← ← + P', color: '#9be15d', danio: 12 },
+      { nombre: 'IMÁN DE NALGAS', tipo: 'iman', input: '← → + P', color: '#ff7ab8', danio: 12 },
     ],
+    aire: { nombre: 'PEDO COHETE', estilo: 'pedo', color: '#9be15d', danio: 12, onda: 1.8 },
     fatality: { nombre: 'APLASTE NALGÓN', tipo: 'nalgon', input: '↓ ↓ ↓ + K', color: '#ff7ab8' },
+    brutality: { nombre: 'TRAGADO POR LA TIERRA', tipo: 'tragado', color: '#ff7ab8' },
     frase: 'Con estas nalgas no se juega.',
     intro: 'twerk',
   },
@@ -181,8 +202,11 @@ export const PELEADORES = [
       { nombre: 'EMBESTIDA DE TORO', tipo: 'embestida', input: '← → + K', color: '#ff3b2f', danio: 12 },
       { nombre: 'PISOTÓN SÍSMICO', tipo: 'terremoto', input: '↓ ↓ + K', color: '#c98b4a', danio: 13 },
       { nombre: 'LANZAMIENTO TITÁNICO', tipo: 'agarre', input: '← → + P', color: '#ffd23a', danio: 15 },
+      { nombre: 'ARRANCABANQUETAS', tipo: 'losa', input: '↓ → + P', color: '#b8b1a6', danio: 15 },
     ],
+    aire: { nombre: 'PLANCHA', estilo: 'plancha', color: '#ff7a1a', danio: 14, onda: 2.6 },
     fatality: { nombre: 'PISOTÓN GIGANTE', tipo: 'pisoton', input: '↓ → ↓ + K', color: '#ff7a1a' },
+    brutality: { nombre: 'MUÑECO DE TRAPO', tipo: 'trapo', color: '#ff7a1a' },
     frase: 'Ahora sí, ¿quién es el chaparro?',
     intro: 'flexion',
   },
@@ -200,8 +224,11 @@ export const PELEADORES = [
       { nombre: 'KAWAMA VOLADORA', tipo: 'kawama', input: '↓ → + P', color: '#ffb000', danio: 12 },
       { nombre: 'LLUVIA DE PESCADOS', tipo: 'lluvia_pescados', input: '↓ ← + K', color: '#4fb8ff', danio: 15 },
       { nombre: 'BAÑO DE CHELA', tipo: 'chela', input: '← ← + K', color: '#ffd23a', danio: 12 },
+      { nombre: 'ANZUELO', tipo: 'anzuelo', input: '← ← + P', color: '#e8f4ff', danio: 6 },
     ],
+    aire: { nombre: 'CLAVADO', estilo: 'clavado', color: '#4fb8ff', danio: 12, onda: 2.2 },
     fatality: { nombre: 'PESCADO GIGANTE', tipo: 'pescadote', input: '→ ↓ → + K', color: '#4fb8ff' },
+    brutality: { nombre: 'PEZ GLOBO', tipo: 'pezglobo', color: '#ffd23a' },
     frase: '¡Pásele, pásele, que hoy hay paliza fresca!',
     intro: 'chela',
   },
@@ -220,8 +247,11 @@ export const PELEADORES = [
       { nombre: 'RAPADO EXPRESS', tipo: 'rapado', input: '→ → + P', color: '#9fe8ff', danio: 15 },
       { nombre: 'NAVAJAZO', tipo: 'navaja', input: '↓ → + P', color: '#e8eef2', danio: 13 },
       { nombre: 'BROCHAZO DE TALCO', tipo: 'talco', input: '↓ ← + K', color: '#ffffff', danio: 6 },
+      { nombre: 'LANZALLAMAS DE SPRAY', tipo: 'lanzallamas', input: '← ← + P', color: '#ff8a2a', danio: 15 },
     ],
+    aire: { nombre: 'NAVAJA EN PICADA', estilo: 'navaja', color: '#e8eef2', danio: 12 },
     fatality: { nombre: 'CORTE AL RAS', tipo: 'corte', input: '↓ ← → + P', color: '#d62828' },
+    brutality: { nombre: 'YA ESTÁS RASURADO', tipo: 'rasurado', color: '#d62828' },
     frase: '¡Siguiente! ¿Degradado o rapado?',
     intro: 'afilar',
   },
@@ -237,8 +267,11 @@ export const PELEADORES = [
       { nombre: 'BOLA DE FUEGO', tipo: 'proyectil', input: '← → + P', color: '#ff6a00', danio: 10 },
       { nombre: 'PUÑO DEL DRAGÓN', tipo: 'uppercut_volador', input: '→ ↓ → + P', color: '#ffb000', danio: 13 },
       { nombre: 'METEORO', tipo: 'terremoto', input: '↓ ↓ + K', color: '#ff3300', danio: 12 },
+      { nombre: 'COLUMNA DE FUEGO', tipo: 'rayo', estilo: 'fuego', input: '↓ ← + P', color: '#ff5500', danio: 12 },
     ],
+    aire: { nombre: 'METEORO ÍGNEO', estilo: 'fuego', color: '#ff6a00', danio: 12, onda: 1.6 },
     fatality: { nombre: 'INCINERACIÓN', tipo: 'incinerar', input: '→ → ← + K', color: '#ff5500' },
+    brutality: { nombre: 'CARBONIZADO', tipo: 'combo_brutal', estilo: 'fuego', color: '#ff5500' },
     frase: '¡Te dejé hecho cenizas!',
   },
   {
@@ -252,8 +285,11 @@ export const PELEADORES = [
       { nombre: 'RAYO HELADO', tipo: 'congelar', input: '↓ → + P', color: '#9fe8ff', danio: 4 },
       { nombre: 'DESLIZ GLACIAL', tipo: 'embestida', input: '← → + K', color: '#bff3ff', danio: 10 },
       { nombre: 'TELETRANSPORTE', tipo: 'teletransporte', input: '↓ ← + K', color: '#7fd4ff', danio: 9 },
+      { nombre: 'PUÑO GLACIAR', tipo: 'uppercut_volador', input: '→ ↓ → + P', color: '#bfefff', danio: 12 },
     ],
+    aire: { nombre: 'CARÁMBANO', estilo: 'hielo', color: '#9fe8ff', danio: 11 },
     fatality: { nombre: 'CONGELAR Y ROMPER', tipo: 'congelar_romper', input: '→ ↓ → + P', color: '#aef' },
+    brutality: { nombre: 'ESTATUA ROTA', tipo: 'combo_brutal', estilo: 'hielo', color: '#bfefff' },
     frase: 'Quédate frío.',
   },
   {
@@ -267,8 +303,11 @@ export const PELEADORES = [
       { nombre: 'TORMENTA', tipo: 'rayo', input: '↓ ← + P', color: '#c9e6ff', danio: 12 },
       { nombre: 'TORPEDO', tipo: 'embestida', input: '← ← → + P', color: '#fff27a', danio: 11 },
       { nombre: 'SALTO ESPACIAL', tipo: 'teletransporte', input: '↓ ↑', color: '#9cf', danio: 9 },
+      { nombre: 'CAMPO ELÉCTRICO', tipo: 'descarga', input: '↓ ↓ + P', color: '#fff27a', danio: 14 },
     ],
+    aire: { nombre: 'RAYO EN PICADA', estilo: 'rayo', color: '#fff27a', danio: 11 },
     fatality: { nombre: 'ELECTROCUCIÓN', tipo: 'rayo', input: '← → ← + K', color: '#bdf' },
+    brutality: { nombre: 'CORTOCIRCUITO', tipo: 'combo_brutal', estilo: 'rayo', color: '#c9e6ff' },
     frase: 'Rápido como un rayo.',
   },
   {
@@ -282,8 +321,11 @@ export const PELEADORES = [
       { nombre: 'CADENA', tipo: 'gancho', input: '← ← + P', color: '#d0d0d0', danio: 5 },
       { nombre: 'FURIA', tipo: 'poder', input: '↓ ↓ + P', color: '#ff2a2a', danio: 0 },
       { nombre: 'PISOTÓN', tipo: 'terremoto', input: '↓ ↓ + K', color: '#b38b4d', danio: 13 },
+      { nombre: 'SUPLEX', tipo: 'agarre', input: '← → + P', color: '#d0d0d0', danio: 14 },
     ],
+    aire: { nombre: 'BALA DE CAÑÓN', estilo: 'bala', color: '#b38b4d', danio: 14, onda: 2.4 },
     fatality: { nombre: 'APLASTAMIENTO', tipo: 'aplastar', input: '↓ ↓ ↓ + K', color: '#a77' },
+    brutality: { nombre: 'APLANADO', tipo: 'combo_brutal', estilo: 'tanque', color: '#ff2a2a' },
     frase: '¿Eso fue todo?',
   },
 ];

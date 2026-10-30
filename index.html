@@ -68,7 +68,7 @@
       <button class="tb" id="tb-k" data-key="KeyG">PATADA</button>
     </div>
     <button id="tpause" data-key="Escape" aria-label="Pausa">❚❚</button>
-    <button id="tfatal" class="hidden">☠ FATALITY</button>
+    <button id="tfatal" class="hidden">☠ FATALITY<small>déjalo presionado: BRUTALITY</small></button>
   </div>
   <!-- Al terminar la pelea (también con clic en la compu) -->
   <div id="endbtns" class="hidden">
@@ -81,7 +81,7 @@
   <div id="flash"></div>
   <!-- Fatality de cine: franjas negras (encima del destello) y el título (fatal.js) -->
   <div id="cine"><div class="bar top"></div><div class="bar bot"></div>
-    <div class="fcard" id="fcard"><small>FATALITY</small><b id="fcard-name"></b><i id="fcard-who"></i></div></div>
+    <div class="fcard" id="fcard"><small id="fcard-kind">FATALITY</small><b id="fcard-name"></b><i id="fcard-who"></i></div></div>
   <div id="fade"></div>
 
   <!-- Menú principal (primero la pantalla de título: "presiona cualquier tecla") -->
@@ -197,8 +197,8 @@
     <div class="touch-help touch-only">
       <p><b>Joystick</b> (lado izquierdo): moverse, saltar (arriba) y agacharse (abajo).</p>
       <p><b>PUÑO · PATADA · BLOQ.</b>: igual que en el teclado; con el joystick salen otros golpes (abajo + puño = gancho…).</p>
-      <p><b>ESPECIAL</b>: solo = especial 1 · adelante = 2 · abajo = 3 · atrás = 4. Arriba del botón sale cuál vas a hacer.</p>
-      <p><b>☠ FATALITY</b>: aparece cuando sale “¡ACÁBALO!”.</p>
+      <p><b>ESPECIAL</b>: solo = especial 1 · adelante = 2 · abajo = 3 · atrás = 4 · abajo-adelante = 5 · abajo-atrás = 6. Saltando = el especial en el aire. Arriba del botón sale cuál vas a hacer.</p>
+      <p><b>☠ FATALITY</b>: aparece cuando sale “¡ACÁBALO!”. Tócalo para la FATALITY o déjalo presionado para la BRUTALITY.</p>
     </div>
     <div class="controls-grid kb-only">
       <div>
@@ -232,7 +232,10 @@
           <tr><td>Puño fuerte</td><td>Adelante + Puño</td></tr>
           <tr><td>Patada giratoria</td><td>Atrás + Patada</td></tr>
           <tr><td>Especial 1 / 2 / 3 / 4</td><td>Esp. / Adel.+Esp. / Abajo+Esp. / Atrás+Esp.</td></tr>
+          <tr><td>Especial 5 / 6</td><td>Abajo-adelante+Esp. / Abajo-atrás+Esp.</td></tr>
+          <tr><td>Especial en el aire</td><td>Saltando + Esp.</td></tr>
           <tr><td>Bloqueo bajo</td><td>Abajo + Bloqueo</td></tr>
+          <tr><td>☠ Brutality</td><td>La fatality, dejando presionado el botón</td></tr>
         </table>
         <p class="small">Mandos de Xbox/PlayStation también funcionan.</p>
       </div>

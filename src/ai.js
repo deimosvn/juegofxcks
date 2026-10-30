@@ -19,11 +19,14 @@ export const DIFICULTADES = {
 export const NIVELES = Object.keys(DIFICULTADES);
 
 // Especiales según para qué sirven
-const PROJ = ['proyectil', 'congelar', 'puno_cohete', 'laser', 'pescado', 'kawama', 'cohete', 'plasma', 'tijeras'];
-const DASH = ['rayo', 'teletransporte', 'gancho', 'embestida', 'misiles', 'lluvia_pescados', 'orbital', 'propulsores', 'megalaser', 'camaro'];
-const CLOSE = ['embestida', 'terremoto', 'gancho', 'teletransporte', 'rayo', 'misiles', 'laser', 'chela', 'turbina', 'resorte', 'propulsores', 'megalaser', 'descarga', 'camaro', 'rapado', 'talco'];
-const POWER = ['uppercut_volador', 'gancho', 'poder', 'terremoto', 'armadura', 'titan', 'descarga', 'navaja', 'talco'];
-const GRAB = ['agarre', 'gigante', 'rafaga', 'contra'];
+const PROJ = ['proyectil', 'congelar', 'puno_cohete', 'laser', 'pescado', 'kawama', 'cohete', 'plasma', 'tijeras', 'drones', 'losa'];
+const DASH = ['rayo', 'teletransporte', 'gancho', 'embestida', 'misiles', 'lluvia_pescados', 'orbital', 'propulsores', 'megalaser', 'camaro',
+  'boom_sonico', 'iman', 'anzuelo', 'drones'];
+const CLOSE = ['embestida', 'terremoto', 'gancho', 'teletransporte', 'rayo', 'misiles', 'laser', 'chela', 'turbina', 'resorte', 'propulsores', 'megalaser', 'descarga', 'camaro', 'rapado', 'talco',
+  'lanzallamas', 'higadazo', 'boom_sonico', 'iman'];
+const POWER = ['uppercut_volador', 'gancho', 'poder', 'terremoto', 'armadura', 'titan', 'descarga', 'navaja', 'talco', 'higadazo'];
+const GRAB = ['agarre', 'gigante', 'rafaga', 'contra', 'lanzallamas'];
+const HOLD = 32;   // cuadros que aguanta el botón para hacer la BRUTALITY (brutalidades.js pide 26)
 
 export class CPU {
   constructor(me, input, game, nivel = 'normal') {
@@ -54,16 +57,22 @@ export class CPU {
   // lo que "ve" del rival: lo de hace unos cuadros (según la dificultad)
   see() { return this.seen[Math.max(0, this.seen.length - 1 - this.P.react)]; }
 
-  findSpec(...tipos) { return this.me.specials.findIndex((s) => tipos.includes(s.tipo)); }
+  // uno al azar de los que sirven para eso (así también usa los ataques nuevos)
+  findSpec(...tipos) {
+    const ids = [];
+    this.me.specials.forEach((s, i) => { if (tipos.includes(s.tipo)) ids.push(i); });
+    return ids.length ? ids[Math.random() * ids.length | 0] : -1;
+  }
   useSpec(i) {
-    const specials = this.me.specials, fwd = this.dirKey(true), back = this.dirKey(false);
-    if (i > 3) {   // sin lugar en el botón de especial: con su combinación de flechas
-      const p = specials[i].parsed, map = { F: { [fwd]: true }, B: { [back]: true }, D: { down: true }, U: { up: true } };
+    const fwd = this.dirKey(true), back = this.dirKey(false);
+    // botón de especial con su dirección: solo · adelante · abajo · atrás · abajo-adelante · abajo-atrás
+    const dir = [{}, { [fwd]: true }, { down: true }, { [back]: true }, { down: true, [fwd]: true }, { down: true, [back]: true }][i];
+    if (!dir) {   // (por si hubiera más) con su combinación de flechas
+      const p = this.me.specials[i].parsed, map = { F: { [fwd]: true }, B: { [back]: true }, D: { down: true }, U: { up: true } };
       for (const s of p.seq) this.plan(this.tap(map[s]));
       if (p.btn) this.plan(this.tap({ [p.btn]: true }));
       return;
     }
-    const dir = i === 1 ? { [fwd]: true } : i === 2 ? { down: true } : i === 3 ? { [back]: true } : {};
     this.plan({ keys: dir, frames: 2 }, this.tap({ ...dir, special: true }));
   }
 
@@ -125,6 +134,10 @@ export class CPU {
       }
     }
     if (me.state === 'jump') {
+      // especial en el aire: una vez por salto decide si se lanza en picada (si el rival está adelante y abajo)
+      if (me.animId !== this.lastJump) { this.lastJump = me.animId; this.airSpec = !!me.airSpecial && this.roll(P.spec * 1.4); }
+      const ahead = (opp.x - me.x) * me.facing;
+      if (this.airSpec && !me.airAttackUsed && me.y > 1.0 && ahead > 1.0 && ahead < 4.2) { this.airSpec = false; this.plan(this.tap({ special: true })); return true; }
       if (d < 1.9 && this.roll(0.08)) { this.plan(this.tap({ kick: true })); return true; }
       return false;
     }
@@ -205,13 +218,13 @@ export class CPU {
     opts[Math.random() * opts.length | 0]();
   }
 
-  // ¡ACÁBALO!: a veces hace su fatality
+  // ¡ACÁBALO!: a veces hace su fatality… o, aguantando el botón, su brutality
   finish(opp) {
     const me = this.me, d = Math.abs(opp.x - me.x), fwd = this.dirKey(true), back = this.dirKey(false);
     if (me.fatality && d < 4 && this.roll(this.P.fatal)) {
       const p = me.fatality.parsed, map = { F: { [fwd]: true }, B: { [back]: true }, D: { down: true }, U: { up: true } };
       for (const s of p.seq) this.plan(this.tap(map[s]));
-      if (p.btn) this.plan(this.tap({ [p.btn]: true }));
+      if (p.btn) this.plan(me.brutality && this.roll(0.5) ? { keys: { [p.btn]: true }, frames: HOLD } : this.tap({ [p.btn]: true }));
     } else if (d > 1.3) this.plan(this.walk(true, 12));
     else this.plan(this.tap({ punch: true }));
   }

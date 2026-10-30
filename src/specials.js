@@ -32,8 +32,11 @@ export function spawnProjectile(g, f, kind, spec, extra = {}) {
 }
 
 export const SOLID_PROJECTILES = new Set(['bola', 'hielo', 'puno', 'cohete', 'plasma']);
+// Proyectiles de otros archivos (especiales-extra.js): kind -> función que lo mueve y revisa si pega
+export const PROJ_UPDATE = {};
 
 export function updateProjectile(p, g) {
+  if (PROJ_UPDATE[p.kind]) { PROJ_UPDATE[p.kind](p, g); return; }
   const owner = g.fighters[p.owner], opp = g.fighters[1 - p.owner];
   p.t++;
   if (p.kind === 'misil') {
@@ -243,7 +246,7 @@ export const SPECIALS = {
     },
   },
 
-  // Invoca un rayo del cielo sobre el rival
+  // Invoca un rayo del cielo sobre el rival (con estilo 'fuego': una columna de fuego que sale del piso)
   rayo: {
     total: 48, anim: 'especial',
     start(f, o, s) { f.anim(s.animacion || 'especial', 48, 0.3, 0.8); },
@@ -258,10 +261,16 @@ export const SPECIALS = {
       }
       if (t > 6 && t < 28 && t % 2 === 0) g.effects.aura(f.hand, s.color, 2);
       if (t === 28) {
-        g.effects.lightning(V(d.x, 13, 0), V(d.x, 0, 0), s.color, 0.4);
-        g.effects.lightning(V(d.x + 0.8, 13, -1), V(d.x, 0, 0), '#ffffff', 0.25);
+        if (s.estilo === 'fuego') {
+          g.effects.emitGlow({ pos: V(d.x, 0.2), count: 110, speed: 10, dir: [0, 1, 0], spread: 0.3, color: '#fff3c0', colorEnd: s.color, life: 0.7, size: 0.5, drag: 0.6 });
+          g.effects.smoke(V(d.x, 2.2), '#2a2a2a', 26); sfx.fire(); sfx.boom();
+        } else {
+          g.effects.lightning(V(d.x, 13, 0), V(d.x, 0, 0), s.color, 0.4);
+          g.effects.lightning(V(d.x + 0.8, 13, -1), V(d.x, 0, 0), '#ffffff', 0.25);
+          sfx.zap();
+        }
         g.effects.burst(V(d.x, 0.3), s.color, 70, 6); g.effects.ring(d.x, s.color, 2);
-        g.effects.addShake(0.3); sfx.zap();
+        g.effects.addShake(0.3);
         if (Math.abs(o.x - d.x) < 0.9) o.receive({ dmg: s.danio ?? 12, height: 'mid', knockdown: true, push: 2, color: s.color }, f, V(o.x, 1.2, 0.3));
       }
       return t >= 48;
