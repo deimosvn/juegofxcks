@@ -61,12 +61,15 @@ en línea los dos tienen que tener la versión nueva del juego.
 | Quién | Cómo se ve |
 |---|---|
 | Ramces | la silla sube, vuelta lenta alrededor de la cabeza con la máquina, primer plano de la navaja con destello, tajo en cámara lenta y la cámara sigue a la cabeza |
-| Diego | se pone el traje de robot y bajan del cielo cuatro robots como el suyo (rojo, azul, amarillo y morado); cada uno lo ataca a su manera: láser de los ojos que lo escanea, balas de plasma, descargas eléctricas y lluvia de misiles. Al final disparan todos juntos con el rayo del pecho de Diego, el otro flota entre los rayos y se deshace en cubos de luz; los robots celebran y se van volando |
+| Diego | se transforma en súper héroe (armadura con capa) y bajan del cielo cuatro robots (rojo, azul, amarillo y morado); cada uno lo ataca a su manera: láser de los ojos que lo escanea, balas de plasma, descargas eléctricas y lluvia de misiles. Al final disparan todos juntos con el rayo del pecho de Diego, el otro flota entre los rayos y se deshace en cubos de luz; los robots celebran y se van volando |
 | Alan | el cohete amarrado, despegue desde el piso entre humo, lo persigue hasta el cielo y fuegos artificiales de colores |
 | Gera | ráfaga con tres ángulos, gancho en cámara lenta y lo sigue volando hasta que brilla como estrella |
 | José | lo sigue en el brinco, desde los ojos del otro ve caer las nalgas gigantes y el aplastón sale con destello rosa |
 | Conde | la cámara se queda y él crece hasta salirse del cuadro; contrapicado con el pie gigante sobre el otro |
 | Emi | primer plano chiflando, el pescado rompe el piso entre agua, se lo traga y se vuelve a clavar |
+| Abel | vuelta alrededor de él tocando una canción de cuna con notas que flotan; el otro se encoge con la cabeza grandota hasta ser un bebé con chupón y pañal, llora a chorros, Abel lo carga… y lo avienta hasta que brilla como estrella |
+| Diego Suárez | con las paletas de señalero le da pista a un avión de hélices que se ve bajar en el cielo; el avión pasa por encima de la cámara, aterriza encima del otro y sigue rodando hasta estrellarse al fondo (quedan las marcas de las llantas) |
+| Jaziel | lazo girando y lo laza del pecho; su caballo llega galopando, amarra la reata a la silla, le da una nalgada al caballo y se lo lleva arrastrando entre polvo hasta perderse… a lo lejos se oye el madrazo y el caballo regresa caminando con nomás las botas en la reata |
 
 ## 💀 Brutalities
 Con “¡ACÁBALO!” marca la entrada de tu fatality y **deja presionado el botón** (P o K) ~medio segundo: te pones rojo y
@@ -84,13 +87,17 @@ cine en [`src/cine-brutal.js`](src/cine-brutal.js).
 | Conde | MUÑECO DE TRAPO | Lo agarra de los tobillos y lo azota contra el piso de un lado y del otro, cada vez más rápido; el último lo clava de cabeza: quedan las piernas saliendo del piso |
 | Emi | PEZ GLOBO | Cuatro pescadazos, le mete un pez globo a la boca, se infla con púas y flota… y revienta en lluvia de pescaditos |
 | Ramces | YA ESTÁS RASURADO | Afila la navaja, lo atraviesa en un parpadeo y queda de espaldas cerrándola mientras los cortes se quedan brillando en el aire… “clic”: el otro se cae en pedazos |
+| Abel | SOLO MORTAL | Un solo cada vez más rápido: el otro cabecea más y más fuerte, la guitarra se prende en llamas… y la cabeza le revienta. Abel rompe la guitarra en el piso como estrella de rock |
+| Diego Suárez | HÉLICE DE CABEZA | Lo llena de remaches como si fuera avión, le remacha un gorrito con hélice y despega dando vueltas… hasta que explota en el aire |
+| Jaziel | ESTAMPIDA MORTAL | Chifla y una manada de caballos le pasa por encima de ida y de vuelta (a Jaziel lo brincan); su caballo llega, se voltea y de una coz lo manda a las estrellas |
 | Brasa · Escarcha · Voltio · Mole | CARBONIZADO · ESTATUA ROTA · CORTOCIRCUITO · APLANADO | Combo de ocho golpes, gancho que lo levanta y revienta en el aire en fuego, hielo, rayos o polvo |
 
 ## ✈️ Ataques nuevos
 - **Especial en el aire** (saltando + Especial): se queda un instante arriba y se lanza en picada hacia el rival; si
   pega rebota hacia atrás y si cae al piso sin pegar algunos hacen una onda. Cada quien con su estilo: PATADA METEORO
   de Diego (botas cohete), REENTRADA de Alan (envuelto en fuego como cápsula espacial), MAZAZO de Gera, PEDO COHETE de
-  José, PLANCHA de Conde, CLAVADO de Emi, NAVAJA EN PICADA de Ramces, y fuego, hielo, rayo y bala de cañón para los demás.
+  José, PLANCHA de Conde, CLAVADO de Emi, NAVAJA EN PICADA de Ramces, STAGE DIVE de Abel (con la guitarra arriba),
+  PICADA EN BARRENA de Diego Suárez, SALTO DE RODEO de Jaziel, y fuego, hielo, rayo y bala de cañón para los demás.
 - **Un especial más para cada uno** (Especial + abajo-adelante, o su combinación): ver las tablas de abajo.
 
 ## 🤖 Dificultad de la CPU
@@ -140,21 +147,21 @@ en el navegador.
 
 ## Peleadores
 
-### Diego (robot) — y con MODO TITÁN se pone un traje de robot
+### Diego (robot) — y con MODO TITÁN se transforma en súper héroe
 | Especial | Entrada | Qué hace |
 |---|---|---|
 | PUÑO COHETE | `← → + P` | El antebrazo sale disparado con propulsor y derriba (14 de daño) |
 | LÁSER OCULAR | `↓ → + P` | Rayos de los ojos, 5 impactos (18 en total). Pasa por encima si el rival se agacha |
 | LLUVIA DE MISILES | `↓ ← + K` | 4 misiles desde la espalda que caen alrededor del rival (20 en total) |
-| MODO TITÁN | `↓ ↓ + P` (o Especial + atrás) | Se pone el traje de robot 7 s: camina y salta mucho más rápido, recibe 35% menos daño, no le hace daño bloquear y el botón de especial saca las armas del robot |
+| MODO TITÁN | `↓ ↓ + P` (o Especial + atrás) | Se transforma 7 s en súper héroe (armadura roja y azul con capa): camina y salta mucho más rápido, recibe 35% menos daño, no le hace daño bloquear y el botón de especial saca sus armas |
 | DRONES KAMIKAZE | `← ← + P` (o Especial + abajo-adelante) | Suelta dos drones de la espalda que se acomodan arriba y luego lo persiguen hasta estrellarse en él: uno a la cabeza y otro al cuerpo (el segundo lo tumba) |
 | PATADA METEORO | saltando + Especial | Se lanza en picada con las botas cohete encendidas; si cae al piso, explota |
-| ☠ DESINTEGRACIÓN | `→ → ↓ + P` | Se pone el traje, llama a cuatro robots y entre todos (láser, plasma, rayos, misiles y su rayo del pecho) deshacen al rival en cubos de luz |
+| ☠ DESINTEGRACIÓN | `→ → ↓ + P` | Se transforma, llama a cuatro robots y entre todos (láser, plasma, rayos, misiles y su rayo del pecho) deshacen al rival en cubos de luz |
 | 💀 DESINSTALACIÓN | la de la fatality, dejando presionado P | BRUTALITY: lo “desinstala” hasta el ERROR 404 |
 
-Con el traje puesto (al final parpadea y se le cae en pedazos):
+Transformado (al final parpadea y la armadura se le cae en pedazos):
 
-| Arma del robot | Entrada | Qué hace |
+| Arma | Entrada | Qué hace |
 |---|---|---|
 | CAÑÓN DE PLASMA | `← → + P` (o Especial solo) | Bola de plasma grande que tumba (16) |
 | PROPULSORES | `→ → + K` (o Especial + adelante) | Sale volando a ras de suelo y embiste (15) |
@@ -233,6 +240,42 @@ Con el traje puesto (al final parpadea y se le cae en pedazos):
 | NAVAJA EN PICADA | saltando + Especial | Cae en picada tajando con la navaja |
 | ☠ CORTE AL RAS | `↓ ← → + P` | Sale su silla de barbero, lo sienta, le pone la capa y le pasa la máquina… afila la navaja y le quedó demasiado al ras: la cabeza sale volando |
 | 💀 YA ESTÁS RASURADO | la de la fatality, dejando presionado P | BRUTALITY: lo atraviesa, “clic”… y se cae en pedazos |
+
+### Abel (guitarra) — la trae colgada en la espalda y al tocar se la pasa al frente
+| Especial | Entrada | Qué hace |
+|---|---|---|
+| ACORDE SÓNICO | `← → + P` (o Especial solo) | Rasguea con todo y sale una onda de sonido con notas que avanza (11) |
+| GUITARRAZO | `→ → + P` (o Especial + adelante) | Se lanza con la guitarra arriba y se la rompe en la cabeza (15). Hay que cubrirse parado |
+| AMPLIFICADOR | `↓ ↓ + K` (o Especial + abajo) | Azota un amplificador en el piso y suelta acordes que empujan una y otra vez (16 en total) |
+| SERENATA | `↓ ← + P` (o Especial + atrás) | Toca algo bonito: si el otro está cerca se queda dormido un rato. No se bloquea |
+| CUERDAZO | `← ← + P` (o Especial + abajo-adelante) | Revienta una cuerda de la guitarra y la usa de látigo: si lo engancha, lo jala hasta él |
+| STAGE DIVE | saltando + Especial | Se avienta como del escenario con la guitarra arriba; al caer suena el acorde y sale la onda |
+| ☠ CANCIÓN DE CUNA | `↓ ← ↓ + P` | Le toca una canción de cuna, el otro se hace bebé (chupón, pañal y llanto)… y lo avienta a las estrellas |
+| 💀 SOLO MORTAL | la de la fatality, dejando presionado P | BRUTALITY: el solo le revienta la cabeza y rompe la guitarra en el piso |
+
+### Diego Suárez (planta aeroespacial) — remachadora, avión de papel, caja negra y paletas de señalero
+| Especial | Entrada | Qué hace |
+|---|---|---|
+| AVIÓN DE PAPEL | `← → + P` (o Especial solo) | Avienta un avión de papel que vuela en ondas y se acomoda a la altura del rival (10) |
+| HÉLICE | `→ → + K` (o Especial + adelante) | Gira con los brazos estirados como hélice y avanza pegando varias veces; el último lo levanta |
+| AVIONETA FUMIGADORA | `↓ ← + P` (o Especial + abajo) | Con las paletas le hace señas a una avioneta que pasa rociando donde está el rival: le pega desde arriba y el último lo deja mareado |
+| REMACHADORA | `↓ → + P` (o Especial + atrás) | Ráfaga de 7 remaches; el último lo empuja |
+| CAJA NEGRA | `← ← + K` (o Especial + abajo-adelante) | Avienta la caja negra (que es naranja): rebota hasta dos veces y tumba al que pega |
+| PICADA EN BARRENA | saltando + Especial | Cae como avión en barrena con humo; si pega en el piso, explota |
+| ☠ ATERRIZAJE FORZOSO | `→ → ↓ + K` | Le da pista a un avión que le aterriza encima y se estrella al fondo |
+| 💀 HÉLICE DE CABEZA | la de la fatality, dejando presionado K | BRUTALITY: lo remacha, le pone un gorrito con hélice y despega… hasta explotar |
+
+### Jaziel (vaquero) — lazo, revólver y su caballo
+| Especial | Entrada | Qué hace |
+|---|---|---|
+| LAZO | `← → + P` (o Especial solo) | Le da vueltas al lazo arriba de la cabeza y lo avienta: si lo laza, lo jala hasta él y lo deja mareado |
+| CABALLAZO | `→ → + K` (o Especial + adelante) | Chifla, su caballo llega galopando, se sube de un brinco y se lleva al rival de corbata (14) |
+| ESTAMPIDA | `↓ ↓ + K` (o Especial + abajo) | Una manada de cinco caballos pasa brincando sobre Jaziel y arrolla al otro (18 en total, el último lo tumba) |
+| REVÓLVER | `↓ → + P` (o Especial + atrás) | Desenfunda y echa dos tiros |
+| PATADA DE MULA | `← ← + K` (o Especial + abajo-adelante) | Se voltea y suelta las dos patas hacia atrás, con espuelas (13) |
+| SALTO DE RODEO | saltando + Especial | Cae de botas levantando polvo; al caer, onda |
+| ☠ ARRASTRADO | `← → → + K` | Lo laza, amarra la reata a su caballo y se lo lleva arrastrando… el caballo regresa con nomás las botas |
+| 💀 ESTAMPIDA MORTAL | la de la fatality, dejando presionado K | BRUTALITY: la manada le pasa por encima de ida y de vuelta y su caballo lo manda a volar de una coz |
 
 Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo), cada uno con un especial más (COLUMNA DE FUEGO,
 PUÑO GLACIAR, CAMPO ELÉCTRICO y SUPLEX), su especial en el aire y su brutality.
@@ -337,15 +380,21 @@ Tipos de especial: `proyectil`, `congelar`, `teletransporte`, `embestida`, `terr
 `uppercut_volador`, `poder`, `rayo`; robot: `puno_cohete`, `laser`, `misiles`, `armadura`; aeroespacial:
 `cohete`, `jetpack`, `orbital`, `turbina`, `camaro` (con `modelo`: el carro); robot con traje: `titan`, `plasma`, `megalaser`, `propulsores`, `descarga`; boxeo: `rafaga`, `resorte`, `contra`; nalgas: `culazo`, `senton`,
 `twerk`, `gas`; fuerza: `gigante`, `agarre`; barbero: `tijeras`, `rapado`, `navaja`, `talco`; nuevos: `drones`, `boom_sonico`,
-`higadazo`, `iman`, `losa`, `anzuelo`, `lanzallamas` (y `rayo` con `estilo: 'fuego'`). Estilos de `aire`: `cohete`, `reentrada`,
-`mazazo`, `pedo`, `plancha`, `clavado`, `navaja`, `fuego`, `hielo`, `rayo`, `bala`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
-`aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`, `pescadote`, `corte`. Brutalities: `desinstalar`,
-`atropello`, `pinata`, `tragado`, `trapo`, `pezglobo`, `rasurado`, `combo_brutal` (con `estilo`: `fuego`, `hielo`, `rayo`,
-`tanque`). Accesorios: `accesorios: ['guantes']` y/o `['jetpack']`.
+`higadazo`, `iman`, `losa`, `anzuelo`, `lanzallamas` (y `rayo` con `estilo: 'fuego'`); guitarra: `acorde`, `guitarrazo`,
+`amplificador`, `serenata`, `cuerdazo`; aviones: `avion_papel`, `helice`, `fumigadora`, `remachadora`, `caja_negra`; vaquero:
+`lazo`, `caballazo`, `estampida`, `revolver`, `coz`. Estilos de `aire`: `cohete`, `reentrada`,
+`mazazo`, `pedo`, `plancha`, `clavado`, `navaja`, `fuego`, `hielo`, `rayo`, `bala`, `stagedive`, `barrena`, `rodeo`. Fatalidades: `explosion`, `incinerar`, `congelar_romper`, `rayo`,
+`aplastar`, `desintegrar`, `despegue`, `nocaut`, `nalgon`, `pisoton`, `pescadote`, `corte`, `cuna`, `aterrizaje`, `arrastre`. Brutalities: `desinstalar`,
+`atropello`, `pinata`, `tragado`, `trapo`, `pezglobo`, `rasurado`, `solo_mortal`, `remachado`, `pisoteado`, `combo_brutal` (con `estilo`: `fuego`, `hielo`, `rayo`,
+`tanque`). Accesorios: `accesorios: ['guantes']`, `['jetpack']`, `['pescadero']`, `['barbero']`, `['guitarra']`, `['aeroespacial']` o `['vaquero']`.
+Los ataques de Abel, Diego Suárez y Jaziel están en [`src/especiales-nuevos.js`](src/especiales-nuevos.js), cómo se ven en
+[`src/vista-nuevos.js`](src/vista-nuevos.js) (caballos, avioneta, amplificador, notas…) y sus fatalities de cine en
+[`src/cine-nuevos.js`](src/cine-nuevos.js).
 
-Traje que se pone con un especial `titan` (como Diego): pasa el modelo por el convertidor con otro id (ej. `diego-robot`)
-y en el roster agrega `traje: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 }` y la lista
-`especialesTitan` con lo que hace el botón de especial mientras lo trae puesto. Los modelos de Meshy con la textura
+Traje o transformación que se pone con un especial `titan` (como Diego): pasa el modelo por el convertidor con otro id
+(ej. `diego-heroe`) y en el roster agrega `traje: { modelo: 'assets/peleadores/diego-heroe/modelo.glb', escala: 1.05 }` y la
+lista `especialesTitan` con lo que hace el botón de especial mientras lo trae puesto. Los cuatro robots de la fatality
+`desintegrar` usan `robots: { modelo, escala }` (si no lo pones, son copias del traje). Los modelos de Meshy con la textura
 partida en muchas islas también se reducen bien: el convertidor lo detecta solo.
 
 Objetos que salen en un especial (como el Camaro de Alan): abre el convertidor con

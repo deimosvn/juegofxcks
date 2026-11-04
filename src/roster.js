@@ -17,6 +17,7 @@
 //    aire       especial en el aire (Especial mientras saltas): { nombre, estilo, color, danio, onda }
 //               estilos: cohete, reentrada, mazazo, pedo, plancha, clavado, navaja, fuego, hielo, rayo, bala
 //    traje      (opcional) modelo que se pone con un especial tipo 'titan': { modelo, escala }
+//    robots     (opcional) modelo de los robots de la fatality 'desintegrar' (si no, copias del traje)
 //    especialesTitan  (opcional) lo que sacan los mismos botones mientras trae el traje puesto
 //    intro      (opcional) pose de presentación en la ronda 1 (una animación de especial: jojo, flexion, carga…)
 //    victoria   (opcional) pose al ganar: 0 puño arriba, 1 brazos en V, 2 bíceps, 3 brazos cruzados (si no, según su estilo)
@@ -41,16 +42,23 @@
 //    nuevos: drones (dos drones que lo persiguen), boom_sonico (lo atraviesa volando), higadazo (se dobla sin aire),
 //      iman (lo jala meneando las nalgas), losa (arranca la banqueta y se la avienta), anzuelo (lo pesca y lo jala),
 //      lanzallamas (spray + encendedor); rayo con estilo 'fuego' es una columna de fuego
+//    guitarra (especiales-nuevos.js): acorde, guitarrazo, amplificador, serenata (lo duerme), cuerdazo (lo jala)
+//    aviones: avion_papel, helice, fumigadora (avioneta que rocía), remachadora, caja_negra
+//    vaquero: lazo (lo jala), caballazo (llega montado), estampida (manada de caballos), revolver, coz
 //    Botón de especial: solo = 1º · adelante = 2º · abajo = 3º · atrás = 4º · abajo-adelante = 5º · abajo-atrás = 6º
+//    estilos del especial en el aire también: stagedive, barrena, rodeo
 //
 //  Tipos de fatality disponibles:
 //    explosion, incinerar, congelar_romper, rayo, aplastar, desintegrar,
-//    despegue, nocaut, nalgon, pisoton, pescadote, corte (silla de barbero)
+//    despegue, nocaut, nalgon, pisoton, pescadote, corte (silla de barbero),
+//    cuna (lo hace bebé), aterrizaje (un avión le aterriza encima), arrastre (el caballo se lo lleva)
 //  Tipos de brutality: desinstalar, atropello, pinata, tragado, trapo, pezglobo, rasurado,
+//    solo_mortal, remachado (gorrito con hélice), pisoteado (estampida),
 //    combo_brutal (con estilo fuego, hielo, rayo o tanque)
 //
 //  accesorios: ['guantes'] (guantes de box, color con colorGuantes), ['jetpack'],
-//    ['pescadero'] (pescado y caguama en la mano), ['barbero'] (tijeras, máquina, navaja y brocha)
+//    ['pescadero'] (pescado y caguama en la mano), ['barbero'] (tijeras, máquina, navaja y brocha),
+//    ['guitarra'] (en la espalda), ['aeroespacial'] (remachadora, avión de papel, caja negra, paletas), ['vaquero'] (lazo y revólver)
 //  rig: { colgando: false }  si el esqueleto automático corta la ropa entre brazo y cuerpo
 //
 //  Modelos: pasa el .fbx/.glb de Meshy o Tripo por herramientas/convertir.html
@@ -99,8 +107,10 @@ export const PELEADORES = [
     modelo: 'assets/peleadores/diego/modelo.glb',
     retrato: 'assets/peleadores/diego/retrato.png',
     escala: 1, rotacionY: 0,
-    // MODO TITÁN: se pone este traje de robot (Robot X de Meshy)
-    traje: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 },
+    // MODO TITÁN: se transforma en este súper héroe (armadura con capa)
+    traje: { modelo: 'assets/peleadores/diego-heroe/modelo.glb', escala: 1.05 },
+    // los cuatro robots que bajan en su fatality
+    robots: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 },
     stats: { velocidad: 1.05, fuerza: 1, vida: 100 },
     especiales: [
       { nombre: 'PUÑO COHETE', tipo: 'puno_cohete', input: '← → + P', color: '#ff8a00', danio: 14 },
@@ -254,6 +264,72 @@ export const PELEADORES = [
     brutality: { nombre: 'YA ESTÁS RASURADO', tipo: 'rasurado', color: '#d62828' },
     frase: '¡Siguiente! ¿Degradado o rapado?',
     intro: 'afilar',
+  },
+  {
+    id: 'abel',
+    nombre: 'ABEL',
+    color: '#8a5cff',
+    modelo: 'assets/peleadores/abel/modelo.glb',
+    retrato: 'assets/peleadores/abel/retrato.png',
+    escala: 1, rotacionY: 0,
+    accesorios: ['guitarra'],       // la guitarra en la espalda (y al frente cuando toca)
+    stats: { velocidad: 1.05, fuerza: 0.95, vida: 100 },
+    especiales: [
+      { nombre: 'ACORDE SÓNICO', tipo: 'acorde', input: '← → + P', color: '#b18cff', danio: 11 },
+      { nombre: 'GUITARRAZO', tipo: 'guitarrazo', input: '→ → + P', color: '#ffd27a', danio: 15 },
+      { nombre: 'AMPLIFICADOR', tipo: 'amplificador', input: '↓ ↓ + K', color: '#ff4fd8', danio: 16 },
+      { nombre: 'SERENATA', tipo: 'serenata', input: '↓ ← + P', color: '#ffd0ec', danio: 5 },
+      { nombre: 'CUERDAZO', tipo: 'cuerdazo', input: '← ← + P', color: '#d9b8ff', danio: 8 },
+    ],
+    aire: { nombre: 'STAGE DIVE', estilo: 'stagedive', color: '#b18cff', danio: 13, onda: 2.2 },
+    fatality: { nombre: 'CANCIÓN DE CUNA', tipo: 'cuna', input: '↓ ← ↓ + P', color: '#ff9ad5' },
+    brutality: { nombre: 'SOLO MORTAL', tipo: 'solo_mortal', color: '#b18cff' },
+    frase: '¡Gracias, gracias! Esa rola te la dediqué.',
+    intro: 'guitarra',
+  },
+  {
+    id: 'suarez',
+    nombre: 'DIEGO SUÁREZ',
+    color: '#ff8a1a',
+    modelo: 'assets/peleadores/suarez/modelo.glb',
+    retrato: 'assets/peleadores/suarez/retrato.png',
+    escala: 1, rotacionY: 0,
+    accesorios: ['aeroespacial'],   // remachadora, avión de papel, caja negra y paletas de señalero en la mano
+    stats: { velocidad: 1, fuerza: 1, vida: 100 },
+    especiales: [
+      { nombre: 'AVIÓN DE PAPEL', tipo: 'avion_papel', input: '← → + P', color: '#bfe9ff', danio: 10 },
+      { nombre: 'HÉLICE', tipo: 'helice', input: '→ → + K', color: '#bfe9ff', danio: 13 },
+      { nombre: 'AVIONETA FUMIGADORA', tipo: 'fumigadora', input: '↓ ← + P', color: '#9be15d', danio: 13 },
+      { nombre: 'REMACHADORA', tipo: 'remachadora', input: '↓ → + P', color: '#ffd27a', danio: 12 },
+      { nombre: 'CAJA NEGRA', tipo: 'caja_negra', input: '← ← + K', color: '#ff7a00', danio: 12 },
+    ],
+    aire: { nombre: 'PICADA EN BARRENA', estilo: 'barrena', color: '#ff7a1a', danio: 12, onda: 2.0 },
+    fatality: { nombre: 'ATERRIZAJE FORZOSO', tipo: 'aterrizaje', input: '→ → ↓ + K', color: '#7fb8ff' },
+    brutality: { nombre: 'HÉLICE DE CABEZA', tipo: 'remachado', color: '#ffb000' },
+    frase: 'Torre de control: rival fuera de servicio.',
+    intro: 'senalero',
+  },
+  {
+    id: 'jaziel',
+    nombre: 'JAZIEL',
+    color: '#c27a2c',
+    modelo: 'assets/peleadores/jaziel/modelo.glb',
+    retrato: 'assets/peleadores/jaziel/retrato.png',
+    escala: 1, rotacionY: 0,
+    accesorios: ['vaquero'],        // el lazo y el revólver en la mano
+    stats: { velocidad: 1, fuerza: 1.05, vida: 105 },
+    especiales: [
+      { nombre: 'LAZO', tipo: 'lazo', input: '← → + P', color: '#c9a46a', danio: 7 },
+      { nombre: 'CABALLAZO', tipo: 'caballazo', input: '→ → + K', color: '#c27a2c', danio: 14 },
+      { nombre: 'ESTAMPIDA', tipo: 'estampida', input: '↓ ↓ + K', color: '#d8c3a0', danio: 18 },
+      { nombre: 'REVÓLVER', tipo: 'revolver', input: '↓ → + P', color: '#ffd27a', danio: 12 },
+      { nombre: 'PATADA DE MULA', tipo: 'coz', input: '← ← + K', color: '#c27a2c', danio: 13 },
+    ],
+    aire: { nombre: 'SALTO DE RODEO', estilo: 'rodeo', color: '#ffb347', danio: 12, onda: 2.2 },
+    fatality: { nombre: 'ARRASTRADO', tipo: 'arrastre', input: '← → → + K', color: '#c27a2c' },
+    brutality: { nombre: 'ESTAMPIDA MORTAL', tipo: 'pisoteado', color: '#c98b4a' },
+    frase: '¡Yiijaa! Este rancho tiene nuevo dueño.',
+    intro: 'lazo',
   },
   {
     id: 'fuego',

@@ -571,7 +571,8 @@ const OLD = { hipsY: 0.93, hipsX: 0, torsoX: 0.1, torsoY: 0.35, torsoZ: 0, headX
 // piernas en ángulos directos (en el aire, sentado, de espaldas…); 'swap': la de adelante es la F
 const LEG_MODE = { jet_sube: 'fk', jet_cae: 'fk', turbina: 'swap', culazo: 'fk', senton: 'fk', senton_suelo: 'fk', twerk: 'fk',
   gas: 'fk', jojo: 'fk', navaja: 'swap', sentado: 'fk', propulsor: 'fk', pisar_arriba: 'fk', pisar: 'fk',
-  picada_carga: 'fk', mazazo: 'fk', plancha: 'fk', clavado: 'fk', bola: 'fk', doblado: 'fk', colgado: 'fk' };
+  picada_carga: 'fk', mazazo: 'fk', plancha: 'fk', clavado: 'fk', bola: 'fk', doblado: 'fk', colgado: 'fk',
+  jinete: 'fk', coz: 'fk', avion: 'fk', bebe: 'fk', cargado: 'fk' };
 
 function legacy(a, h, st) {
   const L = { ...OLD };
@@ -582,7 +583,7 @@ function legacy(a, h, st) {
   const mode = LEG_MODE[a.key];
   if (mode) {
     const [n, f] = mode === 'swap' ? ['F', 'N'] : ['N', 'F'];
-    fkLeg(P.legs.N, L[`hip${n}X`], L[`kn${n}X`]); fkLeg(P.legs.F, L[`hip${f}X`], L[`kn${f}X`]);
+    fkLeg(P.legs.N, L[`hip${n}X`], L[`kn${n}X`], L[`hip${n}Z`] || 0); fkLeg(P.legs.F, L[`hip${f}X`], L[`kn${f}X`], L[`hip${f}Z`] || 0);
   } else {   // de pie: los pies plantados (la cadera no gira, así que van más cuadrados)
     Object.assign(P.legs.F, { z: 0.2 * h, yaw: -0.12 }); Object.assign(P.legs.N, { z: -0.19 * h, yaw: -0.55 });
   }
@@ -698,11 +699,67 @@ function oldPose(a, P, e, t) {
       Object.assign(P, { torsoX: 0, torsoY: 0, headX: 0.2, shNX: -2.8, shNZ: 0.35, elNX: -0.3, shFX: -2.7, shFZ: -0.35, elFX: -0.4, hipNX: 0, knNX: 0.08, hipFX: 0.05, knFX: 0.1, hipsY: 0.95 });
       P.shNX += Math.sin(t * 0.5) * 0.25; P.shFX += Math.sin(t * 0.5 + 1) * 0.25;
       return;
+    // Abel (guitarra)
+    case 'guitarra':       // toca de tres cuartos hacia la cámara (como para el público): una mano en el mástil, la otra rasguea
+      Object.assign(P, { spin: -0.8, torsoX: 0.12, torsoY: 0.1, headX: 0.12 + Math.sin(t * 0.42) * 0.12, shFX: -1.05, shFZ: -0.55, elFX: -0.75, shNX: -0.45, shNZ: 0.3, elNX: -1.55, hipsY: 0.9 });
+      P.elNX += Math.sin(t * 1.7) * 0.22; P.shNX += Math.sin(t * 1.7) * 0.08; P.torsoZ = Math.sin(t * 0.21) * 0.03;
+      return;
+    case 'guitarrazo':     // la guitarra arriba con las dos manos… y abajo con todo
+      Object.assign(P, { torsoY: 0, headX: -0.1, shNZ: 0.2, shFZ: -0.2, hipsY: 0.9 });
+      P.shNX = P.shFX = lerp(-3.0, -0.9, e); P.elNX = P.elFX = lerp(-0.7, -0.15, e); P.torsoX = lerp(-0.3, 0.55, e);
+      return;
+    // Jaziel (vaquero)
+    case 'lazo':           // le da vueltas al lazo arriba de la cabeza
+      Object.assign(P, { torsoX: -0.05, torsoY: 0.2, headX: -0.15, shNX: -0.8, shNZ: 0.2, elNX: -1.6, hipsY: 0.92 });
+      P.shFX = -2.75 + Math.sin(t * 0.55) * 0.25; P.shFZ = -0.35 + Math.cos(t * 0.55) * 0.3; P.elFX = -0.45;
+      return;
+    case 'disparo': {      // de lado, el brazo estirado apuntando y la otra mano en el cinto; el arma brinca con cada tiro
+      Object.assign(P, { torsoX: 0.02, torsoY: -0.65, headX: 0, shFX: -1.55, shFZ: -0.02, elFX: -0.04, shNX: -0.2, shNZ: 0.45, elNX: -1.5, hipsY: 0.9 });
+      const kick = (t >= 10 && t < 15) || (t >= 18 && t < 23) ? 0.28 : 0;
+      P.shFX -= kick; P.elFX -= kick * 0.6;
+      return;
+    }
+    case 'jinete':         // montado: piernas a los lados del caballo, una mano en las riendas y la otra con el sombrero
+      Object.assign(P, { hipsY: 0.62, torsoX: 0.15, torsoY: 0, headX: -0.1, hipNX: -0.55, knNX: 0.95, hipFX: -0.55, knFX: 0.95, hipNZ: 0.5, hipFZ: -0.5, shFX: -1.2, shFZ: -0.15, elFX: -0.9, shNX: -2.7, shNZ: 0.45, elNX: -0.7 });
+      P.elNX += Math.sin(t * 0.5) * 0.4; P.hipsY += Math.abs(Math.sin(t * 0.45)) * 0.05;
+      return;
+    case 'coz':            // patada de mula: de espaldas, se agacha y suelta las dos piernas hacia atrás
+      Object.assign(P, { spin: Math.PI, torsoY: 0, headX: -0.5, shNX: -1.2, shNZ: 0.25, elNX: -0.2, shFX: -1.2, shFZ: -0.25, elFX: -0.2 });
+      P.torsoX = lerp(0.5, 1.25, e); P.hipsY = lerp(0.85, 0.78, e);
+      P.hipNX = lerp(-0.5, 1.1, e); P.knNX = lerp(1.3, 0.15, e); P.hipFX = lerp(-0.4, 1.0, e); P.knFX = lerp(1.2, 0.2, e);
+      return;
+    // Diego Suárez (aeroespacial)
+    case 'avion':          // los brazos abiertos como alas, inclinado hacia adelante (y se ladea como avión)
+      Object.assign(P, { tilt: 0.25, torsoX: 0.3, torsoY: 0, headX: -0.4, shNX: -0.25, shNZ: 1.35, elNX: -0.1, shFX: -0.25, shFZ: -1.35, elFX: -0.1, hipNX: 0.1, knNX: 0.3, hipFX: 0.2, knFX: 0.4, hipsY: 0.95 });
+      P.torsoZ = Math.sin(t * 0.3) * 0.12;
+      return;
+    case 'helice':         // gira como hélice con los brazos estirados
+      Object.assign(P, { torsoX: 0.05, torsoY: 0, headX: -0.1, shNX: -0.1, shNZ: 1.5, elNX: -0.05, shFX: -0.1, shFZ: -1.5, elFX: -0.05, hipsY: 0.94 });
+      P.spin = t * 0.75;
+      return;
+    case 'senalero':       // señalero de pista: las dos paletas arriba, cruzándolas una y otra vez
+      Object.assign(P, { torsoX: -0.05, torsoY: 0.15, headX: -0.1, shNZ: 0.35, shFZ: -0.35, elNX: -0.35, elFX: -0.35, hipsY: 0.93 });
+      P.shNX = -2.65 + Math.sin(t * 0.22) * 0.45; P.shFX = -2.65 - Math.sin(t * 0.22) * 0.45;
+      return;
+    case 'remachar':       // la remachadora con las dos manos, temblando con cada remache
+      Object.assign(P, { torsoX: 0.12, torsoY: -0.35, shFX: -1.45, shFZ: -0.05, elFX: -0.25, shNX: -1.3, shNZ: -0.15, elNX: -0.75, hipsY: 0.9 });
+      P.shFX += Math.sin(t * 3.1) * 0.04; P.torsoZ = Math.sin(t * 2.3) * 0.015;
+      return;
+    // la fatality de Abel: el otro hecho bebé
+    case 'bebe':           // sentado en el piso, llorando con los brazos arriba
+      Object.assign(P, { torsoX: -0.15, torsoY: 0, headX: -0.35, hipNX: -1.5, knNX: 0.35, hipFX: -1.45, knFX: 0.3, elNX: -0.5, elFX: -0.5, shNZ: 0.35, shFZ: -0.35, hipsY: 0.26 });
+      P.shNX = -2.4 + Math.sin(t * 0.45) * 0.35; P.shFX = -2.4 - Math.sin(t * 0.45) * 0.35; P.torsoZ = Math.sin(t * 0.3) * 0.05;
+      return;
+    case 'cargado':        // lo cargan: hecho bolita, pataleando
+      Object.assign(P, { torsoX: 0.25, torsoY: 0, headX: -0.2, shNX: -1.6, shNZ: 0.3, elNX: -1.2, shFX: -1.6, shFZ: -0.3, elFX: -1.2, hipsY: 0.9 });
+      P.hipNX = -1.6 + Math.sin(t * 0.7) * 0.3; P.knNX = 1.6; P.hipFX = -1.6 - Math.sin(t * 0.7) * 0.3; P.knFX = 1.6;
+      return;
   }
 }
 const OLD_KEYS = new Set(['jet_sube', 'jet_cae', 'turbina', 'orbital', 'culazo', 'senton', 'senton_suelo', 'twerk', 'gas', 'jojo',
   'rapar', 'navaja', 'afilar', 'capa', 'sentado', 'canon', 'propulsor', 'descarga', 'flexion', 'agarrar', 'levantar', 'pisar_arriba', 'pisar', 'silbido', 'chela',
-  'picada_carga', 'mazazo', 'plancha', 'clavado', 'bola', 'higadazo', 'doblado', 'colgado']);
+  'picada_carga', 'mazazo', 'plancha', 'clavado', 'bola', 'higadazo', 'doblado', 'colgado',
+  'guitarra', 'guitarrazo', 'lazo', 'disparo', 'jinete', 'coz', 'avion', 'helice', 'senalero', 'remachar', 'bebe', 'cargado']);
 
 // Cómo se mueve cada quien (sale de sus stats y accesorios)
 export function styleOf(def) {

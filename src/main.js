@@ -3,6 +3,7 @@ import { JUEGO, PELEADORES } from './roster.js';
 import { FighterModel, loadAsset } from './model.js';
 import { styleOf } from './anim.js';
 import { FatalDirector, ROBOTS } from './fatal.js';
+import './cine-nuevos.js';
 import { Fighter, ARENA_HALF } from './fighter.js';
 import { PlayerInput, consumeKey, clearKeyEdges, decodeMask } from './input.js';
 import { Effects } from './effects.js';
@@ -11,8 +12,10 @@ import { CPU, DIFICULTADES, NIVELES } from './ai.js';
 import { FATALITIES, impactProjectile, SOLID_PROJECTILES } from './specials.js';
 import { updateProjectileExtra as updateProjectile, BUTT_SPECIALS } from './specials-amigos.js';
 import './especiales-extra.js';
+import './especiales-nuevos.js';
 import { BRUTALITIES, MANTENER } from './brutalidades.js';
 import { VistaEspeciales } from './vista-especiales.js';
+import { VistaNuevos, propNuevo } from './vista-nuevos.js';
 import { sfx, announce, unlockAudio, setVoice, setVolumes, audioState, setAmbience } from './audio.js';
 import { music } from './music.js';
 import { Post } from './post.js';
@@ -34,7 +37,7 @@ const smooth = (x) => { const k = Math.min(1, Math.max(0, x)); return k * k * (3
 const STAGE_MUSIC = { six: 'six', cabana: 'cabana', casachuy: 'casachuy', templo: 'templo' };
 // Pose de presentación en la ronda 1 (solo se ve: la pelea no cambia). Con `intro` en roster.js cada quien
 // tiene la suya; si la pose usa una herramienta, la saca.
-const INTRO_PROP = { chela: 'caguama', afilar: 'navaja', rapar: 'maquina' };
+const INTRO_PROP = { chela: 'caguama', afilar: 'navaja', rapar: 'maquina', guitarra: 'guitarra', senalero: 'paletas', lazo: 'lazo' };
 // Golpes fuertes que dejan estela: hueso del brazo o de la pierna que pega (N = mano/pierna de atrás, F = la de adelante)
 const TRAILS = { puno_fuerte: 'elN', gancho_arriba: 'elN', patada: 'knN', patada_giratoria: 'knN', patada_aerea: 'knN', barrida: 'knN' };
 // Firma aproximada de un efecto (tipo + posición redondeada) para no repetirlo en el rollback
@@ -95,6 +98,7 @@ class Game {
     this.buildLobby();
     this.buildViews();
     this.vista = new VistaEspeciales(this);   // cómo se ven los ataques nuevos (vista-especiales.js)
+    this.vista2 = new VistaNuevos(this);      // y los de Abel, Diego Suárez y Jaziel (vista-nuevos.js)
     this.cine = new FatalDirector(this);   // fatalities de cine (fatal.js)
     addEventListener('resize', () => this.resize()); this.resize();
     // pantalla de título: con la primera tecla o toque ya se puede sonar (los navegadores lo exigen)
@@ -114,6 +118,7 @@ class Game {
 
   resize() {
     const w = innerWidth, h = innerHeight;
+    if (!w || !h) return;   // pestaña oculta o minimizada: 0×0 dejaría la cámara en NaN para siempre
     this.renderer.setSize(w, h, false);
     this.post.setSize(w, h);
     this.camera.aspect = w / h;
@@ -625,7 +630,7 @@ class Game {
       $(`pick${p + 1}`).textContent = show ? def.nombre : '?';
       const list = (l) => l.map((e) => `<b>${esc(e.nombre)}</b><br><span class="inp">${esc(e.input)}</span>`).join('<br>');
       const extra = [def.aire && { nombre: def.aire.nombre, input: 'en el aire + ESPECIAL' }, def.brutality && { nombre: `☠ ${def.brutality.nombre}`, input: 'BRUTALITY: la fatality dejando presionado' }].filter(Boolean);
-      $(`pspec${p + 1}`).innerHTML = show ? list([...def.especiales, ...extra]) + (def.especialesTitan ? `<p class="suit">Con el traje de robot:</p>${list(def.especialesTitan)}` : '')
+      $(`pspec${p + 1}`).innerHTML = show ? list([...def.especiales, ...extra]) + (def.especialesTitan ? `<p class="suit">Transformado (MODO TITÁN):</p>${list(def.especialesTitan)}` : '')
         + (s.locked[p] ? '<p class="ready">¡LISTO!</p>' : '') : '';
     }
   }
@@ -667,16 +672,20 @@ class Game {
     if (!quiet) $('loading').classList.remove('hidden');
     this.disposeModels();
     this.models = [];
-    // con `traje` también se carga el robot que se pone en el MODO TITÁN (model.suit)
+    // con `traje` también se carga en lo que se transforma en el MODO TITÁN (model.suit)
     const make = async (def, alt) => {
-      const [m, suit] = await Promise.all([FighterModel.create(def, alt),
-        def.traje ? FighterModel.create({ ...def, modelo: def.traje.modelo, escala: def.traje.escala ?? 1, accesorios: [] }, alt) : null]);
+      const bots = def.fatality?.tipo === 'desintegrar' && def.robots;
+      const [m, suit, bot] = await Promise.all([FighterModel.create(def, alt),
+        def.traje ? FighterModel.create({ ...def, modelo: def.traje.modelo, escala: def.traje.escala ?? 1, accesorios: [] }, alt) : null,
+        bots ? FighterModel.create({ ...def, modelo: bots.modelo, escala: bots.escala ?? 1, accesorios: [] }, alt) : null]);
       if (suit) {
         for (const mt of suit.materials) if (mt.isMeshStandardMaterial) { mt.metalness = 0.3; mt.roughness = 0.45; }   // un poco de brillo metálico
         m.suit = suit;
-        // su fatality: cuatro robots como su traje, cada uno de un color (fatal.js los anima)
-        if (def.fatality?.tipo === 'desintegrar') m.robots = ROBOTS.map((r) => suit.cloneRigged(r.color)).filter(Boolean);
       }
+      // su fatality: cuatro robots (su modelo de robots, o copias del traje), cada uno de un color (fatal.js los anima)
+      const base = bot || suit;
+      if (base && def.fatality?.tipo === 'desintegrar') m.robots = ROBOTS.map((r) => base.cloneRigged(r.color)).filter(Boolean);
+      if (bot) bot.dispose();
       return m;
     };
     // y los objetos de sus especiales (el Camaro de Alan), para que salgan sin esperar
@@ -1489,7 +1498,7 @@ class Game {
     for (const c of this.chains) c.line.visible = false;
     for (const L of this.lasers) for (const m of [...L.beams, ...L.cores]) m.visible = false;
     for (const G of this.gadgets) for (const o of [G.sat, G.aim, G.ray, G.turb, G.spring, G.sglove, G.rocket, ...G.gogo]) o.visible = false;
-    this.vista?.clear();
+    this.vista?.clear(); this.vista2?.clear();
     this.projLight.intensity = 0;
   }
 
@@ -1507,6 +1516,7 @@ class Game {
     this.syncLasers(dt);
     this.syncGadgets(dt);
     this.vista.update(this.paused || this.screen !== 'fight' ? 0 : dt);
+    this.vista2.update(this.paused || this.screen !== 'fight' ? 0 : dt);
     this.updateAnnouncer();
     this.syncBarber(dt);
     this.cine.update(dt);
@@ -1649,11 +1659,11 @@ class Game {
     }
   }
 
-  // el modelo que se ve de cada peleador (Diego en MODO TITÁN: el traje de robot)
+  // el modelo que se ve de cada peleador (Diego en MODO TITÁN: el súper héroe)
   viewModel(i) { const m = this.models[i]; return m?.suitOn && m.suit ? m.suit : m; }
 
   syncFighter(f, base, animDt) {
-    // MODO TITÁN (y la fatality de Diego): se ve el traje de robot en lugar del modelo; al ponérselo "se arma" en un instante
+    // MODO TITÁN (y la fatality de Diego): se ve el súper héroe en lugar del modelo; al transformarse "se arma" en un instante
     const robot = !!base.suit && (f.titan || this.cine.suitOn(f));
     if (robot !== !!base.suitOn) {
       base.suitOn = robot; base.suitT = 0;
@@ -1696,6 +1706,7 @@ class Game {
     m.prop = tipo === 'pescado' && f.t < 12 ? 'pez' : (tipo === 'kawama' && f.t < 14) || tipo === 'chela' ? 'caguama'
       : tipo === 'tijeras' && f.t < 12 ? 'tijeras' : tipo === 'rapado' ? 'maquina' : tipo === 'navaja' ? 'navaja' : tipo === 'talco' ? 'brocha'
         : corte >= 40 && corte < 104 ? 'maquina' : corte >= 104 && corte < 176 ? 'navaja' : null;
+    if (!m.prop) m.prop = propNuevo(f, tipo);   // la guitarra de Abel, la remachadora de Diego Suárez, el revólver de Jaziel…
     if (intro) m.prop = INTRO_PROP[intro] || null;
     const cineProp = this.cine.prop(f);   // en una brutality: el pescado de Emi…
     if (cineProp !== undefined) m.prop = cineProp;
@@ -1749,6 +1760,7 @@ class Game {
 
   makeProjectileView(p) {
     if (this.vista.has(p.kind)) return this.vista.makeProjectile(p);   // drones de Diego y la losa de Conde
+    if (this.vista2.has(p.kind)) return this.vista2.makeProjectile(p); // acordes, aviones de papel, remaches, tiros, caja negra
     const g = new THREE.Group();
     const add = (geo, mat, setup) => { const mesh = new THREE.Mesh(geo, mat); setup?.(mesh); g.add(mesh); return mesh; };
     const glow = (c, o = 0.7) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -1831,7 +1843,7 @@ class Game {
       if (p.kind === 'misil') v.obj.rotation.z = Math.atan2(p.vy, p.vx);
       else v.obj.rotation.y = dir > 0 ? 0 : Math.PI;
       if (p.kind === 'camaro') { this.syncCamaro(p, v, dt, n); continue; }
-      if (v.custom) { this.vista.syncProjectile(p, v, dt, n); continue; }
+      if (v.custom) { (v.nuevo ? this.vista2 : this.vista).syncProjectile(p, v, dt, n); continue; }
       if (v.spin) { v.spin.rotation.x += dt * 12; v.spin.rotation.y += dt * 9; v.spin.scale.setScalar(1 + Math.sin(v.t * 36) * 0.12); }
       // pescado/caguama: da vueltas; el de la lluvia cae de cabeza coleteando
       if (v.tumble) v.tumble.rotation.z = p.fall ? -Math.PI / 2 + Math.sin(v.t * 9) * 0.35 : -v.t * (p.kind === 'kawama' ? 11 : 15);
@@ -2080,4 +2092,4 @@ window.game = new Game();
 initTouch(window.game);
 registerServiceWorker();
 // precargar en segundo plano los modelos de los peleadores
-for (const d of PELEADORES) for (const url of [d.modelo, d.traje?.modelo, ...(d.especiales || []).map((s) => s.modelo)]) if (url) loadAsset(url).catch(() => {});
+for (const d of PELEADORES) for (const url of [d.modelo, d.traje?.modelo, d.robots?.modelo, ...(d.especiales || []).map((s) => s.modelo)]) if (url) loadAsset(url).catch(() => {});

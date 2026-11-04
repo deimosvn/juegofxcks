@@ -290,10 +290,10 @@ export class FatalDirector {
     const g = this.g, r = g.renderer;
     const R = this.rb ||= this.buildRobotProps();   // los rayos y misiles de la fatality de Diego, también ya preparados
     // y lo de las brutalities de los que van a pelear (el Camaro, la tumba, la barra de Diego…)
-    for (const f of g.fighters || []) if (f.brutality) BRUTALS[f.brutality.tipo]?.warm?.(this);
+    for (const f of g.fighters || []) { if (f.brutality) BRUTALS[f.brutality.tipo]?.warm?.(this); if (f.fatality) FATALS[f.fatality.tipo]?.warm?.(this); }
     this.hideExtra();   // (obj() los deja prendidos: aquí solo se preparan)
     // lo que solo sale en las fatalities, prendido un momento: la luz, el traje de Diego, sus robots y sus rayos
-    const extra = [this.spot, this.warmStar, ...R.all, ...R.rings, R.cubes, ...Object.values(this.extra),
+    const extra = [this.spot, this.warmStar, ...R.all, ...R.rings, R.cubes, ...Object.values(this.extra), ...(g.vista2?.warmList() || []),
       ...(g.models || []).flatMap((m) => [m.suit?.root, ...(m.robots || []).map((b) => b.root)])].filter(Boolean);
     const was = extra.map((o) => o.visible);
     for (const o of extra) o.visible = true;
@@ -363,7 +363,7 @@ export class FatalDirector {
     return cur ? cur[1] : undefined;
   }
 
-  // Diego trae puesto el traje de robot en su fatality (desde que se lo pone hasta los resultados)
+  // Diego trae puesto su traje (el súper héroe) en su fatality (desde que se lo pone hasta los resultados)
   suitOn(f) {
     const g = this.g;
     return g.fatal?.tipo === 'desintegrar' && f === g.winner &&

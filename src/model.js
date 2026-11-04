@@ -3,7 +3,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ANIMACIONES } from './roster.js';
-import { makeFish, makeKawama, makeScissors, makeClippers, makeRazor, makeBrush } from './props.js';
+import { makeFish, makeKawama, makeScissors, makeClippers, makeRazor, makeBrush, makeGuitar, makeLassoCoil, makeRevolver, makeRivetGun, makePaperPlane, makeWand, makeBlackBox } from './props.js';
+// lo que puede traer en la mano (model.prop): solo se ve el que está usando
+const HAND_PROPS = ['pez', 'caguama', 'tijeras', 'maquina', 'navaja', 'brocha', 'guitarra_mano', 'lazo', 'pistola', 'remachadora', 'avion', 'paletas', 'caja'];
 import { animate } from './anim.js';
 
 export const TARGET_HEIGHT = 1.85;
@@ -746,7 +748,7 @@ export class FighterModel {
     this.detachArm = false;
     this.buttScale = 1;      // nalgas infladas (José)
     this.jetOn = false;      // fuego del jetpack (Alan)
-    this.prop = null;        // lo que trae en la mano: 'pez' | 'caguama' (Emi) · 'tijeras' | 'maquina' | 'navaja' | 'brocha' (Ramces)
+    this.prop = null;        // lo que trae en la mano (HAND_PROPS) o 'guitarra' (Abel tocando); con cualquier cosa en la mano se esconde la guitarra de la espalda
     this.headless = false;   // fatality de Ramces: ya no tiene cabeza
     this.acc = {};           // accesorios: guantes, jetpack, pescado, caguama
     // poses procedurales: esqueleto resuelto, transición entre animaciones, pies plantados e inercia
@@ -796,6 +798,28 @@ export class FighterModel {
         o.rotation.z = -Math.PI / 2; o.position.copy(hand).add(new THREE.Vector3(0, -0.06, 0));
         o.visible = false; P.elF.add(o); this.acc[k] = o;
       }
+    }
+    // Abel: la guitarra colgada en la espalda; al tocar, al frente (y en la mano cuando la usa de mazo)
+    if (list.includes('guitarra')) {
+      const back = R ? R.back : new THREE.Vector3(0, 0.32, -0.16);
+      const onBack = makeGuitar({ cuerpo: true }); onBack.position.set(0.02, back.y * 0.45, back.z - 0.05); onBack.rotation.set(0, Math.PI, 1.05);
+      const chest = makeGuitar({ cuerpo: true }); chest.position.set(-0.1, back.y * 0.05, -back.z + 0.06); chest.rotation.set(0, 0, 0.42);
+      const hand = makeGuitar(); hand.rotation.z = Math.PI / 2; hand.position.copy(R ? R.handF : new THREE.Vector3(0, -0.29, 0)).add(new THREE.Vector3(0, -0.04, 0));
+      P.torso.add(onBack, chest); P.elF.add(hand);
+      chest.visible = hand.visible = false;
+      this.acc.guitarraEspalda = onBack; this.acc.guitarra = chest; this.acc.guitarra_mano = hand;
+    }
+    // Jaziel: el lazo y el revólver · Diego Suárez: la remachadora, el avión de papel y las paletas de señalero
+    const inHand = (key, o, side = 'F') => {
+      o.rotation.z = -Math.PI / 2; o.position.copy(R ? R['hand' + side] : new THREE.Vector3(0, -0.29, 0)).add(new THREE.Vector3(0, -0.05, 0));
+      o.visible = false; P['el' + side].add(o); this.acc[key] = o;
+    };
+    if (list.includes('vaquero')) {
+      const coil = makeLassoCoil(); coil.position.copy(R ? R.handF : new THREE.Vector3(0, -0.29, 0)); coil.visible = false; P.elF.add(coil); this.acc.lazo = coil;
+      inHand('pistola', makeRevolver());
+    }
+    if (list.includes('aeroespacial')) {
+      inHand('remachadora', makeRivetGun()); inHand('avion', makePaperPlane()); inHand('paletas', makeWand()); inHand('paletasN', makeWand(), 'N'); inHand('caja', makeBlackBox());
     }
     if (list.includes('jetpack')) {
       const metal = new THREE.MeshStandardMaterial({ color: '#c9d1d9', metalness: 0.85, roughness: 0.3 });
@@ -1085,7 +1109,9 @@ export class FighterModel {
     P.elF.scale.setScalar(this.detachArm ? 0.001 : 1);   // ¡el antebrazo salió volando!
     if (P.butt) P.butt.scale.setScalar(this.buttScale);
     for (const fl of this.acc.flames || []) { fl.visible = this.jetOn; if (this.jetOn) fl.scale.y = 0.8 + Math.random() * 0.5; }
-    for (const k of ['pez', 'caguama', 'tijeras', 'maquina', 'navaja', 'brocha']) if (this.acc[k]) this.acc[k].visible = this.prop === k;
+    for (const k of HAND_PROPS) if (this.acc[k]) this.acc[k].visible = this.prop === k;
+    if (this.acc.paletasN) this.acc.paletasN.visible = this.prop === 'paletas';
+    if (this.acc.guitarraEspalda) { this.acc.guitarra.visible = this.prop === 'guitarra'; this.acc.guitarraEspalda.visible = !this.prop; }
     P.head.scale.setScalar(this.headless ? 0.001 : 1);
     this.pivot.scale.y = this.squash;
   }

@@ -19,13 +19,14 @@ export const DIFICULTADES = {
 export const NIVELES = Object.keys(DIFICULTADES);
 
 // Especiales según para qué sirven
-const PROJ = ['proyectil', 'congelar', 'puno_cohete', 'laser', 'pescado', 'kawama', 'cohete', 'plasma', 'tijeras', 'drones', 'losa'];
+const PROJ = ['proyectil', 'congelar', 'puno_cohete', 'laser', 'pescado', 'kawama', 'cohete', 'plasma', 'tijeras', 'drones', 'losa',
+  'acorde', 'avion_papel', 'caja_negra', 'revolver'];
 const DASH = ['rayo', 'teletransporte', 'gancho', 'embestida', 'misiles', 'lluvia_pescados', 'orbital', 'propulsores', 'megalaser', 'camaro',
-  'boom_sonico', 'iman', 'anzuelo', 'drones'];
+  'boom_sonico', 'iman', 'anzuelo', 'drones', 'lazo', 'cuerdazo', 'caballazo', 'estampida', 'fumigadora'];
 const CLOSE = ['embestida', 'terremoto', 'gancho', 'teletransporte', 'rayo', 'misiles', 'laser', 'chela', 'turbina', 'resorte', 'propulsores', 'megalaser', 'descarga', 'camaro', 'rapado', 'talco',
-  'lanzallamas', 'higadazo', 'boom_sonico', 'iman'];
-const POWER = ['uppercut_volador', 'gancho', 'poder', 'terremoto', 'armadura', 'titan', 'descarga', 'navaja', 'talco', 'higadazo'];
-const GRAB = ['agarre', 'gigante', 'rafaga', 'contra', 'lanzallamas'];
+  'lanzallamas', 'higadazo', 'boom_sonico', 'iman', 'guitarrazo', 'amplificador', 'serenata', 'remachadora', 'helice', 'coz', 'caballazo'];
+const POWER = ['uppercut_volador', 'gancho', 'poder', 'terremoto', 'armadura', 'titan', 'descarga', 'navaja', 'talco', 'higadazo', 'guitarrazo', 'coz', 'serenata'];
+const GRAB = ['agarre', 'gigante', 'rafaga', 'contra', 'lanzallamas', 'helice', 'remachadora'];
 const HOLD = 32;   // cuadros que aguanta el botón para hacer la BRUTALITY (brutalidades.js pide 26)
 
 export class CPU {

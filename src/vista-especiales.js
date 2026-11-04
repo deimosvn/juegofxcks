@@ -86,7 +86,7 @@ function heartTexture() {
 }
 
 // ---------------------------------------------------------------- estela de cada picada (cada cuadro de la caída)
-const TRAIL = {
+export const TRAIL = {
   cohete(e, p, f, n) { e.glow.emit({ pos: V(p.x - f.facing * 0.15, p.y - 0.5, 0.1), count: 4 * n, speed: 4, dir: [-f.facing * 0.4, 1, 0], spread: 0.3, color: '#ffffff', colorEnd: '#ff6a00', life: 0.3, size: 0.32 }); e.solid.emit({ pos: V(p.x, p.y - 0.4, 0), count: n, speed: 1, color: '#9a9a9a', colorEnd: '#333', life: 0.8, size: 0.3, grow: 2, drag: 2 }); },
   reentrada(e, p, f, n) { e.glow.emit({ pos: V(p.x + f.facing * 0.2, p.y, 0.15), count: 6 * n, speed: 3, dir: [-f.facing * 0.5, 1, 0], spread: 0.6, jitter: 0.35, color: '#fff3c0', colorEnd: '#ff5a00', life: 0.35, size: 0.42 }); e.glow.emit({ pos: p, count: n, speed: 6, spread: 1, color: '#ffffff', colorEnd: '#ffb347', life: 0.2, size: 0.08 }); },
   mazazo(e, p, f, n) { e.glow.emit({ pos: V(p.x + f.facing * 0.35, p.y + 0.2, 0.2), count: 2 * n, speed: 1, jitter: 0.15, color: '#ffffff', colorEnd: '#ffd23a', life: 0.25, size: 0.3 }); e.glow.emit({ pos: p, count: n, speed: 5, dir: [-f.facing * 0.6, 1, 0], spread: 0.2, color: '#ffffff', colorEnd: '#ffffff', life: 0.15, size: 0.06 }); },

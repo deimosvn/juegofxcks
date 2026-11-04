@@ -246,6 +246,24 @@ export const sfx = {
     for (let i = 0; i < 3; i++) setTimeout(() => { tone(62, 0.5, 'sine', 0.9, 30); noise(0.25, 900, 0.6, 0.7, 'lowpass', 100); }, i * 150);
     setTimeout(() => { chord([55, 82.4, 110], 2.8, 0.32, 1800, 0.02, 'square'); noise(1.5, 300, 0.6, 0.4, 'lowpass', 70); }, 450);
   },
+  // ---- Abel (guitarra)
+  strum: () => { [82.4, 123.5, 164.8, 207.7, 246.9, 329.6].forEach((f, i) => setTimeout(() => tone(f * vary() ** 0.1, 0.9, 'triangle', 0.07), i * 14)); noise(0.06, 3000, 1, 0.15, 'bandpass'); },
+  powerChord: () => { chord([82.4, 123.5, 164.8], 1.6, 0.34, 2800, 0.008, 'square'); noise(0.9, 1600, 0.5, 0.18, 'lowpass', 300); },
+  note: (i = 0) => { const f = [330, 392, 440, 494, 587, 659, 784, 880][i % 8]; tone(f, 0.32, 'sawtooth', 0.05, f * 0.99); tone(f * 2, 0.2, 'triangle', 0.03); },
+  feedback: () => tone(1760, 1.1, 'sine', 0.06, 2093, 0.5),
+  lullaby: () => [1319, 1319, 1568, 1319, 1319, 1568, 1319, 1568, 2093, 1976, 1760, 1760, 1568].forEach((f, i) => setTimeout(() => { tone(f, 0.9, 'sine', 0.09); tone(f * 2, 0.4, 'sine', 0.02); }, i * 240 + (i > 5 ? 120 : 0))),
+  cry: () => { for (let i = 0; i < 2; i++) setTimeout(() => { tone(560, 0.75, 'sawtooth', 0.07, 470); tone(1120, 0.7, 'triangle', 0.03, 900); noise(0.7, 1400, 2, 0.08, 'bandpass'); }, i * 820); },
+  splinter: () => { noise(0.25, 2600, 1.2, 0.8, 'bandpass', 900); for (let i = 0; i < 5; i++) setTimeout(() => noise(0.04, 1500 + Math.random() * 2500, 4, 0.35, 'bandpass'), 40 + i * 45); },
+  // ---- Jaziel (vaquero)
+  neigh: () => { for (let i = 0; i < 6; i++) setTimeout(() => tone(980 - i * 90, 0.12, 'sawtooth', 0.06, 860 - i * 90), i * 70); noise(0.5, 1200, 1.5, 0.1, 'bandpass', 600); setTimeout(() => noise(0.3, 400, 1, 0.25, 'lowpass'), 450); },
+  gallop: (beats = 8) => { for (let i = 0; i < beats; i++) for (let k = 0; k < 3; k++) setTimeout(() => { tone(85 + k * 10, 0.07, 'sine', 0.35, 55); noise(0.05, 700, 1, 0.25, 'lowpass'); }, i * 330 + k * 70); },
+  bang: () => { noise(0.28, 2600, 0.6, 1.1, 'lowpass', 280); tone(160, 0.1, 'square', 0.35, 50); setTimeout(() => noise(0.5, 900, 0.5, 0.15, 'lowpass', 200), 80); },
+  whip: () => { noise(0.05, 6500, 1, 0.9, 'highpass'); noise(0.12, 2500, 2, 0.4, 'bandpass', 6000); },
+  // ---- Diego Suárez (aeroespacial)
+  rivet: () => { noise(0.035, 3600 * vary(), 4, 0.5, 'bandpass'); tone(950, 0.03, 'square', 0.08); },
+  paper: () => noise(0.35, 2200, 1, 0.2, 'bandpass', 5000, 0.05),
+  jet: (dur = 2.2) => { noise(dur, 260, 0.6, 0.65, 'lowpass', 2600, dur * 0.85); tone(140, dur, 'sawtooth', 0.05, 520, dur * 0.8); noise(dur, 5000, 0.8, 0.12, 'highpass', 7000, dur * 0.9); },
+  propeller: (dur = 1.4) => { tone(62, dur, 'sawtooth', 0.14, 96); tone(124, dur, 'square', 0.04, 190); for (let i = 0; i < dur * 22; i++) setTimeout(() => noise(0.025, 600, 1, 0.12, 'lowpass'), i * 45); },
 };
 
 // Ambiente de cada escenario, muy bajito: un fondo continuo y detalles al azar (pájaros, grillos…)

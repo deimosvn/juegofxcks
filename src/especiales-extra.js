@@ -19,7 +19,7 @@ const LOSA_G = 18;    // gravedad de la losa que avienta Conde
 BUTT_SPECIALS.add('iman');
 
 // Cómo se ve cada picada: pose de la caída, sonido al lanzarse y lo que pasa si cae al piso sin pegar
-const PICADA = {
+export const PICADA = {
   cohete:    { pose: 'patada_aerea', go: 'rocket', land(g, x, c) { g.effects.explosion(V(x, 0.3, 0.2), c, 0.8); sfx.smallBoom(); } },
   reentrada: { pose: 'jet_cae', go: 'fire', land(g, x, c) { g.effects.ring(x, c, 2.8); g.effects.burst(V(x, 0.3), '#fff3c0', 70, 7); g.effects.smoke(V(x, 0.6), '#3a3a3a', 20); sfx.boom(); } },
   mazazo:    { pose: 'mazazo', go: 'whoosh', land(g, x, c) { g.effects.dust(V(x, 0.1), 34); g.effects.ring(x, c, 2.2); sfx.thump(); sfx.boom(); } },
