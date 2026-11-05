@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { JUEGO, PELEADORES } from './roster.js';
-import { FighterModel, loadAsset } from './model.js';
+import { FighterModel, loadAsset, texturas } from './model.js';
 import { styleOf } from './anim.js';
 import { FatalDirector, ROBOTS } from './fatal.js';
 import './cine-nuevos.js';
@@ -60,6 +60,7 @@ class Game {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    texturas.anisotropia = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());   // ropa y caras nítidas de lado
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
     this.camera.position.set(0, 2, 9);
@@ -676,7 +677,7 @@ class Game {
     const make = async (def, alt) => {
       const bots = def.fatality?.tipo === 'desintegrar' && def.robots;
       const [m, suit, bot] = await Promise.all([FighterModel.create(def, alt),
-        def.traje ? FighterModel.create({ ...def, modelo: def.traje.modelo, escala: def.traje.escala ?? 1, accesorios: [] }, alt) : null,
+        def.traje ? FighterModel.create({ ...def, modelo: def.traje.modelo, escala: def.traje.escala ?? 1, rig: def.traje.rig, accesorios: [] }, alt) : null,
         bots ? FighterModel.create({ ...def, modelo: bots.modelo, escala: bots.escala ?? 1, accesorios: [] }, alt) : null]);
       if (suit) {
         for (const mt of suit.materials) if (mt.isMeshStandardMaterial) { mt.metalness = 0.3; mt.roughness = 0.45; }   // un poco de brillo metálico

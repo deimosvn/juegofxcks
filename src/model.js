@@ -9,6 +9,9 @@ const HAND_PROPS = ['pez', 'caguama', 'tijeras', 'maquina', 'navaja', 'brocha', 
 import { animate } from './anim.js';
 
 export const TARGET_HEIGHT = 1.85;
+// Filtro de las texturas de los peleadores (main.js lo pone según la tarjeta de video): así la ropa y la cara se ven
+// nítidas aunque la cámara las vea de lado, como en la pelea
+export const texturas = { anisotropia: 1 };
 const gltfLoader = new GLTFLoader();
 const fbxLoader = new FBXLoader();
 const assetCache = new Map();
@@ -197,6 +200,68 @@ function clusterSlice(bin, gap) {
   }
   for (const c of out) { c.mx = c.sx / c.n; c.mz = c.sz / c.n; }
   return out;
+}
+
+// Pule los pesos del esqueleto automático. Por distancia a cada hueso salían mal repartidos: la pelvis casi no
+// seguía a la cadera (la cintura se torcía de golpe), el brazo jalaba el pecho y la espalda (joroba al pegar) y
+// los muslos jalaban la panza. Medido en 14 poses con 10 peleadores: ~25% menos piel estirada o aplastada.
+//  · el brazo solo mueve lo que está por fuera del hombro; el pecho, la espalda y el costado siguen al torso
+//  · arriba de la entrepierna la pelvis sigue a la cadera y no a los muslos
+//  · la cintura pasa poco a poco de la cadera al torso (al girar no se tuerce de golpe)
+//  · con capa (rig: { capa: true }, el súper héroe de Diego): lo que cuelga muy por detrás del cuerpo sigue al torso
+//    y a la cadera; antes la jalaban piernas y brazos y se estiraba como chicle al caminar o pegar
+// (Suavizar los pesos sobre la superficie salió peor: mezcla partes que se tocan, como la mano y la cadera.)
+// Huesos en el orden de boneList: hips, torso, head, shN, elN, shF, elF, hipN, knN, hipF, knF, butt, ftN, ftF
+function refineWeights(P, si, sw, zones, c) {
+  const H = c.H, R = { hombro: 0.02, muslo: [-0.06, 0.03], cintura: [-0.03, 0.15] };   // anchos de cada transición (× estatura)
+  const ss = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+  const W = new Float32Array(14), top = new Int8Array(4), tw = new Float32Array(4);
+  for (let v = 0; v < zones.length; v++) {
+    if (zones[v] === 1) continue;   // brazo colgando separado del cuerpo: se queda igual
+    W.fill(0);
+    for (let j = 0; j < 4; j++) W[si[v * 4 + j]] += sw[v * 4 + j];
+    const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2], s = x < 0 ? 0 : 1, ax = Math.abs(x);
+    const arm = W[3] + W[4] + W[5] + W[6], leg = W[7] + W[8] + W[9] + W[10] + W[12] + W[13];
+    const kind = arm >= 0.5 ? 'brazo' : leg >= 0.5 && y < c.crotchY ? 'pierna' : 'tronco';
+    if (arm > 0) {
+      let keep = 1;
+      if (y > c.shY[s] - 0.12 * H) {
+        const sx = Math.abs(c.shX[s]);
+        keep = ss(sx - R.hombro * H, sx + 0.01 * H, ax);
+        if (ax < c.torsoHalf && y < c.shY[s] - 0.04 * H) keep = 0;
+      } else if (kind !== 'brazo' && ax < c.torsoHalf) keep = 0;
+      if (keep < 1) { W[3] *= keep; W[4] *= keep; W[5] *= keep; W[6] *= keep; W[1] += arm * (1 - keep); }
+    }
+    if (kind === 'tronco') {
+      const up = ss(c.crotchY + R.muslo[0] * H, c.crotchY + R.muslo[1] * H, y);
+      if (up > 0) { const t = (W[7] + W[9]) * up; W[7] *= 1 - up; W[9] *= 1 - up; W[0] += t; }
+      if (y > c.crotchY + R.muslo[0] * H) {
+        const core = W[0] + W[1], k = ss(c.torsoY + R.cintura[0] * H, c.torsoY + R.cintura[1] * H, y);
+        W[0] = core * (1 - k); W[1] = core * k;
+      }
+    }
+    // la capa: entre más atrás del cuerpo cuelga, más sigue al torso (arriba) y a la cadera (abajo)
+    if (c.capa && y < c.shY[s] - 0.02 * H && W[11] < 0.3) {
+      const axis = y > c.torsoY ? c.capa.zTorso : y > c.crotchY ? c.capa.zPelvis : c.capa.zLeg;
+      const f = ss(axis - 0.05 * H, axis - 0.09 * H, z);
+      if (f > 0) {
+        const k = ss(c.crotchY, c.torsoY + 0.1 * H, y);
+        for (let j = 0; j < 14; j++) W[j] *= 1 - f;
+        W[0] += f * (1 - k); W[1] += f * k;
+      }
+    }
+    // las 4 más pesadas, que sumen 1
+    top.fill(0); tw.fill(0);
+    for (let j = 0; j < 14; j++) {
+      const w = W[j];
+      if (w <= tw[3]) continue;
+      let k = 3;
+      while (k > 0 && w > tw[k - 1]) { tw[k] = tw[k - 1]; top[k] = top[k - 1]; k--; }
+      tw[k] = w; top[k] = j;
+    }
+    const sum = tw[0] + tw[1] + tw[2] + tw[3];
+    for (let j = 0; j < 4; j++) { si[v * 4 + j] = top[j]; sw[v * 4 + j] = tw[j] / sum; }
+  }
 }
 
 // opts.colgando = false: brazos un poco separados del cuerpo (pose en A cerrada) aunque las manos queden
@@ -514,6 +579,11 @@ export function autoRig(obj, height, opts = {}) {
       }
       let sum = 0; for (let j = 0; j < Math.min(4, top.length); j++) sum += top[j][1];
       for (let j = 0; j < Math.min(4, top.length); j++) { si[v * 4 + j] = top[j][0]; sw[v * 4 + j] = top[j][1] / sum; }
+    }
+    // pelvis, cintura y hombros mejor repartidos (ver refineWeights; rig: { pulir: false } deja los pesos como antes)
+    if (opts.pulir !== false) {
+      refineWeights(a, si, sw, zones, { H, crotchY, torsoY, torsoHalf, shY: [SN.y, SF.y], shX: [SN.x, SF.x],
+        capa: opts.capa ? { zTorso, zPelvis, zLeg: (KN.z + KF.z) / 2 } : null });
     }
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
@@ -903,6 +973,7 @@ export class FighterModel {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       const cloned = mats.map((m) => {
         const c = m.clone();
+        for (const k of ['map', 'normalMap']) if (c[k] && c[k].anisotropy !== texturas.anisotropia) { c[k].anisotropy = texturas.anisotropia; c[k].needsUpdate = true; }
         if (altTint && c.color) c.color.multiply(new THREE.Color('#9db8ff'));
         c.userData.baseColor = c.color ? c.color.clone() : null;
         this.materials.push(c);

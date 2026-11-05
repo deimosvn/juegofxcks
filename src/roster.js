@@ -60,6 +60,8 @@
 //    ['pescadero'] (pescado y caguama en la mano), ['barbero'] (tijeras, máquina, navaja y brocha),
 //    ['guitarra'] (en la espalda), ['aeroespacial'] (remachadora, avión de papel, caja negra, paletas), ['vaquero'] (lazo y revólver)
 //  rig: { colgando: false }  si el esqueleto automático corta la ropa entre brazo y cuerpo
+//       { capa: true }       si trae capa (la capa sigue al torso y la cadera, no a piernas ni brazos)
+//       { pulir: false }     reparte los pesos de la piel como antes (solo para comparar)
 //
 //  Modelos: pasa el .fbx/.glb de Meshy o Tripo por herramientas/convertir.html
 //  (lo reduce, le pone esqueleto automático y crea el retrato).
@@ -108,7 +110,7 @@ export const PELEADORES = [
     retrato: 'assets/peleadores/diego/retrato.png',
     escala: 1, rotacionY: 0,
     // MODO TITÁN: se transforma en este súper héroe (armadura con capa)
-    traje: { modelo: 'assets/peleadores/diego-heroe/modelo.glb', escala: 1.05 },
+    traje: { modelo: 'assets/peleadores/diego-heroe/modelo.glb', escala: 1.05, rig: { capa: true } },
     // los cuatro robots que bajan en su fatality
     robots: { modelo: 'assets/peleadores/diego-robot/modelo.glb', escala: 1.06 },
     stats: { velocidad: 1.05, fuerza: 1, vida: 100 },

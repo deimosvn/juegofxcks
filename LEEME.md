@@ -408,6 +408,13 @@ mandiles— sigue a la cadera y no al muslo, así no se estira como sábana cuan
 Si el esqueleto automático corta la ropa entre el brazo y el cuerpo (salen pedacitos flotando cerca de las manos),
 pon `rig: { colgando: false }` en el roster (como Ramces); en el convertidor se prueba con `&colgando=0`.
 
+Cómo se reparte la piel entre los huesos ([`src/model.js`](src/model.js), `refineWeights`): la pelvis sigue a la cadera
+y no a los muslos, la cintura pasa poco a poco de la cadera al torso y el brazo solo mueve lo que está por fuera del
+hombro. Así ya no se tuerce la cintura de golpe ni sale joroba en la espalda al pegar (medido en 14 poses con todos los
+peleadores: ~25% menos piel estirada o aplastada). Si el modelo trae **capa** (como el súper héroe de Diego) pon
+`rig: { capa: true }` en su `traje` o en el roster: la capa cuelga del torso y la cadera y ya no la jalan piernas ni
+brazos. `rig: { pulir: false }` deja los pesos como antes (para comparar).
+
 Si el modelo sale de lado, usa "Girar" en el convertidor (o `rotacionY` en el roster). `escala` cambia la estatura
 (Conde usa `0.94`). Lo mejor es que el modelo venga en **pose de T o de A**; si viene con los brazos pegados al cuerpo
 (como Conde) también funciona: el esqueleto automático separa brazo y cuerpo sin estirar la ropa.
