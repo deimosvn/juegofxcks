@@ -76,6 +76,18 @@
     <button id="end-menu" class="ghost" data-key="Escape">MENÚ</button>
   </div>
   <div id="rotate-hint" class="hidden">↻ Gira el celular para jugar mejor</div>
+  <!-- ARCADE: ganaste LA TORRE (encima de la vuelta de cámara al que ganó) -->
+  <div id="campeon" class="hidden">
+    <div id="camp-confeti"></div>
+    <div class="cbox">
+      <small class="ctop">LA TORRE · <b id="camp-dif"></b></small>
+      <div class="ctit"><span>¡CAMPEÓN!</span></div>
+      <b class="cname" id="camp-n"></b>
+      <p class="cfrase" id="camp-frase"></p>
+      <table id="camp-stats"></table>
+      <button id="camp-ok" data-key="Enter">MENÚ</button>
+    </div>
+  </div>
 
   <div id="announcer"></div>
   <div id="flash"></div>
@@ -89,7 +101,8 @@
     <h1 class="logo"><span class="l1">FXCKS</span><span class="l2">KOMBAT</span></h1>
     <p class="press"><span class="kb-only">PRESIONA CUALQUIER TECLA</span><span class="touch-only">TOCA PARA EMPEZAR</span></p>
     <div class="menu-options">
-      <button data-mode="cpu" class="sel">1 JUGADOR vs CPU</button>
+      <button data-mode="arcade" class="sel">ARCADE · LA TORRE</button>
+      <button data-mode="cpu">1 JUGADOR vs CPU</button>
       <button data-mode="vs" class="kb-only">1 vs 1 LOCAL</button>
       <button data-mode="online">EN LÍNEA</button>
       <button data-mode="options">OPCIONES</button>
@@ -112,6 +125,22 @@
     </div>
     <p class="hint"><span class="kb-only">P1: A D W S + F &nbsp;·&nbsp; P2: flechas + K &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; ESC volver</span><span class="touch-only">Toca un peleador para verlo · tócalo otra vez para elegirlo</span></p>
     <button class="link back" data-key="Escape">← VOLVER</button>
+  </div>
+
+  <!-- ARCADE · LA TORRE: los rivales de abajo hacia arriba (hasta el jefe final); tu retrato sube con cada pelea que ganas -->
+  <div id="torre" class="screen hidden">
+    <h2 id="torre-titulo">LA TORRE</h2>
+    <div class="torre-layout">
+      <div class="torre-lado yo"><div class="tface" id="torre-yo"></div><b id="torre-yo-n"></b><small>TÚ</small></div>
+      <ol class="torre-lista" id="torre-lista"></ol>
+      <div class="torre-lado rival"><small id="torre-pelea">PELEA 1</small><div class="tface" id="torre-rival"></div><b id="torre-rival-n"></b>
+        <span class="tdif" id="torre-nivel"></span><span class="tesc">ESCENARIO: <em id="torre-esc"></em></span></div>
+    </div>
+    <div class="torre-go">
+      <button class="ghost" data-key="Escape">← SALIR</button>
+      <button id="torre-pelear" data-key="Enter">¡A PELEAR!<span class="tbar" id="torre-bar"><i></i></span></button>
+    </div>
+    <p class="hint kb-only">ENTER pelear ya · ESC salir de la torre</p>
   </div>
 
   <!-- Selección de escenario -->

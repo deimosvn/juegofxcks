@@ -12,6 +12,18 @@ export const TARGET_HEIGHT = 1.85;
 // Filtro de las texturas de los peleadores (main.js lo pone según la tarjeta de video): así la ropa y la cara se ven
 // nítidas aunque la cámara las vea de lado, como en la pelea
 export const texturas = { anisotropia: 1 };
+// Luz de borde y de relleno de los peleadores (main.js la ajusta en cada escenario): se separan del fondo y en los
+// escenarios de noche no se pierden en lo oscuro. No es una luz de la escena (el escenario se ve igual y no se
+// recompila nada a media pelea): se suma en el sombreado de sus materiales, los mismos valores para todos.
+export const luzPeleador = { color: { value: new THREE.Color('#ffe2c4') }, borde: { value: 0.32 }, relleno: { value: 0.03 } };
+function rimShader(shader) {
+  shader.uniforms.uRimColor = luzPeleador.color; shader.uniforms.uRim = luzPeleador.borde; shader.uniforms.uFill = luzPeleador.relleno;
+  shader.fragmentShader = shader.fragmentShader
+    .replace('void main() {', 'uniform vec3 uRimColor;\nuniform float uRim;\nuniform float uFill;\nvoid main() {')
+    .replace('#include <opaque_fragment>', `float rimK = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+      outgoingLight += uRimColor * (rimK * rimK * rimK * uRim) + diffuseColor.rgb * uFill;
+      #include <opaque_fragment>`);
+}
 const gltfLoader = new GLTFLoader();
 const fbxLoader = new FBXLoader();
 const assetCache = new Map();
@@ -974,6 +986,7 @@ export class FighterModel {
       const cloned = mats.map((m) => {
         const c = m.clone();
         for (const k of ['map', 'normalMap']) if (c[k] && c[k].anisotropy !== texturas.anisotropia) { c[k].anisotropy = texturas.anisotropia; c[k].needsUpdate = true; }
+        if (c.isMeshStandardMaterial) c.onBeforeCompile = rimShader;
         if (altTint && c.color) c.color.multiply(new THREE.Color('#9db8ff'));
         c.userData.baseColor = c.color ? c.color.clone() : null;
         this.materials.push(c);

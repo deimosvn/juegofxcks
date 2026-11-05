@@ -100,7 +100,7 @@ Object.assign(SPECIALS, {
   serenata: {
     total: 64, anim: 'guitarra', s: 0.3, a: 0.75,
     update(f, o, s, g, t) {
-      if (t === 6 || t === 14 || t === 22) sfx.note(t / 4);
+      if (t === 6 || t === 14 || t === 22) sfx.note(t >> 2);
       if (t === 30) {
         const dx = (o.x - f.x) * f.facing;
         if (dx > -0.3 && dx < 4.2 && o.y < 1.2 && !o.invulnerable()) {
@@ -335,7 +335,7 @@ Object.assign(PICADA, {
   // Abel: se avienta del escenario con la guitarra arriba; al caer suena el acorde y sale la onda
   stagedive: { pose: 'mazazo', go: 'whoosh', land(g, x, c) { g.effects.ring(x, c, 2.4); g.effects.ring(x, '#ffffff', 1.6, 0.3); g.effects.burst(V(x, 0.4), c, 50, 6); sfx.powerChord(); sfx.thump(); } },
   // Diego Suárez: cae en barrena como avión
-  barrena: { pose: 'avion', go: 'jet', land(g, x, c) { g.effects.explosion(V(x, 0.3, 0.2), c, 0.7); g.effects.dust(V(x, 0.1), 30); sfx.smallBoom(); } },
+  barrena: { pose: 'avion', go: 'rocket', land(g, x, c) { g.effects.explosion(V(x, 0.3, 0.2), c, 0.7); g.effects.dust(V(x, 0.1), 30); sfx.smallBoom(); } },
   // Jaziel: salto de rodeo, cae de botas y levanta polvo
   rodeo: { pose: 'patada_aerea', go: 'whoosh', land(g, x, c) { g.effects.dust(V(x, 0.1), 60); g.effects.ring(x, c, 2.4); sfx.thump(); sfx.boom(); } },
 });

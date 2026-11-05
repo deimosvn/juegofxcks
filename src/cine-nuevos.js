@@ -136,10 +136,10 @@ Object.assign(FATALS, {
     beats: [[14, { riser: 1.4 }], [64, { sfx: 'heartbeat' }], [76, { sfx: 'heartbeat' }], [100, { kill: true, flash: '#ffffff', shake: 0.8 }],
       [CHOQUE, { flash: '#ffb060', aberr: 1, fov: 3 }]],
     prop: { W: [[0, 'paletas']] },
-    warm(d) { d.obj('avion', makeTurboprop); d.obj('marcas', skidMarks); },
+    warm(d) { d.obj('avion', makeTurboprop); d.obj('llantasAvion', skidMarks); },
     view(d, t, dt, prev, data, post) {
       const x = data.x ?? d.anchors.L.x;
-      if (t >= 100 || post) d.obj('marcas', skidMarks).position.set(x, 0, 0);
+      if (t >= 100 || post) d.obj('llantasAvion', skidMarks).position.set(x, 0, 0);
       // ya estrellado: se quema al fondo
       if (t >= CHOQUE || post) {
         if (live(d, dt)) {

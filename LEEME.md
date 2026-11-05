@@ -1,8 +1,8 @@
 # FXCKS KOMBAT
 
-Juego de pelea 3D para el navegador (Three.js) con los compas: contra la CPU, 1 vs 1 en el mismo teclado, o
-**en línea** con presencia en tiempo real (ves quién está conectado), retos, **salas con espectadores**, ranking y
-netcode con *rollback*.
+Juego de pelea 3D para el navegador (Three.js) con los compas: **ARCADE · LA TORRE** (todos contra ti, uno tras
+otro, hasta el jefe final), contra la CPU, 1 vs 1 en el mismo teclado, o **en línea** con presencia en tiempo real
+(ves quién está conectado), retos, **salas con espectadores**, ranking y netcode con *rollback*.
 
 ## Jugar en tu computadora
 
@@ -38,6 +38,28 @@ cualquiera de las dos teclas o un mando.
   si ganas sin que te peguen. Entre rondas la pantalla se va a negro.
 - Imagen “de cine”: brillo (bloom) en focos, rayos y chispas, viñeta, grano fino, estelas en los golpes fuertes,
   onda de choque en cada impacto, polvo al saltar y caer, y orillas rojas cuando te queda poca vida.
+- **Luz de contorno** en los peleadores: una orilla de luz (azulada como de luna en Casa Chuy y el Templo, cálida y
+  suave de día) y un poco de luz de relleno, para que no se pierdan en los escenarios oscuros. Se ajusta por escenario
+  en `LUZ_PELEADOR` ([`src/main.js`](src/main.js)); el sombreado está en [`src/model.js`](src/model.js) (`luzPeleador`)
+  y no agrega luces a la escena (así no se traba al cambiar de escenario).
+
+## 🗼 ARCADE · LA TORRE
+La primera opción del menú. Eliges a tu peleador y la **dificultad** (en el panel de la derecha, como contra la CPU) y
+te toca pelear contra **7 de tus amigos seguidos**, en orden al azar:
+- **Cada pelea es más difícil**: el primer tercio un nivel abajo del que elegiste, luego el tuyo, luego uno arriba, y
+  la última es el **JEFE FINAL**: dos niveles arriba y siempre en el **Templo**. Los demás escenarios van al azar sin
+  repetir el de la pelea anterior.
+- **Entre peleas sale la torre**: tus rivales de abajo hacia arriba (los vencidos tachados, el jefe con calavera), tu
+  retrato sube al siguiente escalón y a un lado el rival, su dificultad y el escenario. La pelea empieza sola en unos
+  segundos (ENTER o **¡A PELEAR!** para ya; ESC o **SALIR** para dejar la torre).
+- **Si pierdes**: “¡OTRA VEZ!” y repites esa misma pelea (cuenta como reintento).
+- **Al ganar la última: ¡CAMPEÓN!** con confeti encima de la vuelta de cámara a tu peleador, y tus números: peleas
+  ganadas, rondas perfectas, fatalities, brutalities, reintentos y tiempo.
+- En la selección, los que ya ganaron la torre traen una **corona** del color de la dificultad más alta en que la
+  ganaron (se guarda en el navegador).
+
+Cuántas peleas son: `torre` en `JUEGO` ([`src/roster.js`](src/roster.js)). Es solo contra la CPU en tu pantalla: no
+cambia en nada la simulación ni el modo en línea.
 
 ## ☠ Fatalities de cine
 Cada fatality se ve como escena de película ([`src/fatal.js`](src/fatal.js)). Lo que pasa y cuándo sigue en
@@ -90,7 +112,7 @@ cine en [`src/cine-brutal.js`](src/cine-brutal.js).
 | Abel | SOLO MORTAL | Un solo cada vez más rápido: el otro cabecea más y más fuerte, la guitarra se prende en llamas… y la cabeza le revienta. Abel rompe la guitarra en el piso como estrella de rock |
 | Diego Suárez | HÉLICE DE CABEZA | Lo llena de remaches como si fuera avión, le remacha un gorrito con hélice y despega dando vueltas… hasta que explota en el aire |
 | Jaziel | ESTAMPIDA MORTAL | Chifla y una manada de caballos le pasa por encima de ida y de vuelta (a Jaziel lo brincan); su caballo llega, se voltea y de una coz lo manda a las estrellas |
-| Brasa · Escarcha · Voltio · Mole | CARBONIZADO · ESTATUA ROTA · CORTOCIRCUITO · APLANADO | Combo de ocho golpes, gancho que lo levanta y revienta en el aire en fuego, hielo, rayos o polvo |
+| Brasa · Escarcha · Voltio · Mole (ocultos) | CARBONIZADO · ESTATUA ROTA · CORTOCIRCUITO · APLANADO | Combo de ocho golpes, gancho que lo levanta y revienta en el aire en fuego, hielo, rayos o polvo |
 
 ## ✈️ Ataques nuevos
 - **Especial en el aire** (saltando + Especial): se queda un instante arriba y se lanza en picada hacia el rival; si
@@ -277,8 +299,9 @@ Transformado (al final parpadea y la armadura se le cae en pedazos):
 | ☠ ARRASTRADO | `← → → + K` | Lo laza, amarra la reata a su caballo y se lo lleva arrastrando… el caballo regresa con nomás las botas |
 | 💀 ESTAMPIDA MORTAL | la de la fatality, dejando presionado K | BRUTALITY: la manada le pasa por encima de ida y de vuelta y su caballo lo manda a volar de una coz |
 
-Además siguen Brasa, Escarcha, Voltio y Mole (muñecos de ejemplo), cada uno con un especial más (COLUMNA DE FUEGO,
-PUÑO GLACIAR, CAMPO ELÉCTRICO y SUPLEX), su especial en el aire y su brutality.
+Brasa, Escarcha, Voltio y Mole (los muñecos de ejemplo, con COLUMNA DE FUEGO, PUÑO GLACIAR, CAMPO ELÉCTRICO y SUPLEX,
+su especial en el aire y su brutality) siguen en el roster como plantilla, pero ya **no salen en la selección ni en la
+torre** (`oculto: true`). Quítale `oculto` a uno para que vuelva a salir.
 
 ## 🔊 Sonidos y música
 Los efectos son sintetizados (no hay archivos) y todo pasa por un compresor y un poco de eco de cuarto.
@@ -418,3 +441,15 @@ brazos. `rig: { pulir: false }` deja los pesos como antes (para comparar).
 Si el modelo sale de lado, usa "Girar" en el convertidor (o `rotacionY` en el roster). `escala` cambia la estatura
 (Conde usa `0.94`). Lo mejor es que el modelo venga en **pose de T o de A**; si viene con los brazos pegados al cuerpo
 (como Conde) también funciona: el esqueleto automático separa brazo y cuerpo sin estirar la ropa.
+
+---
+
+## 🛠️ Si algo falla
+- **El juego ya no se congela por un error en un cuadro**: si un sonido o un efecto falla, se anota en la consola del
+  navegador (F12) como “Error en el cuadro (el juego sigue)” y la pelea continúa. Antes cualquier error detenía todo:
+  así pasaba con la SERENATA de Abel (pedía una nota que no existía y el navegador rechazaba el sonido).
+- Los sonidos ignoran números inválidos (`audio.js`) en lugar de tronar.
+- Los objetos de las escenas de cine se guardan **por nombre** (`d.obj('nombre', ...)` del director de
+  [`src/fatal.js`](src/fatal.js)): cada nombre tiene que ser único entre `fatal.js`, `cine-brutal.js` y `cine-nuevos.js`.
+  Dos con el mismo nombre se pisan (la avioneta de Diego Suárez le cambiaba las marcas de llanta al atropello de Alan y
+  la brutality se trababa).

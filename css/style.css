@@ -178,6 +178,7 @@ body.cine #hud, body.cine #tbtns, body.cine #tpad { opacity: 0; pointer-events: 
 .menu-options button:nth-child(3) { animation-delay: .1s; }
 .menu-options button:nth-child(4) { animation-delay: .15s; }
 .menu-options button:nth-child(5) { animation-delay: .2s; }
+.menu-options button:nth-child(6) { animation-delay: .25s; }
 /* la opción elegida: franja roja inclinada y flecha que late */
 .menu-options button::before { content: ''; position: absolute; inset: 3px 14px; z-index: -1; background: linear-gradient(90deg, transparent, rgba(196, 22, 28, .9) 18%, rgba(140, 10, 14, .9) 82%, transparent); border-top: 1px solid rgba(255, 210, 120, .5); border-bottom: 1px solid rgba(255, 210, 120, .5); transform: skewX(-18deg) scaleX(0); transition: transform .22s cubic-bezier(.2, 1.3, .4, 1); }
 .menu-options button.sel { color: #fff; transform: scale(1.06); text-shadow: 0 2px 0 #000, 0 0 14px rgba(255, 160, 0, .8); }
@@ -229,6 +230,11 @@ h3 { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px
 @keyframes lockFlash { from { background: rgba(255, 255, 255, .85); } to { background: transparent; } }
 .card .portrait-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; transition: transform .25s; }
 .card.c1 .portrait-img, .card.c2 .portrait-img { transform: scale(1.08); }
+/* corona: ya ganó LA TORRE (del color de la dificultad) */
+.card .crown { --dc: #ffd23a; position: absolute; right: 5px; bottom: 28px; z-index: 1; font-size: 24px; line-height: 1; color: var(--dc); text-shadow: 0 0 10px var(--dc), 1px 1px 0 #000, -1px -1px 0 #000; pointer-events: none; }
+/* ARCADE: del lado del rival está la torre */
+#select.arcade #pface2 { display: flex; align-items: center; justify-content: center; }
+#select.arcade #pface2::after { content: '♜'; font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', serif; font-size: min(140px, 22vh); line-height: 1; color: var(--gold); text-shadow: 0 0 30px rgba(255, 140, 0, .7), 0 6px 0 #000; }
 
 /* Opciones */
 .opts { width: min(560px, 100%); display: flex; flex-direction: column; gap: 4px; padding: 10px; background: var(--panel); border: 1px solid #3a2a1a; }
@@ -300,6 +306,76 @@ td.sub { padding-top: 10px; text-align: left !important; font-family: 'Bebas Neu
 #results td:first-child { text-align: left; color: #aaa; font-size: 12px; letter-spacing: 1px; }
 #results td.best { color: var(--gold); font-weight: 700; }
 @keyframes resultsIn { from { opacity: 0; transform: translate(-50%, 30px); } }
+
+/* ---------- ARCADE · LA TORRE ---------- */
+.torre-layout { display: flex; align-items: center; justify-content: center; gap: 34px; width: min(1000px, 100%); }
+.torre-lado { flex: 0 0 200px; display: flex; flex-direction: column; align-items: center; text-align: center; font-family: 'Bebas Neue', sans-serif; }
+.tface { width: 170px; aspect-ratio: 3 / 4; display: flex; align-items: center; justify-content: center; border: 3px solid #333; font-size: 64px; color: rgba(255, 255, 255, .85);
+  background-color: var(--fc, #333); background-image: var(--img, none), linear-gradient(180deg, var(--fc, #333), #0b0806 92%); background-size: cover, 100% 100%; background-position: 50% 0, center; background-repeat: no-repeat; box-shadow: 0 10px 30px rgba(0, 0, 0, .6); }
+.torre-lado.yo .tface { border-color: var(--p1); box-shadow: 0 0 24px rgba(58, 160, 255, .45), 0 10px 30px rgba(0, 0, 0, .6); }
+.torre-lado.rival .tface { border-color: var(--p2); scale: -1 1; box-shadow: 0 0 24px rgba(255, 74, 58, .45), 0 10px 30px rgba(0, 0, 0, .6); animation: rivalIn .6s .15s cubic-bezier(.2, 1.3, .4, 1) both; }
+.torre-lado b { margin-top: 8px; font-weight: 400; font-size: 34px; letter-spacing: 2px; line-height: 1; color: #fff; text-shadow: 2px 2px 0 #000; }
+.torre-lado small { font-size: 18px; letter-spacing: 4px; color: var(--gold); white-space: nowrap; }
+.torre-lado.rival small { margin-bottom: 6px; color: #ff6a5a; text-shadow: 0 0 10px rgba(255, 40, 30, .6); }
+.tdif { --dc: #ffd23a; margin-top: 6px; padding: 1px 12px; font-size: 22px; letter-spacing: 3px; color: var(--dc); border: 1px solid var(--dc); text-shadow: 0 0 10px var(--dc); }
+.tesc { margin-top: 6px; font-family: 'Rubik', sans-serif; font-size: 12px; letter-spacing: 1px; color: #999; }
+.tesc em { font-style: normal; color: #ddd; }
+@keyframes rivalIn { from { opacity: 0; translate: 40px 0; filter: brightness(2.5); } }
+/* los escalones: el primero abajo; tu retrato (.tyo) va a la izquierda del tuyo */
+.torre-lista { --rh: clamp(34px, 7.4vh, 60px); --gap: 6px; position: relative; flex: 0 1 380px; min-width: 0; display: flex; flex-direction: column-reverse; gap: var(--gap); margin: 0; padding: 0 0 0 calc(var(--rh) + 16px); list-style: none; }
+.torre-lista li { --dc: #ffd23a; position: relative; height: var(--rh); display: flex; align-items: center; gap: 10px; padding: 0 12px 0 4px; background: linear-gradient(90deg, rgba(48, 28, 14, .92), rgba(14, 9, 6, .82)); border: 1px solid #3a2a1a; border-left: 4px solid var(--dc); animation: rungIn .35s cubic-bezier(.2, 1.2, .4, 1) both; animation-delay: calc(var(--k, 0) * 45ms); }
+.tmed { flex: none; height: calc(var(--rh) - 8px); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid #c9961e; font-family: 'Bebas Neue', sans-serif; font-size: calc(var(--rh) * .4); color: #fff;
+  background-color: var(--fc, #444); background-image: var(--img, none); background-size: 250% auto; background-position: 50% 12%; background-repeat: no-repeat; }
+.tn { flex: 1; min-width: 0; font-family: 'Bebas Neue', sans-serif; font-size: calc(var(--rh) * .5); letter-spacing: 2px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl { flex: none; font-style: normal; font-family: 'Bebas Neue', sans-serif; font-size: calc(var(--rh) * .32); letter-spacing: 2px; color: var(--dc); }
+/* vencidos, en gris; el que sigue brilla; el jefe, en rojo con calavera */
+.torre-lista li.done .tmed { filter: grayscale(1) brightness(.55); }
+.torre-lista li.done .tn { color: #6f6a64; text-decoration: line-through; }
+.torre-lista li.done .tl { display: none; }
+.torre-lista li.done::after { content: 'VENCIDO'; font-family: 'Bebas Neue', sans-serif; font-size: calc(var(--rh) * .32); letter-spacing: 2px; color: #5dff6a; }
+.torre-lista li.cur { z-index: 1; border-color: var(--gold) var(--gold) var(--gold) var(--dc); background: linear-gradient(90deg, rgba(196, 22, 28, .92), rgba(96, 10, 12, .85)); transform: scale(1.06); animation: rungIn .35s cubic-bezier(.2, 1.2, .4, 1) both, curGlow .9s ease-in-out infinite alternate; animation-delay: calc(var(--k, 0) * 45ms), 0s; }
+.torre-lista li.cur .tn { color: #fff; text-shadow: 1px 1px 0 #000; }
+.torre-lista li.jefe { border-left-color: #ff2a2a; }
+.torre-lista li.jefe .tn::before { content: '☠ '; color: #ff4a3a; }
+.tyo { position: absolute; left: 0; bottom: calc(var(--k, 0) * (var(--rh) + var(--gap))); z-index: 2; width: var(--rh); height: var(--rh); border-radius: 50%; border: 3px solid var(--p1); display: flex; align-items: center; justify-content: center; font-family: 'Bebas Neue', sans-serif; font-size: calc(var(--rh) * .4); color: #fff;
+  background-color: var(--fc, #444); background-image: var(--img, none); background-size: 250% auto; background-position: 50% 12%; background-repeat: no-repeat; box-shadow: 0 0 16px rgba(58, 160, 255, .85); transition: bottom .75s cubic-bezier(.3, 1.45, .5, 1); }
+.tyo::after { content: '▶'; position: absolute; right: -15px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--p1); animation: nudgeX .5s ease-in-out infinite alternate; }
+@keyframes rungIn { from { opacity: 0; transform: translateX(-26px); } }
+@keyframes curGlow { from { box-shadow: 0 0 10px rgba(255, 120, 0, .35); } to { box-shadow: 0 0 30px rgba(255, 170, 0, .8); } }
+@keyframes nudgeX { to { right: -19px; } }
+.torre-go { display: flex; gap: 14px; justify-content: center; margin-top: 22px; }
+.torre-go button { position: relative; overflow: hidden; font-family: 'Bebas Neue', sans-serif; font-size: 30px; letter-spacing: 3px; padding: 8px 34px; background: var(--gold); color: #111; border: 0; cursor: pointer; box-shadow: 0 4px 0 var(--gold-dark); }
+.torre-go button.ghost { background: rgba(0, 0, 0, .55); color: #ddd; border: 2px solid #777; box-shadow: none; font-size: 24px; padding: 6px 20px; }
+/* la barra se llena mientras llega la pelea (o ENTER para ya) */
+.tbar { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(0, 0, 0, .25); }
+.tbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--red), #ff7a1a); transform-origin: 0 50%; transform: scaleX(0); }
+.tbar.run i { animation: tbar var(--t, 4.5s) linear both; }
+@keyframes tbar { to { transform: scaleX(1); } }
+#torre .hint { margin-top: 14px; }
+/* jefe final: todo en rojo */
+#torre.jefe { background: radial-gradient(ellipse at center, rgba(120, 0, 0, .55), rgba(0, 0, 0, .93)); }
+#torre.jefe h2 { background-image: var(--blood); filter: drop-shadow(3px 3px 0 #000) drop-shadow(0 0 18px rgba(255, 0, 0, .6)); }
+#torre.jefe .torre-lado.rival small { font-size: 22px; color: #ff3b30; animation: perfect .6s ease-in-out infinite alternate; }
+
+/* ---------- ARCADE: ¡CAMPEÓN! (encima de la vuelta de cámara al que ganó) ---------- */
+#campeon { position: fixed; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+#campeon .cbox { position: absolute; right: max(4vw, 16px); top: 50%; transform: translateY(-50%); width: min(400px, 44vw); padding: 16px 22px 18px; text-align: center; pointer-events: auto;
+  background: linear-gradient(rgba(14, 9, 6, .92), rgba(14, 9, 6, .8)); border: 1px solid rgba(245, 197, 66, .6); box-shadow: 0 0 40px rgba(255, 140, 0, .3), 0 10px 30px rgba(0, 0, 0, .6); animation: campIn .7s cubic-bezier(.2, 1.3, .4, 1) both; }
+.ctop { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 6px; color: #bbb; }
+.ctop b { --dc: #ffd23a; font-weight: 400; color: var(--dc); text-shadow: 0 0 10px var(--dc); }
+.ctit { font-family: 'Bebas Neue', sans-serif; font-size: clamp(54px, 7.5vw, 96px); line-height: 1; letter-spacing: 4px; }
+.ctit span { display: inline-block; padding: 0 .08em; background: var(--metal); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-stroke: 2px #2a1400; filter: drop-shadow(0 5px 0 #000) drop-shadow(0 0 24px rgba(255, 140, 0, .7)); animation: slam .6s .2s cubic-bezier(.2, 1.5, .4, 1) both; }
+.cname { display: block; font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 34px; letter-spacing: 3px; color: #fff; text-shadow: 2px 2px 0 #000; }
+.cfrase { margin: 2px 0 10px; font-size: 14px; font-style: italic; color: #d8cfc4; }
+.cfrase:empty { display: none; }
+#camp-stats td { padding: 3px 4px; font-size: 15px; }
+#camp-stats td:first-child { color: #aaa; font-size: 12px; letter-spacing: 1px; text-align: left; }
+#camp-ok { margin-top: 14px; font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 2px; padding: 6px 34px; background: var(--gold); color: #111; border: 0; cursor: pointer; box-shadow: 0 4px 0 var(--gold-dark); }
+@keyframes campIn { from { opacity: 0; translate: 50px 0; } }
+#camp-confeti i { position: absolute; top: -24px; width: 9px; height: 15px; background: hsl(var(--h, 45) 90% 58%); opacity: .9; animation: confeti 4s linear infinite both; }
+@keyframes confeti { from { transform: translateY(0) rotate(0); } to { transform: translateY(112vh) rotate(var(--r, 360deg)); } }
+/* con el ¡CAMPEÓN! en pantalla no se ve lo de la pelea */
+body.campeon #hud, body.campeon #results, body.campeon #announcer, body.campeon #endbtns { display: none !important; }
 
 /* Lobby en línea */
 .panel { background: var(--panel); border: 1px solid #333; padding: 16px; }
@@ -463,10 +539,11 @@ html.touch #results { bottom: auto; top: 58%; }
 
 /* Pantallas bajitas (celular acostado): todo más compacto */
 @media (max-height: 520px) {
-  .logo { font-size: clamp(48px, 15vh, 110px); margin-bottom: 14px; }
+  .logo { font-size: clamp(44px, 14vh, 110px); margin-bottom: 10px; }
   .press { font-size: 22px; }
   .menu-options { gap: 2px; }
-  .menu-options button { font-size: 25px; padding: 2px 44px; }
+  .menu-options button { font-size: clamp(20px, 6.8vh, 25px); line-height: 1.12; padding: 2px 44px; }
+  #menu .hint { margin-bottom: 0; }
   .menu-options button.sel::after { left: 14px; }
   .hint { margin-top: 10px; font-size: 12px; }
   h2 { font-size: 34px; margin-bottom: 8px; }
@@ -550,4 +627,46 @@ html.touch #results { bottom: auto; top: 58%; }
   #results td:first-child { font-size: 10px; }
   .vs-stage b { font-size: 24px; }
   .vs-stage small { font-size: 11px; }
+}
+
+/* ARCADE en pantallas chicas: la torre sin tu retrato grande; el ¡CAMPEÓN! abajo en el celular parado */
+@media (max-width: 760px) {
+  .torre-layout { gap: 14px; }
+  .torre-lado.yo { display: none; }
+  .torre-lado { flex-basis: 120px; }
+  .tface { width: 104px; font-size: 40px; }
+  .torre-lado b { font-size: 24px; }
+  .tdif { font-size: 17px; }
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .torre-layout { flex-direction: column-reverse; gap: 14px; }   /* el rival arriba, la torre abajo a todo lo ancho */
+  .torre-lista { --rh: clamp(28px, 5.1vh, 44px); flex: none; width: 100%; }
+  .torre-lado.rival { flex: none; }
+  .torre-go { margin-top: 14px; }
+  .tface { width: 96px; font-size: 36px; }
+  #campeon .cbox { left: 50%; right: auto; top: auto; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: 92vw; }
+  .ctit { font-size: 56px; }
+}
+@media (max-height: 520px) {
+  .torre-layout { gap: 18px; }
+  .torre-lista { --rh: clamp(22px, 7.2vh, 40px); --gap: 4px; }
+  .tface { width: auto; height: 34vh; font-size: 36px; }
+  #torre h2 { line-height: 1.1; }
+  .torre-lado b { font-size: 22px; margin-top: 4px; }
+  .torre-lado small, #torre.jefe .torre-lado.rival small { font-size: 15px; letter-spacing: 2px; }
+  .tdif { font-size: 15px; margin-top: 4px; }
+  .tesc { font-size: 10px; margin-top: 3px; }
+  .torre-go { margin-top: 10px; }
+  .torre-go button { font-size: 22px; padding: 4px 24px; }
+  .torre-go button.ghost { font-size: 18px; padding: 3px 14px; }
+  #torre .hint { display: none; }
+  .card .crown { font-size: 14px; bottom: 16px; right: 3px; }
+  #campeon .cbox { padding: 8px 14px 10px; width: min(330px, 46vw); }
+  .ctop { font-size: 13px; letter-spacing: 4px; }
+  .ctit { font-size: clamp(36px, 12vh, 60px); }
+  .cname { font-size: 22px; }
+  .cfrase { font-size: 11px; margin-bottom: 4px; }
+  #camp-stats td { font-size: 11px; padding: 1px 4px; }
+  #camp-stats td:first-child { font-size: 9.5px; }
+  #camp-ok { font-size: 20px; padding: 3px 24px; margin-top: 6px; }
 }

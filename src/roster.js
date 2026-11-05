@@ -21,6 +21,7 @@
 //    especialesTitan  (opcional) lo que sacan los mismos botones mientras trae el traje puesto
 //    intro      (opcional) pose de presentación en la ronda 1 (una animación de especial: jojo, flexion, carga…)
 //    victoria   (opcional) pose al ganar: 0 puño arriba, 1 brazos en V, 2 bíceps, 3 brazos cruzados (si no, según su estilo)
+//    oculto     (opcional) true: no sale en la selección ni en la torre (los muñecos de ejemplo)
 //
 //  Entradas (input) — relativas a hacia dónde mira el peleador:
 //    →  adelante    ←  atrás    ↓  abajo    ↑  arriba
@@ -71,6 +72,7 @@ export const JUEGO = {
   titulo: 'FXCKS KOMBAT',
   rondasParaGanar: 2,
   tiempoRonda: 99,
+  torre: 7,           // ARCADE · LA TORRE: cuántas peleas (la última es el jefe final)
   sangre: true,
   voz: true,          // narrador con voz del navegador
 };
@@ -336,6 +338,7 @@ export const PELEADORES = [
   {
     id: 'fuego',
     nombre: 'BRASA',
+    oculto: true,          // muñeco de ejemplo: no sale en la selección (sirve de plantilla)
     color: '#d8401f',
     modelo: null,          // ej: 'assets/peleadores/fuego/modelo.fbx'
     retrato: null,         // ej: 'assets/peleadores/fuego/retrato.png'
@@ -355,6 +358,7 @@ export const PELEADORES = [
   {
     id: 'hielo',
     nombre: 'ESCARCHA',
+    oculto: true,
     color: '#2f7fd8',
     modelo: null, retrato: null,
     escala: 1, rotacionY: 0,
@@ -373,6 +377,7 @@ export const PELEADORES = [
   {
     id: 'rayo',
     nombre: 'VOLTIO',
+    oculto: true,
     color: '#e3c21a',
     modelo: null, retrato: null,
     escala: 1, rotacionY: 0,
@@ -391,6 +396,7 @@ export const PELEADORES = [
   {
     id: 'tanque',
     nombre: 'MOLE',
+    oculto: true,
     color: '#4c8a2e',
     modelo: null, retrato: null,
     escala: 1.08, rotacionY: 0,

@@ -60,8 +60,10 @@ export function unlockAudio() {
 }
 
 // attack > 0: el sonido crece en vez de empezar de golpe (para los "whoosh" que suben)
+// (un número inválido en un sonido no debe tronar el juego: WebAudio avienta un error y se detenía todo)
+const ok = (...xs) => xs.every((x) => x == null || Number.isFinite(x));
 function noise(dur, freq, q = 1, gain = 1, type = 'lowpass', sweepTo = null, attack = 0) {
-  if (!ctx) return;
+  if (!ctx || !ok(dur, freq, q, gain, sweepTo, attack)) return;
   const t = ctx.currentTime;
   const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
   const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
@@ -74,7 +76,7 @@ function noise(dur, freq, q = 1, gain = 1, type = 'lowpass', sweepTo = null, att
 }
 
 function tone(freq, dur, type = 'sine', gain = 0.5, slideTo = null, attack = 0) {
-  if (!ctx) return;
+  if (!ctx || !ok(freq, dur, gain, slideTo, attack)) return;
   const t = ctx.currentTime;
   const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t);
   if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
@@ -249,7 +251,7 @@ export const sfx = {
   // ---- Abel (guitarra)
   strum: () => { [82.4, 123.5, 164.8, 207.7, 246.9, 329.6].forEach((f, i) => setTimeout(() => tone(f * vary() ** 0.1, 0.9, 'triangle', 0.07), i * 14)); noise(0.06, 3000, 1, 0.15, 'bandpass'); },
   powerChord: () => { chord([82.4, 123.5, 164.8], 1.6, 0.34, 2800, 0.008, 'square'); noise(0.9, 1600, 0.5, 0.18, 'lowpass', 300); },
-  note: (i = 0) => { const f = [330, 392, 440, 494, 587, 659, 784, 880][i % 8]; tone(f, 0.32, 'sawtooth', 0.05, f * 0.99); tone(f * 2, 0.2, 'triangle', 0.03); },
+  note: (i = 0) => { const f = [330, 392, 440, 494, 587, 659, 784, 880][((Math.floor(i) % 8) + 8) % 8]; tone(f, 0.32, 'sawtooth', 0.05, f * 0.99); tone(f * 2, 0.2, 'triangle', 0.03); },
   feedback: () => tone(1760, 1.1, 'sine', 0.06, 2093, 0.5),
   lullaby: () => [1319, 1319, 1568, 1319, 1319, 1568, 1319, 1568, 2093, 1976, 1760, 1760, 1568].forEach((f, i) => setTimeout(() => { tone(f, 0.9, 'sine', 0.09); tone(f * 2, 0.4, 'sine', 0.02); }, i * 240 + (i > 5 ? 120 : 0))),
   cry: () => { for (let i = 0; i < 2; i++) setTimeout(() => { tone(560, 0.75, 'sawtooth', 0.07, 470); tone(1120, 0.7, 'triangle', 0.03, 900); noise(0.7, 1400, 2, 0.08, 'bandpass'); }, i * 820); },

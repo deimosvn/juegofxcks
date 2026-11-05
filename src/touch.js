@@ -186,9 +186,14 @@ export function initTouch(game) {
     }
     ui.fatal.classList.toggle('hidden', !(touch && f && game.phase === 'finish' && game.winner === f && f.fatality));
     // en una sala la siguiente pelea se arma sola
-    const end = fight && game.phase === 'matchEnd' && game.phaseT > 120 && !watch && !game.online?.turno;
+    // (en la torre: SIGUIENTE o REINTENTAR; con el ¡CAMPEÓN! en pantalla, su propio botón)
+    const end = fight && game.phase === 'matchEnd' && game.phaseT > 120 && !watch && !game.online?.turno && !game.campeonOn;
     ui.end.classList.toggle('hidden', !end);
-    if (end) { const online = game.mode === 'online'; setText(ui.ok, online ? 'REVANCHA' : 'CONTINUAR'); setText(ui.menu, online ? 'SALIR' : 'MENÚ'); }
+    if (end) {
+      const online = game.mode === 'online', A = game.arcade?.rivales ? game.arcade : null;
+      setText(ui.ok, online ? 'REVANCHA' : A ? (game.winnerSide !== 0 ? 'REINTENTAR' : A.i + 1 >= A.rivales.length ? '¡EL FINAL!' : 'SIGUIENTE') : 'CONTINUAR');
+      setText(ui.menu, online || A ? 'SALIR' : 'MENÚ');
+    }
     ui.rotate.classList.toggle('hidden', !(touch && fight && innerHeight > innerWidth));
     setText(ui.back, game.paused ? 'SEGUIR' : '← VOLVER');
     ui.quit.classList.toggle('hidden', !game.paused);

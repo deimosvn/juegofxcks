@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { JUEGO, PELEADORES } from './roster.js';
-import { FighterModel, loadAsset, texturas } from './model.js';
+// los que se pueden elegir (los muñecos de ejemplo, `oculto`, no salen; en línea se buscan por id en PELEADORES)
+const ELEGIBLES = PELEADORES.filter((d) => !d.oculto);
+// luz de borde (color, fuerza) y relleno de los peleadores en cada escenario (model.js luzPeleador)
+const LUZ_PELEADOR = { dia: ['#ffe2c4', 0.32, 0.03], casachuy: ['#b8d0ff', 0.55, 0.13], templo: ['#c8d8ff', 0.45, 0.09] };
+// ARCADE · LA TORRE: el jefe final pelea en el Templo. El récord (con quién la ganaste y en qué dificultad) se guarda aquí
+const JEFE_ESCENARIO = 'templo';
+const TORRE_ESPERA = 4500;   // ms en la pantalla de la torre antes de que empiece la pelea (con ENTER, ya)
+const TORRE_KEY = 'kombate-torre';
+const leerTorre = () => { try { return JSON.parse(localStorage.getItem(TORRE_KEY)) || {}; } catch { return {}; } };
+const iniciales = (n) => n.split(/\s+/).map((w) => w[0]).join('').slice(0, 2);
+import { FighterModel, loadAsset, texturas, luzPeleador } from './model.js';
 import { styleOf } from './anim.js';
 import { FatalDirector, ROBOTS } from './fatal.js';
 import './cine-nuevos.js';
@@ -87,6 +97,7 @@ class Game {
     this.cpu = null; this.session = null; this.online = null; this.net = null; this.salas = null;
     this.props = new Map();   // modelos que usan los especiales (el Camaro de Alan), ya cargados
     this.screen = 'menu'; this.menuIdx = 0; this.mode = 'cpu';
+    this.arcade = null; this.campeonOn = false;   // ARCADE · LA TORRE (la partida en curso) y su pantalla final
     this.fxSeen = new Map(); this.fxCount = new Map();
     this.effects.gate = (name, args) => this.fxAllow(name, args);
     audioState.gate = (name, args) => this.fxAllow(name, args);
@@ -108,10 +119,11 @@ class Game {
     addEventListener('keydown', unlock); addEventListener('pointerdown', unlock);
 
     this.last = performance.now(); this.acc = 0;
-    const frame = (t) => { this.loop(t); requestAnimationFrame(frame); };
+    // un error en un cuadro (un sonido, un efecto…) no debe congelar el juego: se anota y sigue el siguiente
+    const frame = (t) => { this.safeLoop(t); requestAnimationFrame(frame); };
     requestAnimationFrame(frame);
     // En línea el juego no puede pararse si la pestaña queda en segundo plano
-    setInterval(() => { if (document.hidden && this.session) this.loop(performance.now()); }, 100);
+    setInterval(() => { if (document.hidden && this.session) this.safeLoop(performance.now()); }, 100);
     // liga de una sala (?sala=...): directo al modo en línea y a esa sala
     const sala = new URLSearchParams(location.search).get('sala');
     if (sala) { this.pendingSala = sala; setTimeout(() => this.openLobby(), 0); }
@@ -330,6 +342,9 @@ class Game {
       case 'ko':
         if (this.phaseT > 70 && ['dead', 'knockdown'].includes(this.loser.state)) {
           this.winner.wins++;
+          // ARCADE: rondas que ganaste sin que te pegaran (solo se cuentan, no cambian la pelea)
+          const S = this.arcade?.stats;
+          if (S && !this.session && this.winnerSide === 0 && this.winner.health >= this.winner.maxHealth) S.perfectas++;
           if (this.winner.wins >= need) {
             this.loser.setState('dizzy', 'mareado');
             this.loser.health = 0;
@@ -361,12 +376,17 @@ class Game {
     this.phase = 'matchEnd'; this.phaseT = 0;
     this.winner.setState('victory', 'victoria');
     sfx.cheer();   // la fanfarria la toca la música (music.js)
+    // ARCADE: tus fatalities y brutalities (solo se cuentan para la pantalla final)
+    const S = this.arcade?.stats;
+    if (S && !this.session && this.winnerSide === 0 && this.fatal?.tipo) S[this.fatal.brutal ? 'brutalities' : 'fatalities']++;
   }
 
   // ================================================================== PANTALLAS
   show(screen) {
     this.screen = screen;
-    for (const id of ['menu', 'select', 'controls', 'lobby', 'stages', 'arena', 'options']) $(id).classList.toggle('hidden', id !== screen);
+    if (screen === 'menu') this.arcade = null;   // de regreso al menú se acaba la torre (si había)
+    if (screen !== 'torre') clearTimeout(this.torreT);
+    for (const id of ['menu', 'select', 'controls', 'lobby', 'stages', 'arena', 'options', 'torre']) $(id).classList.toggle('hidden', id !== screen);
     $('hud').classList.toggle('hidden', screen !== 'fight');
     if (screen !== 'menu') this.leaveSplash(true);   // la liga de una sala se salta el título
     clearKeyEdges();
@@ -396,7 +416,9 @@ class Game {
     if (mode === 'controls') { this.showControls(false); return; }
     if (mode === 'options') { this.openOptions(); return; }
     if (mode === 'online') { this.openLobby(); return; }
-    this.mode = mode;
+    // ARCADE: es contra la CPU, pero los rivales los pone la torre
+    this.arcade = mode === 'arcade' ? {} : null;
+    this.mode = mode === 'arcade' ? 'cpu' : mode;
     this.openSelect();
   }
 
@@ -476,7 +498,7 @@ class Game {
   buildSelect() {
     const grid = $('grid');
     grid.innerHTML = '';
-    this.cards = PELEADORES.map((def, i) => {
+    this.cards = ELEGIBLES.map((def, i) => {
       const c = document.createElement('div');
       c.className = 'card';
       c.style.background = `linear-gradient(160deg, ${def.color}, #111 85%)`;
@@ -495,7 +517,7 @@ class Game {
   }
 
   // Dificultad de la CPU (en el panel de la CPU; también en OPCIONES)
-  get cpuLevel() { return DIFICULTADES[ajustes.dificultad] || DIFICULTADES.normal; }
+  get cpuLevel() { return DIFICULTADES[this.arcade?.nivel || ajustes.dificultad] || DIFICULTADES.normal; }
   renderDiff(pop = true) {
     const D = this.cpuLevel, el = $('diff-val');
     el.textContent = D.nombre;
@@ -513,7 +535,7 @@ class Game {
   localSelectSide() { return this.mode === 'online' ? this.online.side : 0; }
 
   openSelect() {
-    const n = PELEADORES.length;
+    const n = ELEGIBLES.length;
     this.sel = { cur: [0, Math.min(1, n - 1)], locked: [false, false] };
     if (this.mode === 'online') {
       $('ptag1').textContent = this.online.side === 0 ? 'TÚ' : esc(this.online.peerName);
@@ -523,9 +545,25 @@ class Game {
       $('ptag2').textContent = this.mode === 'cpu' ? 'CPU' : 'P2';
     }
     $('diff').classList.toggle('hidden', this.mode !== 'cpu');
+    $('select').classList.toggle('arcade', !!this.arcade);
+    this.markCrowns();
     this.renderDiff(false);
     this.show('select');
     this.renderSelect();
+  }
+
+  // corona en los que ya ganaron LA TORRE, del color de la dificultad más alta en que la ganaron
+  markCrowns() {
+    const rec = leerTorre();
+    this.cards.forEach((c, i) => {
+      c.querySelector('.crown')?.remove();
+      const k = rec[ELEGIBLES[i].id];
+      if (k == null || !NIVELES[k]) return;
+      const D = DIFICULTADES[NIVELES[k]], el = document.createElement('div');
+      el.className = 'crown'; el.textContent = '♛'; el.title = `Ganó LA TORRE en ${D.nombre}`;
+      el.style.setProperty('--dc', D.color);
+      c.appendChild(el);
+    });
   }
 
   clickCard(i) {
@@ -542,33 +580,40 @@ class Game {
 
   selectMoved(p) {
     sfx.select(); this.renderSelect();
-    if (this.mode === 'online') this.online.link.sendCtrl({ t: 'cursor', id: PELEADORES[this.sel.cur[p]].id });
+    if (this.mode === 'online') this.online.link.sendCtrl({ t: 'cursor', id: ELEGIBLES[this.sel.cur[p]].id });
   }
 
   lock(p) {
     this.sel.locked[p] = true; sfx.lockIn();
-    announce(PELEADORES[this.sel.cur[p]].nombre);
+    announce(ELEGIBLES[this.sel.cur[p]].nombre);
     if (this.mode === 'online') {
-      this.online.link.sendCtrl({ t: 'pick', id: PELEADORES[this.sel.cur[p]].id });
+      this.online.link.sendCtrl({ t: 'pick', id: ELEGIBLES[this.sel.cur[p]].id });
       this.renderSelect();
       this.checkOnlinePicks();
       return;
     }
+    // en la torre los rivales ya están puestos: de aquí a verla
+    if (this.arcade && p === 0) {
+      this.renderSelect();
+      const d1 = ELEGIBLES[this.sel.cur[0]];
+      setTimeout(() => this.startArcade(d1), 600);
+      return;
+    }
     if (this.mode === 'cpu' && p === 0) {
-      const others = PELEADORES.map((_, i) => i).filter((i) => i !== this.sel.cur[0]);
+      const others = ELEGIBLES.map((_, i) => i).filter((i) => i !== this.sel.cur[0]);
       this.sel.cur[1] = others.length ? others[Math.random() * others.length | 0] : 0;
       this.sel.locked[1] = true;
     }
     this.renderSelect();
     if (this.sel.locked[0] && this.sel.locked[1]) {
-      const d1 = PELEADORES[this.sel.cur[0]], d2 = PELEADORES[this.sel.cur[1]];
+      const d1 = ELEGIBLES[this.sel.cur[0]], d2 = ELEGIBLES[this.sel.cur[1]];
       setTimeout(() => this.openStageSelect(true, (id) => this.versusThenFight(d1, d2, id)), 600);
     }
   }
 
   // Presentación (VS) mientras cargan los modelos; la pelea empieza cuando ya se vio completa
-  async versusThenFight(d1, d2, stageId) {
-    const shown = this.versus(d1, d2, stageId, ['JUGADOR 1', this.mode === 'cpu' ? `CPU · ${this.cpuLevel.nombre}` : 'JUGADOR 2']);
+  async versusThenFight(d1, d2, stageId, names = null) {
+    const shown = this.versus(d1, d2, stageId, names || ['JUGADOR 1', this.mode === 'cpu' ? `CPU · ${this.cpuLevel.nombre}` : 'JUGADOR 2']);
     const models = this.loadModels(d1, d2, true);
     await shown;
     $('vs-status').textContent = 'Cargando peleadores…';   // solo se ve si todavía no terminan
@@ -619,7 +664,7 @@ class Game {
     });
     for (const p of [0, 1]) {
       const show = p === 0 || showP2;
-      const def = PELEADORES[s.cur[p]];
+      const def = ELEGIBLES[s.cur[p]];
       // retrato grande: se cambia (con un destello) solo cuando cambia el peleador señalado
       const face = $(`pface${p + 1}`), fid = show ? def.id : '';
       if (face.dataset.id !== fid) {
@@ -634,11 +679,18 @@ class Game {
       $(`pspec${p + 1}`).innerHTML = show ? list([...def.especiales, ...extra]) + (def.especialesTitan ? `<p class="suit">Transformado (MODO TITÁN):</p>${list(def.especialesTitan)}` : '')
         + (s.locked[p] ? '<p class="ready">¡LISTO!</p>' : '') : '';
     }
+    // ARCADE: del otro lado no hay rival que elegir, está la torre
+    if (this.arcade) {
+      const n = Math.min(JUEGO.torre || 7, Math.max(1, ELEGIBLES.length - 1));
+      $('pick2').textContent = 'LA TORRE';
+      $('pspec2').innerHTML = `<b>${n} peleas seguidas</b> contra tus amigos, cada una más difícil.<br>La última, contra el <b>JEFE FINAL</b> en el Templo.<br>Si pierdes, la vuelves a intentar.`
+        + (s.locked[0] ? '<p class="ready">¡A LA TORRE!</p>' : '');
+    }
   }
 
   selectInput() {
     const s = this.sel;
-    const n = PELEADORES.length;
+    const n = ELEGIBLES.length;
     const cols = Math.max(1, Math.round($('grid').clientWidth / 130));
     const nav = (p, l, r, u, d, ok) => {
       if (s.locked[p]) return;
@@ -730,6 +782,9 @@ class Game {
     this.stage = createStage(id, this.scene, this.effects);
     this.stageId = id;
     this.post.setStage(id);
+    // luz de borde y relleno de los peleadores: de noche más fuerte y azulada (luna), de día cálida y suave
+    const L = LUZ_PELEADOR[id] || LUZ_PELEADOR.dia;
+    luzPeleador.color.value.set(L[0]); luzPeleador.borde.value = L[1]; luzPeleador.relleno.value = L[2];
   }
 
   async startMatch(def1, def2, preloaded = null, stageId = null) {
@@ -745,12 +800,14 @@ class Game {
     }
     this.fighters = [new Fighter(def1, 0, this), new Fighter(def2, 1, this)];
     this.inputs = [new PlayerInput(0), new PlayerInput(1)];
-    this.cpu = this.mode === 'cpu' ? new CPU(this.fighters[1], this.inputs[1], this, ajustes.dificultad) : null;
+    const A = this.arcade?.rivales ? this.arcade : null;   // en la torre la dificultad la pone cada pelea
+    this.cpu = this.mode === 'cpu' ? new CPU(this.fighters[1], this.inputs[1], this, A?.nivel || ajustes.dificultad) : null;
     this.frame = 0; this.round = 0; this.projSeq = 0; this.slowmo = 0;
     this.fxSeen.clear();
     this.clearViews();
     const o = this.online;
     this.hud.start([def1, def2], this.mode === 'online' && o ? (o.side === 0 ? [o.myName, o.peerName] : [o.peerName, o.myName])
+      : A ? [`TORRE ${A.i + 1}/${A.rivales.length}`, `${this.esJefe() ? 'JEFE FINAL' : 'CPU'} · ${this.cpuLevel.nombre}`]
       : this.mode === 'cpu' ? ['', `CPU · ${this.cpuLevel.nombre}`] : []);
     this.stats = { hits: [0, 0], combo: [0, 0], specials: [0, 0] };
     this.firstHitRound = 0; this.viewPhase = null; this.introCue = 0;
@@ -776,10 +833,141 @@ class Game {
     $('results').classList.add('hidden'); this.resultsOn = false;
     $('fade').style.opacity = 0;
     this.hideVersus();
+    if (this.campeonOn) { this.campeonOn = false; document.body.classList.remove('campeon'); $('campeon').classList.add('hidden'); $('camp-confeti').innerHTML = ''; }
     this.cine.reset();
     Object.assign(this.post.fx, { aberr: 0, desat: 0, danger: 0, tintAmt: 0, glitch: 0, vignette: 0.4, bloom: 1 });
     this.aberr = 0; this.fovKick = 0; this.camRoll = 0;
     this.renderer.toneMappingExposure = 1;
+  }
+
+  // ================================================================== ARCADE · LA TORRE
+  // Peleas seguidas contra los demás (revueltos), cada vez más difícil; la última es el JEFE FINAL en el
+  // Templo. Si pierdes, la reintentas; al ganarlas todas, ¡CAMPEÓN! (y se guarda con quién la ganaste).
+  // Es solo de esta pantalla (nunca en línea): no toca la simulación, solo la arma pelea por pelea.
+  esJefe() { const A = this.arcade; return !!A?.rivales && A.rivales.length > 1 && A.i === A.rivales.length - 1; }
+
+  startArcade(p1) {
+    const A = this.arcade;
+    if (!A || this.screen !== 'select' || !this.sel.locked[0]) return;   // (se arrepintió con ESC)
+    const pool = ELEGIBLES.filter((d) => d.id !== p1.id);
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const rivales = pool.length ? pool.slice(0, JUEGO.torre || 7) : [p1];
+    const N = rivales.length, base = Math.max(0, NIVELES.indexOf(ajustes.dificultad)), top = NIVELES.length - 1;
+    // el primer tercio, un nivel abajo del que elegiste; luego el tuyo; luego uno arriba; el jefe, dos arriba
+    const paso = (i) => (N > 1 && i === N - 1 ? 2 : i < N / 3 ? -1 : i < (2 * N) / 3 ? 0 : 1);
+    const niveles = rivales.map((_, i) => NIVELES[Math.min(top, Math.max(0, base + paso(i)))]);
+    // escenarios al azar sin repetir el de la pelea anterior; el jefe final, en el Templo
+    const ids = STAGES.map((s) => s.id), normales = ids.filter((id) => id !== JEFE_ESCENARIO);
+    const escenarios = [];
+    for (let i = 0; i < N; i++) {
+      if (N > 1 && i === N - 1 && ids.includes(JEFE_ESCENARIO)) { escenarios.push(JEFE_ESCENARIO); continue; }
+      const P = normales.length ? normales : ids, L = P.length > 1 ? P.filter((id) => id !== escenarios[i - 1]) : P;
+      escenarios.push(L[Math.random() * L.length | 0]);
+    }
+    Object.assign(A, { p1, rivales, niveles, escenarios, i: 0, base, nivel: null, t0: performance.now(),
+      stats: { perfectas: 0, fatalities: 0, brutalities: 0, reintentos: 0 } });
+    this.openTower('inicio');
+  }
+
+  // La torre: los rivales de abajo (el primero) hacia arriba (el jefe). como: 'inicio' | 'subio' (ganaste:
+  // tu retrato sube al siguiente escalón) | 'otra' (perdiste: la misma pelea otra vez)
+  openTower(como) {
+    const A = this.arcade, N = A.rivales.length, i = A.i, r = A.rivales[i], jefe = this.esJefe();
+    const D = DIFICULTADES[A.niveles[i]], st = STAGES.find((s) => s.id === A.escenarios[i]);
+    const paint = (el, d) => {
+      el.style.setProperty('--img', d.retrato ? cssUrl(d.retrato) : 'none');
+      el.style.setProperty('--fc', d.color || '#444');
+      el.textContent = d.retrato ? '' : iniciales(d.nombre);
+    };
+    const list = $('torre-lista');
+    list.innerHTML = '';
+    A.rivales.forEach((d, k) => {
+      const li = document.createElement('li'), Dk = DIFICULTADES[A.niveles[k]], boss = N > 1 && k === N - 1;
+      li.className = [k < i && 'done', k === i && 'cur', boss && 'jefe'].filter(Boolean).join(' ');
+      li.style.setProperty('--dc', Dk.color); li.style.setProperty('--k', k);
+      li.innerHTML = `<div class="tmed"></div><span class="tn">${esc(d.nombre)}</span><i class="tl">${boss ? 'JEFE · ' : ''}${esc(Dk.nombre)}</i>`;
+      paint(li.querySelector('.tmed'), d);
+      list.appendChild(li);
+    });
+    // tu retrato junto a tu escalón; si ganaste, sube del anterior al nuevo
+    const yo = document.createElement('div');
+    yo.className = 'tyo';
+    paint(yo, A.p1);
+    yo.style.setProperty('--k', como === 'subio' ? i - 1 : i);
+    list.appendChild(yo);
+    paint($('torre-yo'), A.p1);
+    $('torre-yo-n').textContent = A.p1.nombre;
+    paint($('torre-rival'), r);
+    $('torre-pelea').textContent = jefe ? '☠ JEFE FINAL' : `PELEA ${i + 1} DE ${N}`;
+    $('torre-rival-n').textContent = r.nombre;
+    const lvl = $('torre-nivel');
+    lvl.textContent = D.nombre; lvl.style.setProperty('--dc', D.color);
+    $('torre-esc').textContent = st ? st.nombre : '';
+    $('torre-titulo').textContent = como === 'otra' ? '¡OTRA VEZ!' : 'LA TORRE';
+    $('torre').classList.toggle('jefe', jefe);
+    this.show('torre');
+    sfx.swoosh();
+    if (como === 'subio') {
+      void yo.offsetWidth;
+      setTimeout(() => yo.style.setProperty('--k', i), 350);
+      setTimeout(() => { if (this.screen === 'torre') { sfx.impact(); this.vibrate(40); } }, 1100);
+    }
+    const say = jefe ? '¡Jefe final!' : como === 'inicio' ? 'La torre' : como === 'otra' ? '¡Otra vez!' : '';
+    if (say) setTimeout(() => { if (this.screen === 'torre') announce(say); }, 450);
+    // sigue sola a la pelea en unos segundos (o ya, con ENTER o tocando ¡A PELEAR!)
+    const bar = $('torre-bar');
+    bar.style.setProperty('--t', `${TORRE_ESPERA}ms`);
+    bar.classList.remove('run'); void bar.offsetWidth; bar.classList.add('run');
+    clearTimeout(this.torreT);
+    this.torreT = setTimeout(() => this.arcadeFight(), TORRE_ESPERA);
+  }
+
+  arcadeFight() {
+    clearTimeout(this.torreT);
+    const A = this.arcade;
+    if (this.screen !== 'torre' || !A?.rivales || this.versusOn) return;
+    A.nivel = A.niveles[A.i];
+    sfx.confirm();
+    const N = A.rivales.length;
+    this.versusThenFight(A.p1, A.rivales[A.i], A.escenarios[A.i],
+      [`LA TORRE · ${A.i + 1} DE ${N}`, `${this.esJefe() ? 'JEFE FINAL' : 'CPU'} · ${this.cpuLevel.nombre}`]);
+  }
+
+  // Al terminar una pelea de la torre: ganaste → al siguiente escalón (o al final); perdiste → otra vez
+  arcadeMatchInput() {
+    const A = this.arcade;
+    if (this.campeonOn) { if (consumeKey('Enter', 'KeyF', 'KeyK', 'Space', 'Escape')) { sfx.confirm(); this.quitMatch(); this.show('menu'); } return; }
+    if (consumeKey('Enter', 'KeyF', 'KeyK', 'Space')) {
+      const won = this.winnerSide === 0;
+      if (won && A.i + 1 >= A.rivales.length) { this.showChampion(); return; }
+      if (won) A.i++; else A.stats.reintentos++;
+      this.quitMatch();
+      this.openTower(won ? 'subio' : 'otra');
+    } else if (consumeKey('Escape')) { this.quitMatch(); this.show('menu'); }
+  }
+
+  // ¡CAMPEÓN!: encima de la vuelta de cámara al que ganó (la pelea sigue en su pose de victoria)
+  showChampion() {
+    const A = this.arcade, D = DIFICULTADES[NIVELES[A.base]] || DIFICULTADES.normal;
+    const secs = Math.round((performance.now() - A.t0) / 1000);
+    this.campeonOn = true;
+    document.body.classList.add('campeon');
+    // récord: con quién la ganaste y la dificultad más alta
+    const rec = leerTorre();
+    if (!(rec[A.p1.id] >= A.base)) { rec[A.p1.id] = A.base; try { localStorage.setItem(TORRE_KEY, JSON.stringify(rec)); } catch { /* sin almacenamiento */ } }
+    const dif = $('camp-dif');
+    dif.textContent = D.nombre; dif.style.setProperty('--dc', D.color);
+    $('camp-n').textContent = A.p1.nombre;
+    $('camp-frase').textContent = A.p1.frase ? `“${A.p1.frase}”` : '';
+    const S = A.stats, row = (l, v) => `<tr><td>${l}</td><td>${v}</td></tr>`;
+    $('camp-stats').innerHTML = row('PELEAS GANADAS', A.rivales.length) + row('RONDAS PERFECTAS', S.perfectas) + row('FATALITIES', S.fatalities)
+      + row('BRUTALITIES', S.brutalities) + row('REINTENTOS', S.reintentos) + row('TIEMPO', `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`);
+    // confeti dorado, rojo, azul…
+    $('camp-confeti').innerHTML = Array.from({ length: 46 }, () => `<i style="left:${(Math.random() * 100).toFixed(1)}%;animation-delay:${(Math.random() * 3).toFixed(2)}s;`
+      + `animation-duration:${(2.6 + Math.random() * 2.4).toFixed(2)}s;--r:${Math.round(Math.random() * 720 - 360)}deg;--h:${[45, 0, 210, 120, 300, 30][Math.random() * 6 | 0]}"></i>`).join('');
+    $('campeon').classList.remove('hidden');
+    sfx.cheer(); sfx.perfect(); this.vibrate(150);
+    announce('¡Campeón!');
   }
 
   // ================================================================== EN LÍNEA
@@ -955,14 +1143,15 @@ class Game {
     const peer = 1 - o.side;
     switch (m.t) {
       case 'cursor': {
-        const i = PELEADORES.findIndex((d) => d.id === m.id);
+        const i = ELEGIBLES.findIndex((d) => d.id === m.id);
         if (i >= 0 && this.screen === 'select' && !this.sel.locked[peer]) { this.sel.cur[peer] = i; this.renderSelect(); }
         break;
       }
       case 'pick': {
-        const i = PELEADORES.findIndex((d) => d.id === m.id);
-        if (i < 0) { this.toast('Tu rival tiene un peleador que tú no tienes. Actualicen el juego.'); break; }
-        if (this.screen === 'select') { this.sel.cur[peer] = i; this.sel.locked[peer] = true; this.renderSelect(); }
+        if (!PELEADORES.some((d) => d.id === m.id)) { this.toast('Tu rival tiene un peleador que tú no tienes. Actualicen el juego.'); break; }
+        // (con una versión vieja puede elegir un muñeco de ejemplo: se acepta aunque aquí no tenga tarjeta)
+        const i = ELEGIBLES.findIndex((d) => d.id === m.id);
+        if (this.screen === 'select') { if (i >= 0) this.sel.cur[peer] = i; this.sel.locked[peer] = true; this.renderSelect(); }
         o.picks[peer] = m.id;
         this.checkOnlinePicks();
         break;
@@ -986,7 +1175,7 @@ class Game {
 
   checkOnlinePicks() {
     const o = this.online;
-    o.picks[o.side] = this.sel.locked[o.side] ? PELEADORES[this.sel.cur[o.side]].id : null;
+    o.picks[o.side] = this.sel.locked[o.side] ? ELEGIBLES[this.sel.cur[o.side]].id : null;
     if (!o.picks[0] || !o.picks[1] || o.loading) return;
     o.loading = true;
     o.defs = [PELEADORES.find((d) => d.id === o.picks[0]), PELEADORES.find((d) => d.id === o.picks[1])];
@@ -1165,6 +1354,13 @@ class Game {
   }
 
   // ================================================================== BUCLE
+  safeLoop(now) {
+    try { this.loop(now); } catch (err) {
+      this.loopErrors = (this.loopErrors || 0) + 1;
+      if (this.loopErrors <= 5) console.error('Error en el cuadro (el juego sigue):', err);
+    }
+  }
+
   loop(now) {
     const dt = Math.min(document.hidden ? 1 : 0.1, Math.max(0, (now - this.last) / 1000)); this.last = now;
     this.handleUI();
@@ -1234,6 +1430,10 @@ class Game {
       if (consumeKey('Enter', 'KeyF', 'Space', 'KeyK')) this.menuAccept(this.menuIdx);
     } else if (this.screen === 'select') this.selectInput();
     else if (this.screen === 'stages') this.stageInput();
+    else if (this.screen === 'torre') {
+      if (consumeKey('Enter', 'KeyF', 'Space', 'KeyK')) this.arcadeFight();
+      else if (consumeKey('Escape')) { sfx.back(); this.show('menu'); }
+    }
     else if (this.screen === 'arena') {
       if (consumeKey('Escape')) this.salas?.leave().then(() => this.openLobby());
       if (consumeKey('Enter', 'KeyV')) this.salas?.watchNow();
@@ -1286,7 +1486,8 @@ class Game {
         return;
       }
       if (this.phase === 'matchEnd' && this.phaseT > 120) {
-        if (consumeKey('Enter', 'KeyF', 'KeyK', 'Space')) { this.quitMatch(); this.openSelect(); }
+        if (this.arcade?.rivales) this.arcadeMatchInput();
+        else if (consumeKey('Enter', 'KeyF', 'KeyK', 'Space')) { this.quitMatch(); this.openSelect(); }
         else if (consumeKey('Escape')) { this.quitMatch(); this.show('menu'); }
       } else if (consumeKey('Escape')) { this.paused = true; sfx.pauseIn(); this.showControls(true); }
     }
@@ -1985,8 +2186,10 @@ class Game {
       }
       case 'matchEnd': {
         const room = this.mode === 'watch' || !!this.online?.turno;
-        const hint = room ? (t > 60 ? 'Siguiente pelea en un momento…' : '')
-          : t > 120 && !isTouch() ? (this.mode === 'online' ? 'ENTER revancha · ESC salir' : 'ENTER para continuar · ESC menú') : '';
+        const A = this.arcade?.rivales ? this.arcade : null;
+        const keys = A ? (w.side !== 0 ? 'ENTER reintentar · ESC salir' : A.i + 1 >= A.rivales.length ? 'ENTER ¡a ver el final!' : 'ENTER siguiente pelea · ESC salir')
+          : this.mode === 'online' ? 'ENTER revancha · ESC salir' : 'ENTER para continuar · ESC menú';
+        const hint = room ? (t > 60 ? 'Siguiente pelea en un momento…' : '') : t > 120 && !isTouch() ? keys : '';
         return { text: `GANA ${w.def.nombre}`, sub: [perfect ? PERFECT : '', w.def.frase, hint].filter(Boolean), perfect, say: `${w.def.nombre} gana` };
       }
     }
@@ -2093,4 +2296,4 @@ window.game = new Game();
 initTouch(window.game);
 registerServiceWorker();
 // precargar en segundo plano los modelos de los peleadores
-for (const d of PELEADORES) for (const url of [d.modelo, d.traje?.modelo, d.robots?.modelo, ...(d.especiales || []).map((s) => s.modelo)]) if (url) loadAsset(url).catch(() => {});
+for (const d of ELEGIBLES) for (const url of [d.modelo, d.traje?.modelo, d.robots?.modelo, ...(d.especiales || []).map((s) => s.modelo)]) if (url) loadAsset(url).catch(() => {});
