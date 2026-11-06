@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { V, clamp01, smooth, S, HERO } from './cine-util.js';
+import { V, clamp01, smooth, S, O, HERO } from './cine-util.js';
 import { makeFish } from './props.js';
 import { camaro as buildCamaro } from './stages.js';
+import { DESINSTALAR } from './brutalidades.js';
 
 // =====================================================================
 //  BRUTALITIES de cine (solo se ve: los tiempos están en brutalidades.js)
@@ -22,31 +23,194 @@ const eo = (u) => 1 - (1 - clamp01(u)) ** 2;
 const seeded = (s) => () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
 const loserModel = (d) => d.g.viewModel(d.g.loserSide);
 
-// ---------------------------------------------------------------- Diego: la barra de "desinstalando"
-function barSprite() {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+// ---------------------------------------------------------------- Diego: DESINSTALACIÓN
+// La ventana de "DIEGO.OS" (en la pantalla, arriba y del lado de Diego): primero analiza al otro, luego borra sus
+// "archivos" uno por uno y al final sale el ERROR 404 con su botón de eliminar. Solo se reescribe cuando cambia.
+const ARCHIVOS = ['brazo_izq.dll', 'brazo_der.dll', 'piernas.sys', 'orgullo.exe', 'cerebro.exe'];
+const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+let dosSide = 'izq';
+// st: { mode: 'scan' | 'del' | 'err', name, scan, pct, del, blink, sel }
+function dosShow(st, side, jitter) {
+  const el = document.getElementById('dos');
+  if (!el) return;
+  el.classList.add('show'); el.classList.toggle('err', st.mode === 'err'); el.classList.toggle('der', side === 'der');
+  el.style.translate = jitter ? `${(Math.random() - 0.5) * 8}px ${(Math.random() - 0.5) * 6}px` : '';
+  const key = `${st.mode}|${st.name}|${st.scan}|${st.pct}|${st.del}|${st.blink}|${st.sel}`;
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  const name = escHtml(st.name), bar = (p) => `<div class="prog"><i style="--p:${p}%"></i><b>${p}%</b></div>`;
+  let body;
+  if (st.mode === 'scan') {
+    const rows = [['NOMBRE', name, ''], ['AMENAZA', 'NULA', ''], ['ESTADO', 'DAÑADO', ''], ['SOLUCIÓN', 'DESINSTALAR', 'bad']]
+      .map(([a, b, c], i) => (st.scan >= (i + 1) * 22 ? `<div class="row"><span class="dim">${a}</span><span class="${c}">${b}</span></div>` : '<div class="row">&nbsp;</div>'));
+    body = `<h5>ANALIZANDO OBJETIVO…</h5>${rows.join('')}${bar(st.scan)}`;
+  } else if (st.mode === 'del') {
+    const rows = ARCHIVOS.map((f, i) => {
+      if (st.del > i) return i === 4 ? `<div class="row"><span>✗ ${f}</span><span class="warn">NO ENCONTRADO</span></div>` : `<div class="row"><span>✓ ${f}</span><span class="ok">BORRADO</span></div>`;
+      if (st.del === i) return `<div class="row cur"><span>▸ ${f}</span><span class="tag">${st.blink ? 'borrando…' : ''}</span></div>`;
+      return `<div class="row dim"><span>&nbsp; ${f}</span><span></span></div>`;
+    });
+    body = `<h5>DESINSTALANDO: ${name}</h5>${bar(st.pct)}${rows.join('')}`;
+  } else {
+    body = `<div class="e404"><h4>⚠ ERROR 404</h4><div>RIVAL NO ENCONTRADO</div><div class="q">¿Eliminar los restos de ${name}?</div>`
+      + `<div class="btns"><span class="${st.sel >= 2 ? 'b-ok' : st.sel >= 1 ? 'b-on' : ''}">SÍ</span><span>NO</span></div></div>`;
+  }
+  el.innerHTML = `<div class="dt"><span>DIEGO.OS ▸ DESINSTALADOR</span><span>–&nbsp;□&nbsp;✕</span></div><div class="body">${body}</div>`;
+}
+export function dosHide() {
+  const el = document.getElementById('dos');
+  if (el?.classList.contains('show')) { el.classList.remove('show'); el.dataset.key = ''; }
+}
+
+// el anillo del escáner que lo recorre de la cabeza a los pies
+function scanRing() {
+  const g = new THREE.Group();
+  for (const [r0, r1, c, o] of [[0.42, 0.47, '#4fd8ff', 0.95], [0.51, 0.53, '#bff6ff', 0.55]]) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 48), glowMat(c, o));
+    m.material.side = THREE.DoubleSide; m.rotation.x = -Math.PI / 2; g.add(m);
+  }
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.47, 40), glowMat('#4fd8ff', 0.13));
+  disc.material.side = THREE.DoubleSide; disc.rotation.x = -Math.PI / 2; g.add(disc);
+  return g;
+}
+
+// Cubitos (lo que queda de cada parte que borra): unos cuantos cientos, siempre los mismos (no se crean a media
+// escena). `suck`: los del final, que flotan y luego se van a la papelera
+const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _eu = new THREE.Euler(), _sv = V(), _pv = V(), _col = new THREE.Color();
+function cubePool() {
+  const n = 760;
+  // sólidos (como pixeles): sumados con brillo se hacían una mancha blanca
+  const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#ffffff' }), n);
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  for (let i = 0; i < n; i++) { m.setMatrixAt(i, _m4.makeScale(0, 0, 0)); m.setColorAt(i, _col.set('#4fd8ff')); }
+  m.frustumCulled = false;
+  m.userData = { n, p: new Float32Array(n * 3), v: new Float32Array(n * 3), r: new Float32Array(n * 3), w: new Float32Array(n * 3),
+    s: new Float32Array(n), life: new Float32Array(n), suck: new Uint8Array(n), next: 0, eaten: 0, run: null };
+  return m;
+}
+function resetCubes(pool) {
+  const U = pool.userData;
+  U.life.fill(0); U.next = 0; U.eaten = 0;
+  for (let i = 0; i < U.n; i++) pool.setMatrixAt(i, _m4.makeScale(0, 0, 0));
+  pool.instanceMatrix.needsUpdate = true;
+}
+// n cubitos a lo largo de la línea a → b (un brazo, una pierna) o en una bola alrededor de a (o.ball = radio)
+function spawnCubes(pool, a, b, n, o = {}) {
+  const U = pool.userData, cols = o.colors || ['#4fd8ff'];
+  for (let k = 0; k < n; k++) {
+    const i = U.next, i3 = i * 3; U.next = (U.next + 1) % U.n;
+    const u = Math.random(), j = o.jitter ?? 0.07;
+    let ox = (Math.random() - 0.5) * 2 * j, oy = (Math.random() - 0.5) * 2 * j, oz = (Math.random() - 0.5) * 2 * j;
+    if (o.ball) { const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1), r = o.ball * Math.cbrt(Math.random()); ox = r * Math.sin(ph) * Math.cos(th); oy = r * Math.cos(ph) * (o.tall ?? 1); oz = r * Math.sin(ph) * Math.sin(th); }
+    U.p[i3] = a.x + (b.x - a.x) * u + ox; U.p[i3 + 1] = a.y + (b.y - a.y) * u + oy; U.p[i3 + 2] = a.z + (b.z - a.z) * u + oz;
+    let dx = Math.random() - 0.5, dy = Math.random() - 0.5 + (o.up ?? 0.35), dz = Math.random() - 0.5;
+    if (o.ball) { dx += ox * 2; dy += oy * 2; dz += oz * 2; }   // revienta hacia afuera
+    const len = Math.hypot(dx, dy, dz) || 1, sp = (o.speed ?? 2.5) * (0.35 + Math.random());
+    U.v[i3] = dx / len * sp + (o.push?.x ?? 0); U.v[i3 + 1] = dy / len * sp + (o.push?.y ?? 0); U.v[i3 + 2] = dz / len * sp + (o.push?.z ?? 0);
+    for (let c = 0; c < 3; c++) { U.r[i3 + c] = Math.random() * 6; U.w[i3 + c] = (Math.random() - 0.5) * 14; }
+    U.s[i] = (o.size ?? 0.05) * (0.55 + Math.random() * 0.9);
+    U.life[i] = (o.life ?? 1.4) * (0.7 + Math.random() * 0.6);
+    U.suck[i] = o.suck ? 1 : 0;
+    pool.setColorAt(i, _col.set(cols[(Math.random() * cols.length) | 0]));
+  }
+  pool.instanceColor.needsUpdate = true;
+}
+// se mueven; con `bin` (y `pull` de 0 a 1) los de la papelera dan vueltas alrededor de ella y se meten
+function stepCubes(pool, dt, bin, pull) {
+  const U = pool.userData;
+  for (let i = 0; i < U.n; i++) {
+    if (U.life[i] <= 0) continue;
+    const i3 = i * 3;
+    let shrink = 1;
+    if (U.suck[i] && bin && pull > 0) {
+      // resorte hacia la papelera (siempre llegan) con un remolino alrededor
+      const dx = bin.x - U.p[i3], dy = bin.y - U.p[i3 + 1], dz = bin.z - U.p[i3 + 2], dist = Math.hypot(dx, dy, dz) || 1e-3;
+      const k = 34 * pull, sw = 7 * pull / Math.max(0.5, dist), damp = Math.exp(-(1.5 + 6 * pull) * dt);
+      U.v[i3] = (U.v[i3] + (dx * k - dz / dist * sw) * dt) * damp;
+      U.v[i3 + 1] = (U.v[i3 + 1] + dy * k * dt) * damp;
+      U.v[i3 + 2] = (U.v[i3 + 2] + (dz * k + dx / dist * sw) * dt) * damp;
+      shrink = Math.min(1, 0.2 + dist / 0.9);
+      if (dist < 0.3) { U.life[i] = 0; U.eaten++; } else U.life[i] = Math.max(U.life[i], 0.4);   // no se apagan hasta entrar
+    } else {
+      U.life[i] -= dt;
+      const damp = Math.exp(-(U.suck[i] ? 2.6 : 1.1) * dt);
+      U.v[i3] *= damp; U.v[i3 + 2] *= damp;
+      U.v[i3 + 1] = U.v[i3 + 1] * damp - (U.suck[i] ? 0.5 : 7.5) * dt;   // los del final casi flotan
+    }
+    U.p[i3] += U.v[i3] * dt; U.p[i3 + 1] += U.v[i3 + 1] * dt; U.p[i3 + 2] += U.v[i3 + 2] * dt;
+    if (U.p[i3 + 1] < 0.03) { U.p[i3 + 1] = 0.03; U.v[i3 + 1] *= -0.3; U.v[i3] *= 0.6; U.v[i3 + 2] *= 0.6; }
+    for (let c = 0; c < 3; c++) U.r[i3 + c] += U.w[i3 + c] * dt;
+    const sc = U.life[i] > 0 ? U.s[i] * Math.min(1, U.life[i] / 0.3) * shrink : 0;
+    _q.setFromEuler(_eu.set(U.r[i3], U.r[i3 + 1], U.r[i3 + 2]));
+    pool.setMatrixAt(i, _m4.compose(_pv.set(U.p[i3], U.p[i3 + 1], U.p[i3 + 2]), _q, _sv.set(sc, sc, sc)));
+  }
+  pool.instanceMatrix.needsUpdate = true;
+}
+function eatAll(pool) {   // la papelera se cierra: los que faltaban se van con ella
+  const U = pool.userData;
+  for (let i = 0; i < U.n; i++) if (U.suck[i] && U.life[i] > 0) { U.life[i] = 0; pool.setMatrixAt(i, _m4.makeScale(0, 0, 0)); }
+  pool.instanceMatrix.needsUpdate = true;
+}
+
+// su PUÑO COHETE (el mismo del especial): puño mecánico con antebrazo y propulsor; apunta hacia +x
+function rocketFist() {
+  const g = new THREE.Group();
+  const metal = std('#b9c3cc', { metalness: 0.9, roughness: 0.28 }), dark = std('#555555', { metalness: 0.8, roughness: 0.3 });
+  const add = (geo, mat, f) => { const m = new THREE.Mesh(geo, mat); f(m); g.add(m); return m; };
+  add(new THREE.BoxGeometry(0.2, 0.17, 0.16), metal, (m) => { m.position.x = 0.12; });
+  for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(0.04, 0.035, 0.035), dark, (m) => m.position.set(0.23, 0.06 - i * 0.04, 0.06));
+  add(new THREE.CylinderGeometry(0.06, 0.07, 0.34, 12), metal, (m) => { m.rotation.z = Math.PI / 2; m.position.x = -0.13; });
+  add(new THREE.CylinderGeometry(0.075, 0.075, 0.03, 12), new THREE.MeshBasicMaterial({ color: '#4fd8ff' }), (m) => { m.rotation.z = Math.PI / 2; m.position.x = -0.02; });
+  const flame = add(new THREE.ConeGeometry(0.08, 0.5, 10), glowMat('#ffb347', 0.9), (m) => { m.rotation.z = Math.PI / 2; m.position.x = -0.55; });
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  g.scale.setScalar(1.35);
+  g.userData = { flame };
+  return g;
+}
+
+// la papelera de reciclaje (holograma): se llena con los cubitos y al final se vacía
+function binSprite() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 320;
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
-  s.scale.set(1.7, 0.425, 1); s.renderOrder = 10;
+  // (con fondo oscuro y no sumada: de día, en SIX o La Cabaña, la pura línea de luz casi no se veía)
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  s.scale.set(1.1, 1.375, 1); s.renderOrder = 9;
   s.userData = { c, tex, key: '' };
   return s;
 }
-function drawBar(s, pct, err) {
-  const u = s.userData, key = pct + (err ? 'e' : '');
+function drawBin(s, fill, emptied) {
+  const u = s.userData, key = `${Math.round(fill * 20)}|${emptied}`;
   if (u.key === key) return;
   u.key = key;
-  const x = u.c.getContext('2d'), col = err ? '#ff3b3b' : '#4fd8ff';
-  x.clearRect(0, 0, 512, 128);
-  x.fillStyle = 'rgba(3, 14, 22, .85)'; x.strokeStyle = col; x.lineWidth = 4;
-  x.beginPath(); x.roundRect(6, 6, 500, 116, 14); x.fill(); x.stroke();
-  x.fillStyle = err ? '#ff6a6a' : '#bff6ff'; x.font = 'bold 26px monospace';
-  x.fillText(err ? 'ERROR 404: RIVAL NO ENCONTRADO' : 'DESINSTALANDO RIVAL...', 24, 46);
-  x.fillStyle = '#0b2a36'; x.fillRect(24, 66, 380, 34);
-  x.fillStyle = col; x.fillRect(24, 66, 380 * pct / 100, 34);
-  for (let i = 1; i < 10; i++) { x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(24 + i * 38, 66, 3, 34); }
-  x.fillStyle = '#ffffff'; x.font = 'bold 32px monospace'; x.fillText(`${pct}%`, 416, 96);
+  const x = u.c.getContext('2d'), C = emptied ? '#5dff6a' : '#4fd8ff';
+  x.clearRect(0, 0, 256, 320);
+  // el cuerpo, oscuro y transparente (como la ventana de DIEGO.OS)
+  x.fillStyle = 'rgba(2, 16, 24, .6)';
+  x.beginPath(); x.moveTo(64, 80); x.lineTo(192, 80); x.lineTo(178, 252); x.lineTo(78, 252); x.closePath(); x.fill();
+  x.beginPath(); x.roundRect(50, 46, 156, 20, 6); x.fill();
+  x.beginPath(); x.roundRect(40, 268, 176, 44, 8); x.fill();
+  // lo que ya se tragó: se llena de abajo para arriba
+  if (fill > 0) {
+    const top = 250 - 168 * fill;
+    x.fillStyle = emptied ? 'rgba(93, 255, 106, .45)' : 'rgba(79, 216, 255, .55)';
+    x.beginPath(); x.moveTo(66 + (top - 82) * 0.08, top); x.lineTo(190 - (top - 82) * 0.08, top); x.lineTo(178, 250); x.lineTo(78, 250); x.closePath(); x.fill();
+  }
+  x.save(); x.shadowColor = C; x.shadowBlur = 18; x.strokeStyle = C; x.lineWidth = 9; x.lineJoin = 'round';
+  x.beginPath(); x.roundRect(50, 46, 156, 20, 6); x.stroke();      // tapa
+  x.beginPath(); x.roundRect(104, 28, 48, 18, 5); x.stroke();      // agarradera
+  x.beginPath(); x.moveTo(64, 80); x.lineTo(192, 80); x.lineTo(178, 252); x.lineTo(78, 252); x.closePath(); x.stroke();
+  x.lineWidth = 5;
+  for (const k of [-1, 0, 1]) { x.beginPath(); x.moveTo(128 + k * 34, 104); x.lineTo(128 + k * 30, 230); x.stroke(); }
+  x.restore();
+  x.fillStyle = C; x.font = 'bold 30px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(emptied ? 'VACIADA ✓' : 'PAPELERA', 128, 290);
   u.tex.needsUpdate = true;
 }
+const XAXIS = V(1, 0, 0);
+const bez = (a, b, c, u) => V(
+  (1 - u) * (1 - u) * a.x + 2 * (1 - u) * u * b.x + u * u * c.x,
+  (1 - u) * (1 - u) * a.y + 2 * (1 - u) * u * b.y + u * u * c.y,
+  (1 - u) * (1 - u) * a.z + 2 * (1 - u) * u * b.z + u * u * c.z);
 
 // ---------------------------------------------------------------- Alan: el Camaro y las marcas de llanta
 function carModel(d) {
@@ -173,41 +337,164 @@ function cuts() {
 
 // ---------------------------------------------------------------- las escenas
 export const BRUTALS = {
-  // Diego: ráfaga de puños de robot, lo escanea y lo "desinstala" (la imagen se descompone) … ERROR 404
+  // Diego: lo levanta del cuello, lo escanea y lo DESINSTALA parte por parte (se hacen cubitos)… ERROR 404: lo
+  // revienta con su PUÑO COHETE (que da la vuelta y regresa a su brazo) y los cubitos se van a la papelera
   desinstalar: {
-    mood: '#4fd8ff', key: '#d8f4ff', glitch: [96, 140],
+    mood: '#4fd8ff', key: '#d8f4ff', glitch: [196, 250],
     shots: [
-      [0, 22, S('M', 0.2, 1.3, 3.0, 'M', 0, 1.3, 0, 40), S('M', 0.1, 1.25, 2.6, 'M', 0, 1.3, 0, 38)],
-      [22, 40, S('W', -0.6, 1.65, 1.5, 'L', 0, 1.3, 0, 38), S('W', -0.5, 1.6, 1.25, 'L', 0, 1.3, 0, 36, 0.04)],
-      [40, 60, S('L', 0.85, 0.45, 1.9, 'W', 0, 1.35, 0, 46), S('L', 0.7, 0.42, 1.65, 'W', 0, 1.35, 0, 44)],
-      [60, 140, S('Lf', -1.3, 0.1, 2.6, 'Lf', 0, 0.25, 0, 38), S('Lf', -0.95, 0.05, 2.0, 'Lf', 0, 0.3, 0, 34)],
-      [140, 175, S('L', 0, 1.6, 6.5, 'L', 0, 1.2, 0, 46), S('L', 0, 1.5, 6.0, 'L', 0, 1.1, 0, 46)],
-      HERO(175, 205)],
-    beats: [[1, { riser: 0.3 }], [58, { flash: '#4fd8ff', aberr: 1, fov: 2 }], [100, { sfx: 'glitch' }], [140, { kill: true, flash: '#ff2a3a' }]],
-    warm(d) { d.obj('barra', barSprite); },
-    view(d, t, dt, prev, data) {
-      const g = d.g, L = d.anchors.L;
-      if (t >= 62 && t < 150) {
-        const s = d.obj('barra', barSprite);
-        s.position.copy(d.anchors.Lf).add(V(0, 0.62, 0.35));
-        drawBar(s, data.pct || 0, t >= 136);
+      // se le acerca y lo levanta del cuello: desde abajo, por detrás del otro, se ve la cara de Diego
+      [0, 8, S('M', 0.35, 1.2, 3.3, 'M', 0, 1.25, 0, 40), S('M', 0.3, 1.2, 3.0, 'M', 0.1, 1.3, 0, 40)],
+      [8, 36, S('L', 0.65, 0.35, 1.55, 'Wf', 0, 0.02, 0, 46), S('L', 0.55, 0.3, 1.3, 'Wf', 0, 0.05, 0, 42)],
+      // el escáner y la ventana: de lado, con los dos en cuadro
+      [36, 86, S('M', 0.1, 1.6, 3.5, 'M', 0.15, 1.55, 0, 40), S('M', 0.05, 1.55, 3.1, 'M', 0.15, 1.6, 0, 38)],
+      // sus ojos
+      [86, 98, S('Wf', 0.75, 0.0, 1.25, 'Wf', 0, -0.02, 0, 32), S('Wf', 0.68, 0.0, 1.1, 'Wf', 0, 0, 0, 30)],
+      // un brazo (el del lado de la cámara)
+      [98, 118, S('Lf', -0.35, -0.35, 1.7, 'Lf', 0.05, -0.35, 0, 38), S('Lf', -0.3, -0.3, 1.5, 'Lf', 0.05, -0.32, 0, 37)],
+      // el otro brazo: desde arriba
+      [118, 142, S('L', 0.4, 2.9, 2.3, 'Lf', 0, -0.4, 0, 42), S('L', 0.35, 2.7, 2.0, 'Lf', 0, -0.4, 0, 40)],
+      // las piernas: desde abajo, de frente
+      [142, 166, S('L', -0.35, 0.25, 2.5, 'L', 0, 0.75, 0, 46), S('L', -0.3, 0.22, 2.2, 'L', 0, 0.7, 0, 46)],
+      // orgullo.exe, cerebro.exe… vuelta lenta con la ventana
+      [166, 200, O('M', -0.45, 0.25, 4.4, 1.7, 1.55, 42)],
+      // ERROR 404 (la ventana roja): lo suelta y brinca para atrás
+      [200, 218, S('M', 0.1, 1.75, 3.9, 'M', 0.25, 1.55, 0, 40), S('M', 0.05, 1.7, 3.5, 'M', 0.25, 1.6, 0, 40)],
+      // carga el puño: por detrás de su hombro, hacia lo que queda flotando
+      [218, 236, S('W', -1.45, 1.55, 0.95, 'L', -0.7, 0.8, 0, 44), S('W', -1.3, 1.5, 0.85, 'L', -0.6, 0.9, 0, 42)],
+      // ¡IMPACTO!: de lado, cerca, y se abre mientras revienta
+      [236, 256, S('L', -0.6, 1.35, 2.6, 'L', 0, 1.25, 0, 40), S('L', -0.5, 1.3, 3.8, 'L', 0, 1.1, 0, 46)],
+      // la papelera se traga los cubitos (y el puño regresa)
+      [256, 306, S('M', 0.3, 1.25, 4.3, 'L', -0.45, 1.0, 0, 42), S('M', 0.25, 1.2, 3.8, 'L', -0.4, 0.95, 0, 40)],
+      HERO(306, 335)],
+    beats: [[1, { riser: 0.15 }], [8, { flash: '#4fd8ff', aberr: 0.6, fov: 2 }],
+      [100, { flash: '#4fd8ff', aberr: 1.3, fov: 3, slow: 12 }], [124, { flash: '#4fd8ff', aberr: 1.3, fov: 3, slow: 12 }],
+      [148, { flash: '#4fd8ff', aberr: 1.4, fov: 3, slow: 14 }], [200, { flash: '#ff2a3a', aberr: 1.5, fov: 2 }], [218, { riser: 0.27 }],
+      [234, { aberr: 0.9, fov: 3, sfx: 'swoosh' }], [240, { kill: true, flash: '#bff6ff', slow: 50, shake: 0.5 }]],
+    warm(d) { d.obj('anilloScan', scanRing); d.obj('cubosDiego', cubePool); d.obj('punoCohete', rocketFist); d.obj('papelera', binSprite); },
+    view(d, t, dt, prev, data, post) {
+      const g = d.g, X = DESINSTALAR, A = d.anchors, on = live(d, dt);
+      const adt = g.hitstop > 0 || g.paused ? 0 : Math.min(0.1, dt) * (!g.session && g.slowmo > 0 ? 0.35 : 1);
+      const pool = d.obj('cubosDiego', cubePool);
+      if (pool.userData.run !== d.t0) { pool.userData.run = d.t0; resetCubes(pool); }
+      if (post) { stepCubes(pool, adt, null, 0); return; }
+      const lm = loserModel(d), wm = g.viewModel(g.winnerSide), P = lm?.parts, del = data.del || 0, gone = g.loser.hidden;
+      const binPos = V(A.L.x, 0.78, 0.2);
+      // lo trae del cuello: el cuello del otro va a la mano de Diego (al soltarlo regresa a donde lo deja la pelea)
+      if (lm && wm && data.grab && !gone) {
+        const k = data.free ? 1 - smooth((t - X.SUELTA) / 10) : smooth((t - X.AGARRE) / 5);
+        const neck = d.bone(lm, 'head', -0.02);
+        if (k > 0 && neck) lm.root.position.addScaledVector(V().subVectors(A.Wh, neck), k);
+        if (data.free) { lm.root.rotation.order = 'ZYX'; lm.root.rotation.z = Math.sin(t * 0.09) * 0.12; }
       }
-      const lm = loserModel(d);
-      if (lm && t >= 62 && t < 140 && !g.loser.hidden) {
-        const k = clamp01((t - 62) / 78);
-        lm.root.position.x += (Math.random() - 0.5) * 0.09 * k;
-        if (Math.random() < 0.08 + 0.12 * k) lm.root.visible = false;   // parpadea como señal mala
-        lm.tickMaterials(0, Math.random() < 0.5 ? '#ff2a3a' : '#4fd8ff', 0.15 + 0.5 * k * Math.random());
-        // el escaneo de los ojos de Diego
-        const wm = g.viewModel(g.winnerSide);
-        if (wm && d.rb && t < 136) {
-          wm.root.updateMatrixWorld(true);
-          const aim = V(L.x, L.y + 0.25 + (Math.sin(t * 0.21) * 0.5 + 0.5) * 1.5, 0);
-          d.beam(d.rb.beams[0], wm.eyeWorld(), aim, 0.025 + Math.random() * 0.01, '#4fd8ff');
-          g.scanner.visible = true; g.scanner.position.copy(aim); g.scanner.material.color.set('#4fd8ff');
-          if (live(d, dt)) d.glow(aim, { count: 2, speed: 2, color: '#ffffff', colorEnd: '#4fd8ff', life: 0.2, size: 0.12 });
+      // cada parte que borra: primero falla como señal mala… y luego se hace cubitos (antes de esconderla)
+      const B = X.BORRADOS;
+      for (let k = 0; k < 3; k++) {
+        if (lm && !gone && t >= B[k] - 12 && t < B[k]) {
+          lm.tickMaterials(0, (Math.floor(t) >> 1) % 2 ? '#4fd8ff' : '#ff2a3a', 0.45);
+          lm.root.position.x += (Math.random() - 0.5) * 0.05;
+        }
+        if (passed(prev, t, B[k]) && on && P) {
+          const limbs = k === 0 ? [['shN', 'elN', 'handN']] : k === 1 ? [['shF', 'elF', 'handF']] : [['hipN', 'knN', 'ftN'], ['hipF', 'knF', 'ftF']];
+          for (const [a, b, c] of limbs) {
+            const pa = d.bone(lm, a), pb = d.bone(lm, b);
+            if (!pa || !pb) continue;
+            const pc = (c.startsWith('hand') ? d.bone(lm, b, 0, lm.rig?.[c]) : d.bone(lm, c)) || pb;
+            spawnCubes(pool, pa, pb, 46, { colors: ['#4fd8ff', '#4fd8ff', '#1f7bff', '#e8fbff', '#ff2a3a'], speed: 2.6, size: 0.055, life: 1.3 });
+            spawnCubes(pool, pb, pc, 40, { colors: ['#4fd8ff', '#1f7bff', '#ff2a3a'], speed: 3, size: 0.05, life: 1.3 });
+            d.glow(pa, { count: 12, speed: 3.5, color: '#ffffff', colorEnd: '#4fd8ff', life: 0.3, size: 0.1 });
+            d.fx((e) => e.flash(pa, '#4fd8ff', 4));
+          }
         }
       }
+      // lo que ya borró no está (end() lo regresa para la siguiente pelea)
+      if (P) {
+        const z = 0.001;
+        P.shN?.scale.setScalar(del >= 1 ? z : 1); P.shF?.scale.setScalar(del >= 2 ? z : 1);
+        P.hipN?.scale.setScalar(del >= 3 ? z : 1); P.hipF?.scale.setScalar(del >= 3 ? z : 1);
+      }
+      // los ojos de Diego encendidos (más al escanear y al cargar el puño)
+      if (wm && on && t < X.PAPELERA) {
+        const big = (t >= X.ESCANEO && t < X.CARGA) || (t >= X.SUELTA + 12 && t < X.IMPACTO) ? 0.22 : 0.13;
+        d.glow(wm.eyeWorld(), { count: 1, speed: 0.1, color: '#ffffff', colorEnd: '#4fd8ff', life: 0.1, size: big });
+      }
+      // el escáner: un anillo lo recorre de la cabeza a los pies y de regreso, con un rayo desde los ojos de Diego
+      if (t >= X.ESCANEO && t < X.CARGA - 4 && !gone) {
+        const u = (t - X.ESCANEO) / (X.CARGA - 4 - X.ESCANEO), h = 0.5 + 0.5 * Math.cos(u * Math.PI * 2);
+        const ring = d.obj('anilloScan', scanRing), y = A.L.y + 0.08 + 1.75 * h;
+        ring.position.set(A.L.x, y, 0); ring.scale.setScalar(1 + 0.08 * Math.sin(t * 0.7));
+        if (lm) lm.tickMaterials(0, '#4fd8ff', 0.18 + 0.12 * Math.sin(t * 0.5));
+        if (wm && d.rb) { wm.root.updateMatrixWorld(true); d.beam(d.rb.beams[0], wm.eyeWorld(), V(A.L.x, y, 0.3), 0.022 + Math.random() * 0.008, '#4fd8ff'); }
+        if (on) d.glow(V(A.L.x + (Math.random() - 0.5) * 0.8, y, (Math.random() - 0.5) * 0.8), { count: 2, speed: 0.4, color: '#ffffff', colorEnd: '#4fd8ff', life: 0.3, size: 0.06 });
+      }
+      // la ventana de DIEGO.OS: analiza, borra archivo por archivo y al final ERROR 404 … ¿eliminar? SÍ
+      // (del lado de la pantalla donde está Diego, para no tapar al otro)
+      if (t >= X.ESCANEO + 6 && t < X.IMPACTO && on) {
+        const sw = _pv.copy(A.Wf).project(g.camera).x, sl = _sv.copy(A.Lf).project(g.camera).x;
+        if (Math.abs(sw - sl) > 0.25) dosSide = sw < sl ? 'izq' : 'der';
+        const err = t >= X.D404;
+        dosShow({ mode: err ? 'err' : t < X.CARGA ? 'scan' : 'del', name: g.loser.def.nombre,
+          scan: Math.min(100, Math.round((t - X.ESCANEO) / (X.CARGA - X.ESCANEO) * 100)), pct: data.pct || 0, del,
+          blink: (Math.floor(t) >> 3) % 2 === 0, sel: t >= X.DISPARO - 4 ? 2 : t >= X.D404 + 16 ? 1 : 0 }, dosSide, err);
+      } else dosHide();
+      // ERROR 404: lo que queda falla todo y flota temblando
+      if (lm && !gone && t >= X.D404) {
+        lm.tickMaterials(0, Math.floor(t) % 3 ? '#ff2a3a' : '#4fd8ff', 0.3 + 0.4 * Math.random());
+        lm.root.position.x += (Math.random() - 0.5) * 0.07;
+        if (Math.random() < 0.12) lm.root.visible = false;
+      }
+      // carga el puño cohete: la luz le crece en la mano
+      if (t >= X.SUELTA + 12 && t < X.DISPARO && on) {
+        const k = clamp01((t - X.SUELTA - 12) / (X.DISPARO - X.SUELTA - 12));
+        d.glow(A.Wh, { count: 1 + Math.round(3 * k), speed: 1.2 + 2 * k, color: '#ffffff', colorEnd: '#4fd8ff', life: 0.25, size: 0.08 + 0.25 * k });
+        d.light('Wh', '#4fd8ff', 2 + 7 * k);
+      }
+      // el PUÑO COHETE: sale de su brazo, le atraviesa el pecho, sigue de largo, da la vuelta y regresa
+      if (wm?.parts?.elF && t >= X.DISPARO && t < X.REGRESA) {
+        const elbow = d.bone(wm, 'elF'), target = V(A.L.x, A.L.y + 1.25, 0.1);
+        let p, q;
+        if (t < X.IMPACTO) { p = elbow.clone().lerp(target, (t - X.DISPARO) / (X.IMPACTO - X.DISPARO)); q = target.clone().sub(elbow); }
+        else {
+          const dir = target.clone().sub(elbow).setY(0).normalize();   // sigue de largo, sube hacia la cámara y regresa
+          const far = target.clone().addScaledVector(dir, 3.2).add(V(0, 1.8, 2.4));
+          const u = (t - X.IMPACTO) / (X.REGRESA - X.IMPACTO);
+          p = bez(target, far, elbow, u); q = bez(target, far, elbow, Math.min(1, u + 0.03)).sub(p);
+        }
+        const fist = d.obj('punoCohete', rocketFist);
+        fist.position.copy(p);
+        if (q.lengthSq() > 1e-8) fist.quaternion.setFromUnitVectors(XAXIS, q.normalize());
+        fist.userData.flame.scale.set(1, 0.8 + Math.random() * 0.5, 1);
+        wm.parts.elF.scale.setScalar(0.001);   // ¡el antebrazo salió volando!
+        if (on) d.glow(p.clone().addScaledVector(q, -0.65), { count: 3, speed: 1.5, color: '#fff3c0', colorEnd: '#ff7a1a', life: 0.3, size: 0.25 });
+      }
+      // ¡IMPACTO!: lo que quedaba revienta en cubitos (los que luego se traga la papelera)
+      if (passed(prev, t, X.IMPACTO) && on) {
+        const c = V(A.L.x, A.L.y + 1.2, 0.1);
+        spawnCubes(pool, c, c, 300, { ball: 0.42, tall: 1.6, suck: true, speed: 6.5, up: 0.25, size: 0.065, life: 3,
+          colors: ['#4fd8ff', '#4fd8ff', '#4fd8ff', '#1f7bff', '#e8fbff', '#ff2a3a', '#ff2a3a'] });
+        spawnCubes(pool, c, c, 120, { ball: 0.3, speed: 9, up: 0.5, size: 0.05, life: 1.4, colors: ['#ff2a3a', '#b0001a', '#4fd8ff'] });
+        d.glow(c, { count: 70, speed: 10, color: '#ffffff', colorEnd: '#4fd8ff', life: 0.45, size: 0.15 });
+        d.fx((e) => { e.ring(A.L.x, '#4fd8ff', 5.5, 0.6); e.ring(A.L.x, '#ff2a3a', 3.5, 0.45); e.impactRing(c, '#bff6ff', 3.2); e.flash(c, '#bff6ff', 12); });
+        d.sparkle(c, '#ffffff', 1.7, 0.45);
+      }
+      // la papelera de reciclaje: sale, se traga los cubitos dando vueltas… y se vacía
+      const T0 = X.IMPACTO + 14;
+      if (t >= T0 && t < X.PAPELERA + 22) {
+        const bin = d.obj('papelera', binSprite), U = pool.userData;
+        const inK = smooth((t - T0) / 10), outK = smooth((t - X.PAPELERA - 6) / 16);
+        let sx = inK * (1 + 0.12 * Math.sin(clamp01((t - T0) / 10) * Math.PI)), sy = sx;
+        if (t >= X.PAPELERA) { const sq = smooth((t - X.PAPELERA) / 6); sy *= 1 - 0.55 * sq + 0.55 * outK; sx *= 1 + 0.25 * sq; }   // se aplasta al vaciarse
+        sx *= 1 - outK; sy *= 1 - outK;
+        bin.scale.set(1.5 * Math.max(0.001, sx), 1.875 * Math.max(0.001, sy), 1);
+        bin.position.set(binPos.x, 0.06 + bin.scale.y / 2, binPos.z);
+        drawBin(bin, Math.min(1, U.eaten / 300), !!data.emptied);
+        if (passed(prev, t, X.PAPELERA) && on) {
+          eatAll(pool);
+          d.glow(binPos, { count: 60, speed: 5, color: '#ffffff', colorEnd: '#5dff6a', life: 0.5, size: 0.18 });
+          d.sparkle(V(binPos.x, 1.0, binPos.z), '#bfffd0', 1.6, 0.45);
+        }
+      }
+      const pull = t >= T0 && t < X.PAPELERA ? smooth((t - T0) / 12) : 0;
+      stepCubes(pool, adt, binPos, pull);
     },
   },
 

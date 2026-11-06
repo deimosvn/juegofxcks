@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { sfx, audioState } from './audio.js';
 import { V, clamp01, lerp, smooth, S, O, OPEN, HERO } from './cine-util.js';
-import { BRUTALS } from './cine-brutal.js';
+import { BRUTALS, dosHide } from './cine-brutal.js';
 
 const EASE = { S: smooth, L: clamp01, O: (x) => 1 - (1 - clamp01(x)) ** 3, I: (x) => clamp01(x) ** 2.2 };
 const $ = (id) => document.getElementById(id);
@@ -337,12 +337,16 @@ export class FatalDirector {
     $('cine').classList.remove('on');
     document.body.classList.remove('cine');
     $('fcard').classList.remove('show');
+    dosHide();   // la ventana de la DESINSTALACIÓN de Diego
     $('flash').style.background = '';
     this.exposure = 1; this.desat = 0; this.vignette = 0.4; this.tintAmt = 0; this.glitch = 0;
     this.hideRobots(); this.lift = 0;
     this.hideExtra();
-    // lo que las brutalities le hicieron al modelo (voltearlo de cabeza…) se regresa
-    for (const m of this.g.models || []) for (const v of [m, m?.suit]) if (v?.root) { v.root.rotation.order = 'XYZ'; v.root.rotation.x = 0; v.root.rotation.z = 0; }
+    // lo que las brutalities le hicieron al modelo (voltearlo de cabeza, borrarle brazos y piernas…) se regresa
+    for (const m of this.g.models || []) for (const v of [m, m?.suit]) if (v?.root) {
+      v.root.rotation.order = 'XYZ'; v.root.rotation.x = 0; v.root.rotation.z = 0;
+      for (const b of ['shN', 'shF', 'hipN', 'hipF']) v.parts?.[b]?.scale.setScalar(1);
+    }
   }
 
   // objetos propios de una brutality: se crean una vez, se reusan y cada cuadro se prenden solo los que se usan

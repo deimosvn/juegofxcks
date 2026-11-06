@@ -44,25 +44,56 @@ function flurry(t, from, to, every, l, g, color, at = 1.3) {
 // Brazo de Conde (MUÑECO DE TRAPO): a qué ángulo va el brazo con el que lo azota. 0 = adelante · π = atrás
 const SWINGS = [[14, 34, 0, Math.PI], [36, 54, Math.PI, 0], [56, 70, 0, Math.PI], [72, 90, Math.PI, 0]];
 
+// DESINSTALACIÓN de Diego: cuándo pasa cada cosa (cine-brutal.js dibuja con estos mismos cuadros)
+//   AGARRE lo levanta del cuello · ESCANEO de pies a cabeza · BORRADOS: brazo, brazo, piernas, orgullo.exe y
+//   cerebro.exe (no lo encuentra) · D404 la ventana se pone roja · SUELTA lo deja flotando y brinca para atrás ·
+//   DISPARO su PUÑO COHETE · IMPACTO revienta en cubitos · REGRESA el puño a su brazo · PAPELERA vaciada
+export const DESINSTALAR = { AGARRE: 8, ESCANEO: 34, CARGA: 84, BORRADOS: [100, 124, 148, 170, 186], D404: 200, SUELTA: 206,
+  DISPARO: 234, IMPACTO: 240, REGRESA: 268, PAPELERA: 296, FIN: 335 };
+
 export const BRUTALITIES = {
-  // Diego: ráfaga de puños de robot, lo escanea y lo "desinstala": la barra llega a 100%… ERROR 404
+  // Diego: lo levanta del cuello, lo escanea y lo DESINSTALA parte por parte… ERROR 404: lo suelta, brinca para
+  // atrás y lo revienta con su PUÑO COHETE; los cubitos se van a la papelera de reciclaje
   desinstalar(t, w, l, def, g, d) {
-    closeIn(t, w, l, d, 1.0);
-    if (t === 1) { w.anim('rafaga', 60); l.anim('golpeado'); sfx.servo(); }
-    if (flurry(t, 6, 58, 4, l, g, '#4fd8ff') && (t - 6) % 12 === 0) sfx.clank();
-    if (t === 62) { w.anim('laser', 80, 0.1, 0.95); l.anim('mareado'); sfx.charge(); }
-    if (t >= 66 && t <= 136) {
-      d.pct = Math.min(100, Math.round((t - 66) / 70 * 100));
-      if (t % 8 === 2) sfx.beep(d.pct);
-      if (t % 23 === 0) sfx.glitch();
+    const X = DESINSTALAR;
+    closeIn(t, w, l, d, 0.66);
+    if (t === 1) { w.anim('carga', 12); l.anim('mareado'); sfx.servo(); }
+    if (t === X.AGARRE) { d.grab = true; w.anim('estrangular'); l.anim('ahorcado'); sfx.clank(); sfx.slap(); g.effects.addShake(0.2); }
+    if (d.grab && !d.free) l.y = 0.55 * smooth((t - X.AGARRE) / 20);   // arriba
+    if (t === X.ESCANEO) sfx.scan();
+    if (t > X.ESCANEO && t <= X.ESCANEO + 44 && t % 8 === 2) sfx.beep(t - X.ESCANEO);
+    // la desinstalación: de 0 a 100 %
+    if (t >= X.CARGA && t <= X.D404 - 4) { d.pct = Math.min(100, Math.round((t - X.CARGA) / (X.D404 - 4 - X.CARGA) * 100)); if (t % 9 === 0) sfx.beep(d.pct); }
+    const k = X.BORRADOS.indexOf(t);
+    if (k >= 0) {
+      d.del = k + 1;
+      if (k < 3) {   // un brazo, el otro, las piernas: salen en cubitos (y algo de sangre)
+        l.anim('golpeado'); sfx.borrado(); sfx.brutalHit();
+        g.effects.bloodSplash(V(l.x, l.y + (k < 2 ? 1.35 : 0.9), 0.2), w.facing, k < 2 ? 0.8 : 1.1); g.effects.addShake(0.3);
+      } else { sfx.glitch(); g.effects.addShake(0.1); }
     }
-    if (t === 140) {
+    if (X.BORRADOS.slice(0, 3).some((b) => t === b + 10)) l.anim('ahorcado');
+    if (t === X.D404) { d.err = true; sfx.alarm(); sfx.glitch(); }
+    // lo suelta: se queda flotando (ya nomás es código corrupto) y Diego brinca para atrás
+    if (t === X.SUELTA) { d.free = true; d.fy = l.y; w.anim('saltar', 14); sfx.servo(); sfx.whoosh(); }
+    if (t > X.SUELTA && t <= X.SUELTA + 12) {
+      const u = (t - X.SUELTA) / 12;
+      w.x = clamp(d.x - w.facing * 1.35 * smooth(u), -ARENA + 0.4, ARENA - 0.4); w.y = 0.35 * Math.sin(Math.PI * u);
+    }
+    if (t === X.SUELTA + 12) { w.y = 0; w.anim('canon'); sfx.land(); sfx.charge(); }
+    if (d.free && !d.boom) l.y = d.fy + 0.3 * smooth((t - X.SUELTA) / 26) + 0.04 * Math.sin(t * 0.2);
+    if (t === X.DISPARO) { d.fire = true; w.anim('canon', 30, 0.12, 0.55); sfx.rocket(); sfx.whoosh(true); g.effects.addShake(0.15); }
+    if (t === X.IMPACTO) {
       l.hidden = true; d.boom = true;
-      g.effects.gore(l.chest, 1.5); g.effects.burst(l.chest, '#ff2a3a', 110, 9); g.effects.burst(l.chest, '#4fd8ff', 60, 6);
-      g.effects.addShake(0.6); sfx.boom(); sfx.voxel();
+      const c = V(l.x, l.y + 1.25, 0.15);
+      g.effects.gore(c, 1.2); g.effects.burst(c, '#4fd8ff', 70, 10); g.effects.burst(c, '#ff2a3a', 40, 7);
+      g.effects.addShake(0.6); sfx.boom(); sfx.voxel(); sfx.glitch();
     }
-    if (t === 168) w.anim('victoria');
-    return t >= 205;
+    if (t === X.IMPACTO + 14) sfx.succion();
+    if (t === X.REGRESA) { sfx.clank(); g.effects.addShake(0.12); }
+    if (t === X.PAPELERA) { d.emptied = true; sfx.papelera(); }
+    if (t === X.PAPELERA + 10) w.anim('victoria');
+    return t >= X.FIN;
   },
 
   // Alan: su Camaro lo atropella, se echa de reversa sobre él y lo vuelve a atropellar (el carro lo mueve cine-brutal.js;

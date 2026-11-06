@@ -144,6 +144,31 @@ html.touch .kb-only { display: none !important; }
 .fcard.show b { animation: fcardName .7s cubic-bezier(.2, 1, .3, 1) both; }
 @keyframes fcardName { from { letter-spacing: 24px; opacity: 0; filter: blur(6px); } }
 body.cine #hud, body.cine #tbtns, body.cine #tpad { opacity: 0; pointer-events: none; }
+/* DESINSTALACIÓN de Diego: la ventana de "DIEGO.OS" (arriba, del lado de Diego) */
+#dos { position: absolute; top: calc(11.5vh + 2vh); left: 3vw; width: min(390px, 40vw); overflow: hidden; font-family: 'Courier New', ui-monospace, monospace; font-weight: 700; color: #bff6ff;
+  background: rgba(2, 16, 24, .84); border: 2px solid #4fd8ff; border-radius: 8px; box-shadow: 0 0 22px rgba(79, 216, 255, .5), inset 0 0 26px rgba(79, 216, 255, .12);
+  opacity: 0; transform: scale(.85); transform-origin: 0 0; transition: opacity .2s, transform .25s cubic-bezier(.2, 1.4, .4, 1); }
+#dos.der { left: auto; right: 3vw; transform-origin: 100% 0; }
+#dos.show { opacity: 1; transform: none; }
+#dos::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(transparent 0 3px, rgba(79, 216, 255, .07) 3px 4px); }
+#dos .dt { display: flex; justify-content: space-between; padding: 5px 12px; font-size: 13px; letter-spacing: 1px; background: rgba(79, 216, 255, .22); }
+#dos .body { padding: 10px 14px 12px; font-size: 15px; line-height: 1.55; }
+#dos h5 { margin: 0 0 6px; font-size: 17px; letter-spacing: 1px; }
+#dos .prog { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+#dos .prog i { flex: 1; height: 16px; border: 1px solid #4fd8ff; background: linear-gradient(90deg, #4fd8ff var(--p), #0b2a36 var(--p)); }
+#dos .prog b { min-width: 58px; text-align: right; font-size: 21px; color: #fff; }
+#dos .row { display: flex; justify-content: space-between; gap: 10px; white-space: nowrap; }
+#dos .dim { color: #55707c; } #dos .ok { color: #5dff6a; } #dos .warn { color: #ffb000; } #dos .cur { color: #fff; } #dos .tag { color: #4fd8ff; } #dos .bad { color: #ff6a6a; }
+#dos.err { border-color: #ff3b3b; color: #ffc4c4; background: rgba(34, 4, 6, .88); box-shadow: 0 0 26px rgba(255, 40, 40, .6), inset 0 0 26px rgba(255, 40, 40, .15); }
+#dos.err .dt { background: rgba(255, 59, 59, .3); }
+#dos.err::after { background: repeating-linear-gradient(transparent 0 3px, rgba(255, 80, 80, .08) 3px 4px); }
+#dos .e404 { text-align: center; }
+#dos .e404 h4 { margin: 2px 0; font-size: 36px; color: #ff3b3b; text-shadow: 0 0 14px rgba(255, 0, 0, .7); }
+#dos .e404 .q { margin-top: 6px; color: #ffb3b3; font-size: 14px; }
+#dos .btns { display: flex; justify-content: center; gap: 16px; margin-top: 10px; }
+#dos .btns span { padding: 5px 24px; border: 2px solid #7a4a4a; border-radius: 6px; font-size: 20px; }
+#dos .btns .b-on { border-color: #ff8a8a; background: rgba(255, 59, 59, .38); }
+#dos .btns .b-ok { border-color: #ffb3b3; background: #ff3b3b; color: #fff; }
 #hud, #tbtns, #tpad { transition: opacity .45s; }
 
 /* destello blanco del K.O. y fundido a negro entre rondas */
@@ -612,6 +637,13 @@ html.touch #results { bottom: auto; top: 58%; }
   .fcard small { font-size: 12px; letter-spacing: 7px; }
   .fcard b { font-size: clamp(30px, 11vh, 56px); }
   .fcard i { font-size: 13px; }
+  #dos { width: min(290px, 38vw); top: calc(11.5vh + 1vh); }
+  #dos .dt { font-size: 10px; padding: 3px 8px; }
+  #dos .body { font-size: 11px; line-height: 1.38; padding: 6px 10px 8px; }
+  #dos h5 { font-size: 12px; margin-bottom: 3px; }
+  #dos .prog { margin: 3px 0; } #dos .prog i { height: 10px; } #dos .prog b { min-width: 42px; font-size: 14px; }
+  #dos .e404 h4 { font-size: 24px; } #dos .e404 .q { font-size: 11px; }
+  #dos .btns { margin-top: 6px; } #dos .btns span { font-size: 14px; padding: 2px 16px; }
   #announcer small { margin-top: 4px; }
   #announcer.end { top: 9%; }
   html.touch .special-name { top: 88px; font-size: 24px; }

@@ -572,7 +572,7 @@ const OLD = { hipsY: 0.93, hipsX: 0, torsoX: 0.1, torsoY: 0.35, torsoZ: 0, headX
 const LEG_MODE = { jet_sube: 'fk', jet_cae: 'fk', turbina: 'swap', culazo: 'fk', senton: 'fk', senton_suelo: 'fk', twerk: 'fk',
   gas: 'fk', jojo: 'fk', navaja: 'swap', sentado: 'fk', propulsor: 'fk', pisar_arriba: 'fk', pisar: 'fk',
   picada_carga: 'fk', mazazo: 'fk', plancha: 'fk', clavado: 'fk', bola: 'fk', doblado: 'fk', colgado: 'fk',
-  jinete: 'fk', coz: 'fk', avion: 'fk', bebe: 'fk', cargado: 'fk' };
+  jinete: 'fk', coz: 'fk', avion: 'fk', bebe: 'fk', cargado: 'fk', ahorcado: 'fk' };
 
 function legacy(a, h, st) {
   const L = { ...OLD };
@@ -754,12 +754,24 @@ function oldPose(a, P, e, t) {
       Object.assign(P, { torsoX: 0.25, torsoY: 0, headX: -0.2, shNX: -1.6, shNZ: 0.3, elNX: -1.2, shFX: -1.6, shFZ: -0.3, elFX: -1.2, hipsY: 0.9 });
       P.hipNX = -1.6 + Math.sin(t * 0.7) * 0.3; P.knNX = 1.6; P.hipFX = -1.6 - Math.sin(t * 0.7) * 0.3; P.knFX = 1.6;
       return;
+    // la brutality de Diego (DESINSTALACIÓN): lo levanta del cuello con el brazo de adelante, el otro puño atrás
+    case 'estrangular':
+      Object.assign(P, { torsoX: -0.1, torsoY: -0.3, headX: -0.1, shFX: -2.05, shFZ: -0.05, elFX: -0.22, shNX: 0.3, shNZ: 0.35, elNX: -1.95, hipsY: 0.9 });
+      P.shFX += Math.sin(t * 0.8) * 0.025; P.torsoZ = Math.sin(t * 0.45) * 0.012;
+      return;
+    // al que levantan del cuello: las manos al cuello, la cabeza hacia atrás y pataleando
+    case 'ahorcado':
+      Object.assign(P, { torsoX: -0.12, torsoY: 0, headX: -0.4, shNX: -2.0, shNZ: 0.15, elNX: -2.35, shFX: -2.0, shFZ: -0.15, elFX: -2.35, hipsY: 0.95 });
+      P.hipNX = -0.3 + Math.sin(t * 0.55) * 0.45; P.knNX = 0.55 + Math.sin(t * 0.55 + 1.2) * 0.4;
+      P.hipFX = -0.3 - Math.sin(t * 0.55) * 0.45; P.knFX = 0.55 - Math.sin(t * 0.55 + 1.2) * 0.4;
+      P.torsoZ = Math.sin(t * 0.37) * 0.05; P.shNZ += Math.sin(t * 0.9) * 0.1; P.shFZ -= Math.sin(t * 0.8) * 0.1;
+      return;
   }
 }
 const OLD_KEYS = new Set(['jet_sube', 'jet_cae', 'turbina', 'orbital', 'culazo', 'senton', 'senton_suelo', 'twerk', 'gas', 'jojo',
   'rapar', 'navaja', 'afilar', 'capa', 'sentado', 'canon', 'propulsor', 'descarga', 'flexion', 'agarrar', 'levantar', 'pisar_arriba', 'pisar', 'silbido', 'chela',
   'picada_carga', 'mazazo', 'plancha', 'clavado', 'bola', 'higadazo', 'doblado', 'colgado',
-  'guitarra', 'guitarrazo', 'lazo', 'disparo', 'jinete', 'coz', 'avion', 'helice', 'senalero', 'remachar', 'bebe', 'cargado']);
+  'guitarra', 'guitarrazo', 'lazo', 'disparo', 'jinete', 'coz', 'avion', 'helice', 'senalero', 'remachar', 'bebe', 'cargado', 'estrangular', 'ahorcado']);
 
 // Cómo se mueve cada quien (sale de sus stats y accesorios)
 export function styleOf(def) {

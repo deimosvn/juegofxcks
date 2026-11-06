@@ -98,11 +98,12 @@ Con “¡ACÁBALO!” marca la entrada de tu fatality y **deja presionado el bot
 tiemblas mientras carga, y en vez de la fatality sale la **BRUTALITY** (si lo sueltas antes, es FATALITY). En el
 celular: toca ☠ para la fatality o déjalo presionado para la brutality. La CPU a veces hace una y a veces la otra.
 Tiempos en [`src/brutalidades.js`](src/brutalidades.js) (en línea las dos computadoras lo calculan igual) y la escena de
-cine en [`src/cine-brutal.js`](src/cine-brutal.js).
+cine en [`src/cine-brutal.js`](src/cine-brutal.js). La de Diego cambió de tiempos: para hacerla en línea los dos tienen
+que tener la versión nueva del juego.
 
 | Quién | Brutality | Qué pasa |
 |---|---|---|
-| Diego | DESINSTALACIÓN | Ráfaga de puños de robot, lo escanea con los ojos y le sale una barra “DESINSTALANDO RIVAL…” que sube a 100% mientras el otro parpadea como señal mala… **ERROR 404: RIVAL NO ENCONTRADO** y revienta |
+| Diego | DESINSTALACIÓN | Lo agarra del cuello y lo levanta con un brazo (pataleando); un anillo de luz lo escanea desde sus ojos y arriba sale la ventana de **DIEGO.OS**: “ANALIZANDO OBJETIVO… AMENAZA: NULA · SOLUCIÓN: DESINSTALAR”. Luego borra sus archivos uno por uno: `brazo_izq.dll`, `brazo_der.dll` y `piernas.sys` (cada parte falla como señal mala y **se deshace en cubitos**, en cámara lenta), `orgullo.exe`… y `cerebro.exe`: **NO ENCONTRADO**. Al 100%: **ERROR 404 · RIVAL NO ENCONTRADO · ¿Eliminar los restos?** [SÍ]. Lo suelta flotando, brinca para atrás, carga su **PUÑO COHETE** y le atraviesa el pecho: revienta en cubitos, el puño da la vuelta y regresa a su brazo, y una **papelera de reciclaje** se traga los cubitos dando vueltas… “PAPELERA VACIADA ✓” |
 | Alan | TRIPLE ATROPELLO | Pose de JoJo y su Camaro lo atropella, se echa de reversa sobre él y lo vuelve a atropellar; hace donas y se va. Queda aplastado como calcomanía entre las marcas de llanta (toma desde arriba) |
 | Gera | CABEZA DE PIÑATA | Ráfaga a la cara: con cada golpe la cabeza se le infla y se pone roja… el gancho la revienta como piñata: confeti, dulces y el cuerpo sin cabeza |
 | José | TRAGADO POR LA TIERRA | Menea las nalgas tan fuerte que el piso se agrieta bajo el otro y se lo traga (se hunde gritando); el piso se cierra y sale una tumba: “Q.E.P. — se lo tragó la tierra” |

@@ -243,6 +243,19 @@ export const sfx = {
   gulp: () => { tone(300, 0.12, 'sine', 0.3, 120); setTimeout(() => tone(180, 0.15, 'sine', 0.25, 90), 120); },
   beep: (pct = 0) => tone(600 + pct * 6, 0.05, 'square', 0.06),
   glitch: () => { for (let i = 0; i < 5; i++) setTimeout(() => { tone(200 + Math.random() * 2000, 0.03, 'square', 0.07); noise(0.03, 3000, 4, 0.15, 'bandpass'); }, i * 25); },
+  // DESINSTALACIÓN de Diego: el escáner, una parte que se borra, la alarma del ERROR 404, los cubitos que se van
+  // a la papelera y la papelera vaciada
+  scan: () => { tone(300, 1.1, 'sine', 0.09, 1500, 0.1); tone(310, 1.1, 'triangle', 0.04, 1560, 0.1); noise(1.1, 1800, 6, 0.06, 'bandpass', 5200, 0.2); },
+  borrado: () => {
+    tone(1500, 0.32, 'square', 0.08, 70); noise(0.28, 2600, 2, 0.45, 'bandpass', 260); tone(64, 0.45, 'sine', 0.75, 30);
+    for (let i = 0; i < 6; i++) setTimeout(() => tone(300 + Math.random() * 2400, 0.03, 'square', 0.06), 40 + i * 30);
+  },
+  alarm: () => { for (let i = 0; i < 6; i++) setTimeout(() => tone(i % 2 ? 660 : 920, 0.13, 'square', 0.09), i * 150); },
+  succion: () => { noise(1.1, 220, 1.2, 0.35, 'bandpass', 3800, 0.8); tone(80, 1.1, 'sawtooth', 0.05, 900, 1.0); },
+  papelera: () => {
+    for (let i = 0; i < 7; i++) setTimeout(() => noise(0.05, 1800 + Math.random() * 3200, 2.5, 0.4, 'bandpass'), i * 35 + Math.random() * 20);
+    setTimeout(() => { tone(880, 0.12, 'sine', 0.2); tone(1320, 0.5, 'sine', 0.18); }, 300);
+  },
   brutalHit: () => { tone(90, 0.5, 'square', 0.18, 40); noise(0.3, 1400, 0.7, 0.8, 'lowpass', 120); },
   brutal: () => {   // BRUTALITY: tres trancazos de tambor y un acorde rasposo
     for (let i = 0; i < 3; i++) setTimeout(() => { tone(62, 0.5, 'sine', 0.9, 30); noise(0.25, 900, 0.6, 0.7, 'lowpass', 100); }, i * 150);
