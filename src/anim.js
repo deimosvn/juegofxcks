@@ -19,11 +19,13 @@ const PI = Math.PI;
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
+// (O y Q arrancan rápido pero no de golpe: antes salían a toda velocidad desde cero en un cuadro y el movimiento
+//  se veía "a brincos"; los golpes siguen llegando en el mismo cuadro)
 const EASE = {
   L: clamp01,
   S: smooth,
-  O: (x) => 1 - (1 - clamp01(x)) ** 3,          // sale disparado y frena: un golpe que llega
-  Q: (x) => 1 - (1 - clamp01(x)) ** 2,
+  O: (x) => { x = clamp01(x); return 1 - (1 - x) ** 3 * (1 + 1.5 * x); },   // sale disparado y frena: un golpe que llega
+  Q: (x) => { x = clamp01(x); return 1 - (1 - x) ** 2 * (1 + x); },
   I: (x) => clamp01(x) ** 2,                     // arranca lento
   B: (x) => { const u = clamp01(x) - 1; return 1 + u * u * (2.7 * u + 1.7); },   // se pasa tantito y regresa
 };
@@ -557,12 +559,14 @@ const ANIMS = {
 
 // ---------------------------------------------------------------- poses de especiales (ángulos directos)
 // Curva de un movimiento: sube durante el arranque, se mantiene y baja en la recuperación
+// (antes subía con velocidad infinita en el primer cuadro y al regresar frenaba en seco: ahora arranca rápido
+//  pero sin brinco y regresa suave)
 function ext(a) {
   if (!a.total) return 0;
   const p = a.t / a.total;
-  if (p < a.s) return clamp01(p / a.s) ** 0.6;
+  if (p < a.s) return EASE.O(p / a.s);
   if (p < a.a) return 1;
-  return 1 - clamp01((p - a.a) / (1 - a.a)) ** 1.4;
+  return 1 - smooth((p - a.a) / (1 - a.a));
 }
 
 const OLD = { hipsY: 0.93, hipsX: 0, torsoX: 0.1, torsoY: 0.35, torsoZ: 0, headX: 0, spin: 0, tilt: 0,

@@ -4,13 +4,15 @@ import { JUEGO, PELEADORES } from './roster.js';
 const ELEGIBLES = PELEADORES.filter((d) => !d.oculto);
 // luz de borde (color, fuerza) y relleno de los peleadores en cada escenario (model.js luzPeleador)
 const LUZ_PELEADOR = { dia: ['#ffe2c4', 0.32, 0.03], casachuy: ['#b8d0ff', 0.55, 0.13], templo: ['#c8d8ff', 0.45, 0.09] };
+// cuánto les llega a los peleadores la luz del ambiente (el escenario mismo, ver setStage): de noche más, que es poca
+const ENV_PELEADOR = { six: 0.55, cabana: 0.55, casachuy: 1.1, templo: 0.95 };
 // ARCADE · LA TORRE: el jefe final pelea en el Templo. El récord (con quién la ganaste y en qué dificultad) se guarda aquí
 const JEFE_ESCENARIO = 'templo';
 const TORRE_ESPERA = 4500;   // ms en la pantalla de la torre antes de que empiece la pelea (con ENTER, ya)
 const TORRE_KEY = 'kombate-torre';
 const leerTorre = () => { try { return JSON.parse(localStorage.getItem(TORRE_KEY)) || {}; } catch { return {}; } };
 const iniciales = (n) => n.split(/\s+/).map((w) => w[0]).join('').slice(0, 2);
-import { FighterModel, loadAsset, texturas, luzPeleador } from './model.js';
+import { FighterModel, loadAsset, texturas, luzPeleador, disposeTree } from './model.js';
 import { styleOf } from './anim.js';
 import { FatalDirector, ROBOTS } from './fatal.js';
 import './cine-nuevos.js';
@@ -78,6 +80,7 @@ class Game {
     this.baseFov = 40; this.fovKick = 0;
     // brillo, color de cine y calidad (en celular, menos píxeles: se ve casi igual y va más fluido)
     this.post = new Post(this.renderer, this.scene, this.camera);
+    this.pmrem = new THREE.PMREMGenerator(this.renderer); this.envRT = null;   // luz del ambiente de cada escenario
     this.effects = new Effects(this.scene, this.camera);
     this.stage = createStage('six', this.scene, this.effects);
     this.stageId = 'six';
@@ -546,6 +549,10 @@ class Game {
     }
     $('diff').classList.toggle('hidden', this.mode !== 'cpu');
     $('select').classList.toggle('arcade', !!this.arcade);
+    // las teclas de abajo: contra la CPU no hay jugador 2 (antes salían las suyas)
+    $('select-hint').innerHTML = this.mode === 'vs' ? 'P1: A D W S + F &nbsp;·&nbsp; P2: flechas + K &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; ESC volver'
+      : this.mode === 'cpu' ? `A D W S o ← → + F &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; Q E dificultad${this.arcade ? ' (con la que empieza la torre)' : ''} &nbsp;·&nbsp; ESC volver`
+        : 'A D W S o flechas + ENTER &nbsp;·&nbsp; o haz clic &nbsp;·&nbsp; ESC salir';
     this.markCrowns();
     this.renderDiff(false);
     this.show('select');
@@ -738,7 +745,7 @@ class Game {
       // su fatality: cuatro robots (su modelo de robots, o copias del traje), cada uno de un color (fatal.js los anima)
       const base = bot || suit;
       if (base && def.fatality?.tipo === 'desintegrar') m.robots = ROBOTS.map((r) => base.cloneRigged(r.color)).filter(Boolean);
-      if (bot) bot.dispose();
+      if (bot) bot.dispose({ geometry: false });   // (su malla la usan los robots)
       return m;
     };
     // y los objetos de sus especiales (el Camaro de Alan), para que salgan sin esperar
@@ -772,7 +779,7 @@ class Game {
   }
 
   disposeModels() {
-    for (const m of this.models) { m.suit?.dispose(); m.robots?.forEach((r) => r.dispose()); m.head?.removeFromParent(); m.dispose(); }
+    for (const m of this.models) { m.suit?.dispose(); m.robots?.forEach((r) => r.dispose()); m.head?.removeFromParent(); m.head?.userData.model?.dispose(); m.dispose(); }
   }
 
   setStage(id) {
@@ -785,11 +792,37 @@ class Game {
     // luz de borde y relleno de los peleadores: de noche más fuerte y azulada (luna), de día cálida y suave
     const L = LUZ_PELEADOR[id] || LUZ_PELEADOR.dia;
     luzPeleador.color.value.set(L[0]); luzPeleador.borde.value = L[1]; luzPeleador.relleno.value = L[2];
+    this.captureEnv();
+  }
+
+  // Luz del ambiente para los peleadores: el escenario visto desde donde pelean (cielo, piso, paredes, focos), hecho
+  // un mapa de reflejos suaves. Así la ropa y la piel toman el color y la luz de cada lugar en vez de verse planas.
+  // (se toma una vez al cambiar de escenario, sin peleadores en la escena; en gráficos BAJA no)
+  captureEnv() {
+    this.envRT?.dispose(); this.envRT = null;
+    if (ajustes.calidad !== 'baja') {
+      const y = this.scene.position.y, sparks = [this.effects.glow.points, this.effects.solid.points];
+      sparks.forEach((p) => { p.visible = false; });   // (sin las chispas del menú)
+      try { this.scene.position.y = y - 1.25; this.envRT = this.pmrem.fromScene(this.scene, 0.02, 0.1, 60); } catch { this.envRT = null; }
+      this.scene.position.y = y;
+      sparks.forEach((p) => { p.visible = true; });
+    }
+    this.applyEnv();
+  }
+  applyEnv() {
+    const env = this.envRT?.texture || null, k = ENV_PELEADOR[this.stageId] ?? 0.6;
+    for (const m of this.models || []) for (const v of [m, m.suit, ...(m.robots || []), m.head?.userData.model]) {
+      if (v) for (const mt of v.materials) if (mt.isMeshStandardMaterial) {
+        if (mt.envMap !== env) { mt.envMap = env; mt.needsUpdate = true; }
+        mt.envMapIntensity = k;
+      }
+    }
   }
 
   async startMatch(def1, def2, preloaded = null, stageId = null) {
     const models = preloaded || await this.loadModels(def1, def2);
     if (stageId) this.setStage(stageId);
+    if (!this.envRT && ajustes.calidad !== 'baja') this.captureEnv();   // (el primer escenario no pasó por setStage)
     this.models = models;
     this.scene.add(models[0].root, models[1].root);
     for (const m of models) {
@@ -798,6 +831,7 @@ class Game {
       for (const r of m.robots || []) { r.root.visible = false; this.scene.add(r.root); }
       if (m.head) { m.head.visible = false; this.scene.add(m.head); }
     }
+    this.applyEnv();   // la luz del ambiente del escenario también a estos modelos (antes de prepararlos)
     this.fighters = [new Fighter(def1, 0, this), new Fighter(def2, 1, this)];
     this.inputs = [new PlayerInput(0), new PlayerInput(1)];
     const A = this.arcade?.rivales ? this.arcade : null;   // en la torre la dificultad la pone cada pelea
@@ -1507,6 +1541,21 @@ class Game {
 
   // ================================================================== VISTA
   buildViews() {
+    // sombra suave de contacto bajo los pies: "asienta" a cada peleador en el piso aunque la luz venga de lado o sea
+    // de noche (se aclara y se encoge cuando brinca)
+    const blobTex = (() => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      const g2 = cv.getContext('2d'), gr = g2.createRadialGradient(64, 64, 2, 64, 64, 63);
+      gr.addColorStop(0, 'rgba(0,0,0,0.85)'); gr.addColorStop(0.35, 'rgba(0,0,0,0.5)'); gr.addColorStop(0.7, 'rgba(0,0,0,0.16)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g2.fillStyle = gr; g2.fillRect(0, 0, 128, 128);
+      return new THREE.CanvasTexture(cv);
+    })();
+    this.blobs = [0, 1].map(() => {
+      const b = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, opacity: 0.6 }));
+      b.rotation.x = -Math.PI / 2; b.renderOrder = 1; b.visible = false;
+      this.scene.add(b);
+      return b;
+    });
     // cadenas del especial "gancho"
     this.chains = [0, 1].map(() => {
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(0, 0), V(1, 0)]), new THREE.LineBasicMaterial({ color: '#cfcfcf' }));
@@ -1691,12 +1740,12 @@ class Game {
   }
 
   clearViews() {
-    for (const v of this.projViews.values()) this.scene.remove(v.obj);
+    for (const v of this.projViews.values()) { this.scene.remove(v.obj); disposeTree(v.obj); }
     this.projViews.clear();
     this.events.length = 0;
     this.viewRound = -1; this.announced = null;
     // sin peleadores nadie apaga estos objetos: que no se queden en el menú (la capa, el satélite…)
-    for (const o of [this.chair, this.cape, this.bigFish, this.scanner]) o.visible = false;
+    for (const o of [this.chair, this.cape, this.bigFish, this.scanner, ...this.blobs]) o.visible = false;
     for (const c of this.chains) c.line.visible = false;
     for (const L of this.lasers) for (const m of [...L.beams, ...L.cores]) m.visible = false;
     for (const G of this.gadgets) for (const o of [G.sat, G.aim, G.ray, G.turb, G.spring, G.sglove, G.rocket, ...G.gogo]) o.visible = false;
@@ -1889,6 +1938,12 @@ class Game {
     m.size = f.sizeScale * (robot ? 0.8 + 0.2 * Math.min(1, base.suitT / 0.25) : 1);
     m.setFacing(f.facing);
     m.root.visible = !f.hidden;
+    // la sombra de contacto: más clara y chica mientras más alto va
+    const blob = this.blobs[f.side], up = Math.max(0, ry), k = f.sizeScale * (1 + up * 0.18);
+    blob.visible = !f.hidden && up < 3;
+    blob.position.set(f.rx, 0.012, 0.02);
+    blob.scale.set(1.25 * k, 0.8 * k, 1);
+    blob.material.opacity = 0.62 * Math.max(0, 1 - up / 2.6);
     m.burn = f.burn; m.squash = f.squash;
     m.paused = f.iced; m.setIced(f.iced);
     m.detachArm = this.projectiles.some((p) => p.alive && p.owner === f.side && p.kind === 'puno');
@@ -2065,7 +2120,7 @@ class Game {
         glow.emit({ pos: V(p.x, p.y, 0.1), count: 3 * n, speed: 1.2, dir: [-dir, 0.2, 0], spread: 0.6, jitter: 0.2, color: '#ffffff', colorEnd: p.color, life: 0.35, size: 0.3, drag: 2 });
       }
     }
-    for (const [id, v] of this.projViews) if (!seen.has(id)) { this.scene.remove(v.obj); this.projViews.delete(id); }
+    for (const [id, v] of this.projViews) if (!seen.has(id)) { this.scene.remove(v.obj); disposeTree(v.obj); this.projViews.delete(id); }
     // una sola luz fija sigue al proyectil que brilla (el número de luces nunca cambia: sin trabones)
     const lit = [...this.projViews.values()].find((v) => v.light);
     this.projLight.intensity = lit ? lit.light.power : 0;

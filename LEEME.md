@@ -42,6 +42,13 @@ cualquiera de las dos teclas o un mando.
   suave de día) y un poco de luz de relleno, para que no se pierdan en los escenarios oscuros. Se ajusta por escenario
   en `LUZ_PELEADOR` ([`src/main.js`](src/main.js)); el sombreado está en [`src/model.js`](src/model.js) (`luzPeleador`)
   y no agrega luces a la escena (así no se traba al cambiar de escenario).
+- **Luz del ambiente de cada escenario** sobre los peleadores: al empezar la pelea se "fotografía" el escenario desde
+  donde pelean (cielo, piso, paredes, focos) y se usa como reflejos suaves en la ropa y la piel. Así toman el color y la
+  luz del lugar (la ropa oscura ya no se ve plana; de noche les pegan los focos). Fuerza por escenario en `ENV_PELEADOR`
+  ([`src/main.js`](src/main.js)); en gráficos BAJA no se usa.
+- **Sombra de contacto** bajo los pies de cada peleador: los asienta en el piso aunque la luz venga de lado o sea de
+  noche; se aclara y se encoge cuando brincan.
+- **Nitidez**: en gráficos ALTA (y un poco en MEDIA) la imagen se afina al final (caras, ropa y texturas más definidas).
 
 ## 🗼 ARCADE · LA TORRE
 La primera opción del menú. Eliges a tu peleador y la **dificultad** (en el panel de la derecha, como contra la CPU) y
@@ -151,6 +158,16 @@ va la mano o el pie y el esqueleto se acomoda solo.
   dobla la pierna. Al salir volando das vueltas en el aire, rebotas en el piso y te levantas sentándote y parándote.
 - Saltos con **marometa** sobre su centro, aterrizaje que se hunde y rebota, y cuatro poses de victoria
   (`victoria` en el roster: 0 puño arriba, 1 brazos en V, 2 bíceps, 3 brazos cruzados).
+- **Movimientos fluidos** ([`src/model.js`](src/model.js)):
+  - **Transición por inercia** (*inertialization*, como en los juegos grandes): al pasar de una animación a otra la
+    nueva entra completa desde el primer cuadro y lo que se veía se le suma como una diferencia que se apaga sola,
+    conservando la velocidad que traía. Antes se mezclaba con una pose congelada y el movimiento se frenaba de golpe en
+    cada cambio (golpe → guardia, golpe recibido, bloqueo…).
+  - **Tope de giro por hueso** (~43° por cuadro): cuando la pierna recogida de una patada pasaba muy cerca de la
+    cadera, el muslo llegaba a voltearse ~160° en un solo cuadro. Ahora ese giro se reparte en unos cuadros.
+  - **Curvas de los golpes** ([`src/anim.js`](src/anim.js)): arrancan rápido pero sin salir a toda velocidad desde
+    cero, y los especiales regresan suave en lugar de frenar en seco. Los golpes llegan en el mismo cuadro que antes.
+  - Medido en peleas de la CPU (aceleración de los huesos): los peores brincos bajaron ~3 veces y el máximo ~4 veces.
 
 ## ⚙️ Opciones
 **Dificultad de la CPU**, volumen de **música** y de **efectos**, **narrador** sí/no, **gráficos** (ALTA, MEDIA para
@@ -446,6 +463,10 @@ Si el modelo sale de lado, usa "Girar" en el convertidor (o `rotacionY` en el ro
 ---
 
 ## 🛠️ Si algo falla
+- **La memoria ya no se llena pelea tras pelea**: al terminar una pelea se liberan de la tarjeta de video los modelos
+  (la malla con piel, la textura de huesos de cada esqueleto, los accesorios, el traje y los robots de Diego, la
+  cabeza de la fatality de Ramces) y cada proyectil al desaparecer. Antes todo eso se quedaba: en el celular, después
+  de varias peleas seguidas (la torre), el juego podía cerrarse. Medido: repetir peleas deja la memoria igual.
 - **El juego ya no se congela por un error en un cuadro**: si un sonido o un efecto falla, se anota en la consola del
   navegador (F12) como “Error en el cuadro (el juego sigue)” y la pelea continúa. Antes cualquier error detenía todo:
   así pasaba con la SERENATA de Abel (pedía una nota que no existía y el navegador rechazaba el sonido).

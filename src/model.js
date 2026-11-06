@@ -36,12 +36,38 @@ let sharedHipsRef = 0;      // altura de cadera del esqueleto de las animaciones
 export function loadAsset(url) {
   if (!assetCache.has(url)) {
     const isFbx = /\.fbx$/i.test(url);
-    const p = (isFbx ? fbxLoader : gltfLoader).loadAsync(url).then((r) => (
-      isFbx ? { scene: r, animations: r.animations || [] } : { scene: r.scene, animations: r.animations || [] }
-    ));
+    const p = (isFbx ? fbxLoader : gltfLoader).loadAsync(url).then((r) => {
+      const a = isFbx ? { scene: r, animations: r.animations || [] } : { scene: r.scene, animations: r.animations || [] };
+      markShared(a.scene);
+      return a;
+    });
     assetCache.set(url, p);
   }
   return assetCache.get(url);
+}
+
+// Lo que viene del archivo cargado (el caché) lo comparten todas las copias: al tirar un modelo eso no se libera.
+// Lo demás sí (la malla con piel, los accesorios, la textura de huesos de cada esqueleto): antes se quedaba en la
+// tarjeta de video pelea tras pelea (y cada proyectil que se aventaba) y en el celular el juego terminaba por cerrarse.
+const SHARED = new WeakSet();
+const texturesOf = (m) => Object.keys(m).map((k) => m[k]).filter((v) => v && v.isTexture);
+function markShared(root) {
+  root.traverse((o) => {
+    if (o.geometry) SHARED.add(o.geometry);
+    for (const m of [].concat(o.material || [])) if (m) { SHARED.add(m); for (const tx of texturesOf(m)) SHARED.add(tx); }
+  });
+}
+// (los materiales no se liberan: así sus sombreados siguen listos para la siguiente pelea)
+export function disposeTree(root, { geometry = true } = {}) {
+  const done = new Set();
+  root.traverse((o) => {
+    if (geometry && o.geometry && !SHARED.has(o.geometry) && !done.has(o.geometry)) { done.add(o.geometry); o.geometry.dispose(); }
+    if (o.isSkinnedMesh && o.skeleton && !done.has(o.skeleton)) { done.add(o.skeleton); o.skeleton.dispose(); }
+    for (const m of [].concat(o.material || [])) {
+      if (!m || SHARED.has(m)) continue;
+      for (const tx of texturesOf(m)) if (!SHARED.has(tx) && !done.has(tx)) { done.add(tx); tx.dispose(); }
+    }
+  });
 }
 
 const norm = (n) => (n || '').toLowerCase().replace(/^.*[:|]/, '').replace(/mixamorig\d*/g, '').replace(/[^a-z0-9]/g, '');
@@ -702,16 +728,43 @@ function solveTwoBone(J, T, a, b, pole, bend, outQ) {
   return (Math.PI - K) * bend;
 }
 
-// Esqueleto resuelto: posición de la cadera y giro de cada hueso (para mezclar de una pose a otra)
+// Esqueleto resuelto: posición de la cadera y giro de cada hueso (para pasar de una pose a otra)
 const BONES = ['hips', 'torso', 'head', 'shN', 'elN', 'shF', 'elF', 'hipN', 'knN', 'ftN', 'hipF', 'knF', 'ftF'];
+const SCALARS = ['spin', 'tilt', 'tiltY', 'rootZ'];
 const newSkel = () => ({ hipsPos: new THREE.Vector3(), q: Object.fromEntries(BONES.map((b) => [b, new THREE.Quaternion()])), spin: 0, tilt: 0, tiltY: 0, rootZ: 0 });
-function mixSkel(a, b, w, out) {
-  out.hipsPos.lerpVectors(a.hipsPos, b.hipsPos, w);
-  for (const k of BONES) out.q[k].slerpQuaternions(a.q[k], b.q[k], w);
-  out.spin = w >= 1 ? b.spin : a.spin + wrapPI(b.spin - a.spin) * w;
-  out.tilt = w >= 1 ? b.tilt : a.tilt + wrapPI(b.tilt - a.tilt) * w;
-  out.tiltY = lerp(a.tiltY, b.tiltY, w); out.rootZ = lerp(a.rootZ, b.rootZ, w);
+function copySkel(a, out) {
+  out.hipsPos.copy(a.hipsPos);
+  for (const k of BONES) out.q[k].copy(a.q[k]);
+  for (const k of SCALARS) out[k] = a[k];
 }
+
+// Transición por INERCIA (inertialization, como en los juegos grandes): al cambiar de animación la nueva entra
+// completa desde el primer cuadro y lo que se veía se le suma como una diferencia que se apaga sola, conservando
+// la velocidad que traía (curva de quinto grado). Antes se mezclaba con una pose congelada: el movimiento se
+// frenaba de golpe en cada cambio (golpe → guardia, golpe recibido, bloqueo…) y se notaban "brincos".
+// x0: cuánta diferencia hay · v0: qué tan rápido iba (negativo = acercándose) · T: en cuánto se apaga
+function inertCoef(x0, v0, T) {
+  if (!(x0 > 1e-5) || !(T > 0)) return null;
+  const v = Math.min(0, v0);                         // si se estaba alejando, no se sigue alejando
+  const tf = v < 0 ? Math.min(T, -5 * x0 / v) : T;   // (sin pasarse del otro lado)
+  const a0 = Math.max(0, (-8 * v * tf - 20 * x0) / (tf * tf));
+  return { x0, v, a0, tf,
+    A: -(a0 * tf * tf + 6 * v * tf + 12 * x0) / (2 * tf ** 5),
+    B: (3 * a0 * tf * tf + 16 * v * tf + 30 * x0) / (2 * tf ** 4),
+    C: -(3 * a0 * tf * tf + 12 * v * tf + 20 * x0) / (2 * tf ** 3) };
+}
+const inertAt = (c, t) => (!c || t >= c.tf ? 0 : (((((c.A * t + c.B) * t + c.C) * t + c.a0 / 2) * t + c.v) * t + c.x0));
+// ángulo de un giro (por el camino corto) y su eje
+function rotAngle(q, axis) {
+  let { x, y, z, w } = q;
+  if (w < 0) { x = -x; y = -y; z = -z; w = -w; }
+  const s = Math.sqrt(Math.max(0, 1 - w * w));
+  if (s < 1e-7) { axis.set(1, 0, 0); return 0; }
+  axis.set(x / s, y / s, z / s);
+  return 2 * Math.acos(Math.min(1, w));
+}
+const _qi = new THREE.Quaternion(), _qv = new THREE.Quaternion(), _vi = new THREE.Vector3(), _vh = new THREE.Vector3();
+const MAX_GIRO = 45;   // rad/s: lo más rápido que gira un hueso (≈ 43° por cuadro a 60 por segundo)
 
 class PoseRig {
   constructor(parts, rig) {
@@ -783,12 +836,13 @@ class PoseRig {
   }
 }
 
-// Cuánto tarda en pasar de una animación a otra (los golpes y los impactos entran casi de golpe)
-const BLEND = { puno: 0.035, puno_fuerte: 0.05, gancho_arriba: 0.05, patada: 0.05, patada_giratoria: 0.05, barrida: 0.05, patada_aerea: 0.06,
-  golpeado: 0.03, caer: 0.05, muerto: 0.05, bloqueo: 0.06, bloqueo_bajo: 0.06, saltar: 0.07, agacharse: 0.09, levantarse: 0.08,
-  idle: 0.14, caminar: 0.12, caminar_atras: 0.12, victoria: 0.25, mareado: 0.2, retrato: 0 };
+// En cuánto se apaga la diferencia al pasar de una animación a otra (con la inercia la nueva ya se ve desde el
+// primer cuadro, así que puede durar más sin sentirse lenta; los golpes y los impactos, rápido)
+const BLEND = { puno: 0.075, puno_fuerte: 0.085, gancho_arriba: 0.085, patada: 0.09, patada_giratoria: 0.09, barrida: 0.09, patada_aerea: 0.1,
+  golpeado: 0.07, caer: 0.11, muerto: 0.11, bloqueo: 0.09, bloqueo_bajo: 0.09, saltar: 0.12, agacharse: 0.13, levantarse: 0.14,
+  idle: 0.22, caminar: 0.18, caminar_atras: 0.18, victoria: 0.35, mareado: 0.3, retrato: 0 };
 const STRIKES = new Set(['puno', 'puno_fuerte', 'gancho_arriba', 'patada', 'patada_giratoria', 'barrida', 'patada_aerea']);
-const blendTime = (from, to) => (to === 'idle' && STRIKES.has(from) ? 0.1 : BLEND[to] ?? 0.1);
+const blendTime = (from, to) => (to === 'idle' && STRIKES.has(from) ? 0.16 : BLEND[to] ?? 0.16);
 // animaciones que ya saben qué hacer con las piernas en el aire
 const AIR_OK = new Set(['saltar', 'patada_aerea', 'caer', 'muerto', 'levantarse']);
 
@@ -834,8 +888,8 @@ export class FighterModel {
     this.headless = false;   // fatality de Ramces: ya no tiene cabeza
     this.acc = {};           // accesorios: guantes, jetpack, pescado, caguama
     // poses procedurales: esqueleto resuelto, transición entre animaciones, pies plantados e inercia
-    this.solver = null; this.S = null; this.Sout = null; this.Sfrom = null;
-    this.poseTag = null; this.poseKey = null; this.blendT = 0; this.blendDur = 0;
+    this.solver = null; this.S = null; this.Sout = null; this.Sold = null;
+    this.poseTag = null; this.poseKey = null; this.inert = null; this.hasOld = false; this.hasOut = false; this.oldDt = 1 / 60;
     this.feet = { N: { on: false }, F: { on: false } };
     this.spr = { lean: { x: 0, v: 0 }, dip: { x: 0, v: 0 } };
     this.odo = 0; this.lastRx = null; this.landT = 99; this.wasAir = false; this.prevVx = 0;
@@ -1081,7 +1135,7 @@ export class FighterModel {
   applyProcedural(anim, dt) {
     if (!this.solver) {
       this.solver = new PoseRig(this.parts, this.rig);
-      this.S = newSkel(); this.Sout = newSkel(); this.Sfrom = newSkel();
+      this.S = newSkel(); this.Sout = newSkel(); this.Sold = newSkel();
     }
     const c = anim.ctx || {};
     c.H = this.solver.H;
@@ -1097,21 +1151,68 @@ export class FighterModel {
     this.springs(P, c, dt);
     this.plantFeet(P, c, dt);
     this.solver.solve(P, this.S);
-    // transición: de lo que se veía a la animación nueva
+    // transición por inercia: de lo que se veía (con la velocidad que traía) a la animación nueva
     const tag = anim.key + ':' + (anim.id ?? 0);
     if (tag !== this.poseTag) {
-      if (this.poseTag !== null) {
-        const o = this.Sout, f = this.Sfrom;
-        f.hipsPos.copy(o.hipsPos); for (const b of BONES) f.q[b].copy(o.q[b]);
-        f.spin = wrapPI(o.spin); f.tilt = wrapPI(o.tilt); f.tiltY = o.tiltY; f.rootZ = o.rootZ;
-        this.blendT = 0; this.blendDur = blendTime(this.poseKey, anim.key);
-      }
+      if (this.poseTag !== null) this.startInertia(blendTime(this.poseKey, anim.key));
       this.poseTag = tag; this.poseKey = anim.key;
     }
-    this.blendT += dt;
-    mixSkel(this.Sfrom, this.S, this.blendDur > 0 ? smooth01(this.blendT / this.blendDur) : 1, this.Sout);
+    if (dt > 0) { copySkel(this.Sout, this.Sold); this.oldDt = dt; this.hasOld = this.hasOut; }
+    this.applyInertia(dt);
+    if (this.hasOld && dt > 0) this.limitRate(dt);
+    this.hasOut = true;
     this.applySkel(this.Sout);
     this.applyPose();
+  }
+
+  // Al cambiar de animación: cuánto le falta a cada hueso para llegar a la nueva y qué tan rápido se movía
+  startInertia(T) {
+    const I = this.inert ||= { t: 0, q: Object.fromEntries(BONES.map((b) => [b, { axis: new THREE.Vector3(), c: null }])), hips: { axis: new THREE.Vector3(), c: null }, sc: {} };
+    const o = this.Sout, n = this.S, p = this.Sold, dv = this.hasOld ? 1 / Math.max(1 / 240, this.oldDt) : 0;
+    I.t = 0;
+    for (const b of BONES) {
+      const e = I.q[b];
+      _qi.copy(n.q[b]).invert().premultiply(o.q[b]);   // lo que se veía respecto a la nueva
+      const x0 = rotAngle(_qi, e.axis);
+      let v0 = 0;
+      if (dv && x0 > 1e-5) { _qv.copy(p.q[b]).invert().premultiply(o.q[b]); v0 = rotAngle(_qv, _vi) * dv * _vi.dot(e.axis); }
+      e.c = inertCoef(x0, v0, T);
+    }
+    _vh.subVectors(o.hipsPos, n.hipsPos);
+    const hx = _vh.length();
+    I.hips.axis.copy(_vh).divideScalar(hx || 1);
+    I.hips.c = inertCoef(hx, dv ? _vi.subVectors(o.hipsPos, p.hipsPos).multiplyScalar(dv).dot(I.hips.axis) : 0, T);
+    for (const k of SCALARS) {
+      const wrap = k === 'spin' || k === 'tilt';
+      const off = wrap ? wrapPI(o[k] - n[k]) : o[k] - n[k], sg = off < 0 ? -1 : 1;
+      const vel = dv ? (wrap ? wrapPI(o[k] - p[k]) : o[k] - p[k]) * dv * sg : 0;
+      I.sc[k] = { sg, c: inertCoef(Math.abs(off), vel, T) };
+    }
+  }
+
+  // Ningún hueso gira más rápido de lo que puede un cuerpo: cuando la pierna recogida de una patada pasa muy cerca
+  // de la cadera, la cinemática inversa llegaba a voltear el muslo ~160° en un solo cuadro (se veía un "brinco").
+  // Con el tope ese giro se reparte en unos cuadros y los movimientos normales (más lentos que el tope) no cambian.
+  limitRate(dt) {
+    const step = MAX_GIRO * dt, o = this.Sout, p = this.Sold;
+    for (const b of BONES) {
+      if (p.q[b].angleTo(o.q[b]) <= step) continue;
+      _qv.copy(o.q[b]);                                // a dónde iba
+      o.q[b].copy(p.q[b]).rotateTowards(_qv, step);   // llega con el tope
+    }
+  }
+
+  // Cada cuadro: la animación nueva más lo que falta de la diferencia (que se va apagando)
+  applyInertia(dt) {
+    const I = this.inert, o = this.Sout, n = this.S;
+    if (!I) { copySkel(n, o); return; }
+    I.t += dt;
+    for (const b of BONES) {
+      const e = I.q[b], x = inertAt(e.c, I.t);
+      if (x > 1e-6) o.q[b].setFromAxisAngle(e.axis, x).multiply(n.q[b]); else o.q[b].copy(n.q[b]);
+    }
+    o.hipsPos.copy(n.hipsPos).addScaledVector(I.hips.axis, inertAt(I.hips.c, I.t));
+    for (const k of SCALARS) { const s = I.sc[k]; o[k] = n[k] + (s ? s.sg * inertAt(s.c, I.t) : 0); }
   }
 
   // odómetro (para que los pasos sigan a lo que de verdad avanza) y cuándo tocó el piso
@@ -1273,8 +1374,10 @@ export class FighterModel {
     }
   }
 
-  dispose() {
+  // opts.geometry = false: la malla la siguen usando sus copias (los robots de Diego salen de este modelo)
+  dispose(opts) {
     this.root.removeFromParent();
     if (this.mixer) this.mixer.stopAllAction();
+    disposeTree(this.root, opts);
   }
 }

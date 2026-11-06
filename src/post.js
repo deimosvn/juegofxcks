@@ -16,11 +16,12 @@ const GRADE = {
     tDiffuse: { value: null }, uTime: { value: 0 }, uVignette: { value: 0.4 }, uAberr: { value: 0 },
     uDesat: { value: 0 }, uDanger: { value: 0 }, uGrain: { value: 0.028 }, uAspect: { value: 1 },
     uTint: { value: new THREE.Color('#ff2020') }, uTintAmt: { value: 0 }, uGlitch: { value: 0 },
+    uSharp: { value: 0 }, uTexel: { value: new THREE.Vector2(1 / 1024, 1 / 1024) },
   },
   vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uTime, uVignette, uAberr, uDesat, uDanger, uGrain, uAspect, uTintAmt, uGlitch;
-    uniform vec3 uTint;
+    uniform sampler2D tDiffuse; uniform float uTime, uVignette, uAberr, uDesat, uDanger, uGrain, uAspect, uTintAmt, uGlitch, uSharp;
+    uniform vec3 uTint; uniform vec2 uTexel;
     varying vec2 vUv;
     float rnd(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
@@ -38,6 +39,11 @@ const GRADE = {
         vec2 off = c * ab * 0.018;
         col = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
       } else col = texture2D(tDiffuse, uv).rgb;
+      if (uSharp > 0.001) {                                               // nitidez: caras, ropa y texturas más definidas
+        vec3 nb = texture2D(tDiffuse, uv + vec2(uTexel.x, 0.0)).rgb + texture2D(tDiffuse, uv - vec2(uTexel.x, 0.0)).rgb
+                + texture2D(tDiffuse, uv + vec2(0.0, uTexel.y)).rgb + texture2D(tDiffuse, uv - vec2(0.0, uTexel.y)).rgb;
+        col = max(col + (col - nb * 0.25) * uSharp, 0.0);
+      }
       col = (col - 0.5) * 1.07 + 0.5;                                     // un poco más de contraste
       float l = dot(col, vec3(0.299, 0.587, 0.114));
       col = mix(vec3(l), col, 1.1 - uDesat * 1.1);                        // más color (o gris en el K.O.)
@@ -117,6 +123,9 @@ export class Post {
     u.uTint.value.copy(f.tint); u.uTintAmt.value = f.tintAmt; u.uGlitch.value = f.glitch; u.uVignette.value = f.vignette;
     if (this.bloom) this.bloom.strength = this.bloomCfg[0] * (this.quality === 'media' ? 0.9 : 1) * f.bloom;
     u.uAspect.value = this.w / Math.max(1, this.h);
+    const pr = this.r.getPixelRatio();
+    u.uTexel.value.set(1 / Math.max(1, this.w * pr), 1 / Math.max(1, this.h * pr));
+    u.uSharp.value = this.quality === 'alta' ? 0.32 : 0.18;
     this.composer.render(dt);
   }
 }
